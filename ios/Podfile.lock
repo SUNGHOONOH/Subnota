@@ -2161,7 +2161,7 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - RNWorklets (from `../node_modules/react-native-worklets`)
-  - "simdjson (from `../node_modules/@nozbe/simdjson`)"
+  - "simdjson (from `/Users/sunghoon/Desktop/memo/MemoApp/node_modules/.pnpm/@nozbe+simdjson@3.9.4/node_modules/@nozbe/simdjson`)"
   - "WatermelonDB (from `../node_modules/@nozbe/watermelondb`)"
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -2324,7 +2324,7 @@ EXTERNAL SOURCES:
   RNWorklets:
     :path: "../node_modules/react-native-worklets"
   simdjson:
-    :path: "../node_modules/@nozbe/simdjson"
+    :path: "/Users/sunghoon/Desktop/memo/MemoApp/node_modules/.pnpm/@nozbe+simdjson@3.9.4/node_modules/@nozbe/simdjson"
   WatermelonDB:
     :path: "../node_modules/@nozbe/watermelondb"
   Yoga:
@@ -2413,6 +2413,6 @@ SPEC CHECKSUMS:
   WatermelonDB: 75e467adbaf2cb2809780fb3eda7ce4964e11778
   Yoga: 04bb4bfeb02c0000b940c1e6e89e856cd8de5a71
 
-PODFILE CHECKSUM: 6f0514aa39f6a34f0e9828797f49a2625341739a
+PODFILE CHECKSUM: 09d775898dd064abd5ef8dbfb0fd1e61c836cab6
 
 COCOAPODS: 1.16.2

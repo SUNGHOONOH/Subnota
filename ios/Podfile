@@ -5,6 +5,16 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+simdjson_path = File.dirname(Pod::Executable.execute_command('node', ['-p',
+  'const path = require("path");
+   const watermelonPath = path.dirname(require.resolve("@nozbe/watermelondb/package.json", {paths: [process.argv[1]]}));
+   require.resolve("@nozbe/simdjson/package.json", {paths: [watermelonPath]})', __dir__]).strip)
+
+hermesc_path = File.join(File.dirname(Pod::Executable.execute_command('node', ['-p',
+  'const path = require("path");
+   const reactNativePath = path.dirname(require.resolve("react-native/package.json", {paths: [process.argv[1]]}));
+   require.resolve("hermes-compiler/package.json", {paths: [reactNativePath]})', __dir__]).strip), 'hermesc/osx-bin/hermesc')
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
@@ -17,7 +27,7 @@ end
 target 'MemoApp' do
   config = use_native_modules!
 
-  pod 'simdjson', :path => '../node_modules/@nozbe/simdjson'
+  pod 'simdjson', :path => simdjson_path
 
   use_react_native!(
     :path => config[:reactNativePath],
@@ -32,5 +42,12 @@ target 'MemoApp' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    installer.aggregate_targets.each do |aggregate_target|
+      aggregate_target.xcconfigs.each do |config_name, xcconfig|
+        xcconfig.attributes['HERMES_CLI_PATH'] = hermesc_path
+        xcconfig.save_as(aggregate_target.xcconfig_path(config_name))
+      end
+    end
   end
 end
