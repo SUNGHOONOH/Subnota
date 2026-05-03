@@ -17,6 +17,8 @@ end
 target 'MemoApp' do
   config = use_native_modules!
 
+  pod 'simdjson', :path => '../node_modules/@nozbe/simdjson'
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
