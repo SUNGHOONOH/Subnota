@@ -1,16 +1,16 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
-import { MessageSquare, Calendar, Zap } from 'lucide-react-native';
+import { Bot, Calendar, FileText } from 'lucide-react-native';
 
-import MemoListScreen from '../screens/memo/MemoListScreen';
-import CalendarScreen from '../screens/calendar/CalendarScreen';
-import BriefingScreen from '../screens/briefing/BriefingScreen';
+import MemoScreen from '../features/memo/MemoScreen';
+import CalendarScreen from '../features/calendar/CalendarScreen';
+import BriefingScreen from '../features/briefing/BriefingScreen';
 
 const Tab = createBottomTabNavigator();
 
 const MemoTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <MessageSquare color={color} size={size} />
+  <FileText color={color} size={size} />
 );
 
 const CalendarTabIcon = ({ color, size }: { color: string; size: number }) => (
@@ -18,7 +18,7 @@ const CalendarTabIcon = ({ color, size }: { color: string; size: number }) => (
 );
 
 const BriefingTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <Zap color={color} size={size} />
+  <Bot color={color} size={size} />
 );
 
 const Navigation = () => {
@@ -27,18 +27,25 @@ const Navigation = () => {
       <Tab.Navigator
         screenOptions={{
           tabBarActiveTintColor: '#007AFF',
+          tabBarHideOnKeyboard: false,
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: false,
           tabBarStyle: {
-            paddingBottom: 5,
-            paddingTop: 5,
-            height: 60,
+            backgroundColor: '#FFFFFF',
+            borderTopColor: '#E5E5EA',
+            height: 62,
+            paddingBottom: 7,
+            paddingTop: 6,
+          },
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
           },
         }}
       >
         <Tab.Screen
           name="Memo"
-          component={MemoListScreen}
+          component={MemoScreen}
           options={{
             tabBarLabel: '메모',
             tabBarIcon: MemoTabIcon,

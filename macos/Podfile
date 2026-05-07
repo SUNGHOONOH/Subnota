@@ -1,0 +1,98 @@
+require 'pathname'
+require 'fileutils'
+
+ws_dir = Pathname.new(__dir__)
+ws_dir = ws_dir.parent until
+  File.exist?("#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb") ||
+  ws_dir.expand_path.to_s == '/'
+require "#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb"
+
+prepare_react_native_project!
+
+# ── Codegen이 react-native 0.85 소스를 스캔하지 않도록 ──
+# 미리 빈 autolinking.json을 생성해서 codegen이 node_modules를 직접
+# 스캔하는 fallback 경로로 빠지지 않게 합니다.
+codegen_output_dir = File.join(__dir__, 'build', 'generated', 'autolinking')
+FileUtils.mkdir_p(codegen_output_dir)
+autolinking_json_path = File.join(codegen_output_dir, 'autolinking.json')
+
+# macOS에서 호환되는 라이브러리만 선언 (react-native-screens, reanimated, worklets 제외)
+autolinking_content = {
+  "reactNativePath" => "../node_modules/react-native-macos",
+  "project" => {
+    "ios" => {
+      "sourceDir" => __dir__
+    }
+  },
+  "dependencies" => {
+    "react-native-gesture-handler" => {
+      "root" => File.expand_path("../node_modules/react-native-gesture-handler", __dir__),
+      "platforms" => { "ios" => {
+        "podspecPath" => File.expand_path("../node_modules/react-native-gesture-handler/RNGestureHandler.podspec", __dir__),
+        "configurations" => []
+      }}
+    },
+    "react-native-safe-area-context" => {
+      "root" => File.expand_path("../node_modules/react-native-safe-area-context", __dir__),
+      "platforms" => { "ios" => {
+        "podspecPath" => File.expand_path("../node_modules/react-native-safe-area-context/react-native-safe-area-context.podspec", __dir__),
+        "configurations" => []
+      }}
+    },
+    "react-native-svg" => {
+      "root" => File.expand_path("../node_modules/react-native-svg", __dir__),
+      "platforms" => { "ios" => {
+        "podspecPath" => File.expand_path("../node_modules/react-native-svg/RNSVG.podspec", __dir__),
+        "configurations" => []
+      }}
+    }
+  }
+}
+
+require 'json'
+File.write(autolinking_json_path, JSON.pretty_generate(autolinking_content))
+
+target 'MemoApp-macOS' do
+  platform :macos, '14.0'
+
+  # 수동으로 macOS 호환 Pod만 선언
+  pod 'RNGestureHandler', :path => '../node_modules/react-native-gesture-handler'
+  pod 'react-native-safe-area-context', :path => '../node_modules/react-native-safe-area-context'
+  pod 'RNSVG', :path => '../node_modules/react-native-svg'
+
+  use_react_native!(
+    :path => '../node_modules/react-native-macos',
+    :hermes_enabled => false,
+    :fabric_enabled => false,
+    :new_arch_enabled => false,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  post_install do |installer|
+    react_native_post_install(installer)
+
+    fmt_base_header = File.join(Pod::Config.instance.installation_root.to_s, 'Pods', 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_header)
+      contents = File.read(fmt_base_header)
+      unless contents.include?('#ifdef FMT_USE_CONSTEVAL')
+        patched_contents = contents.sub(
+          "// Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.\n#if !defined(__cpp_lib_is_constant_evaluated)",
+          "// Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.\n#ifdef FMT_USE_CONSTEVAL\n// Use the provided definition.\n#elif !defined(__cpp_lib_is_constant_evaluated)"
+        )
+        File.chmod(0644, fmt_base_header)
+        File.write(fmt_base_header, patched_contents)
+      end
+    end
+
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |config|
+        definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+        definitions = [definitions] if definitions.is_a?(String)
+        definitions << 'FMT_USE_CONSTEVAL=0' unless definitions.include?('FMT_USE_CONSTEVAL=0')
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+      end
+    end
+  end
+end

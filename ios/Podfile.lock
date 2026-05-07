@@ -1,4 +1,26 @@
 PODS:
+  - AsyncStorage (3.0.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - FBLazyVector (0.85.2)
   - hermes-engine (250829098.0.10):
     - hermes-engine/Pre-built (= 250829098.0.10)
@@ -2075,13 +2097,10 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - simdjson (3.9.4)
-  - WatermelonDB (0.28.0):
-    - React
-    - simdjson
   - Yoga (0.0.0)
 
 DEPENDENCIES:
+  - "AsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
@@ -2161,11 +2180,11 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - RNWorklets (from `../node_modules/react-native-worklets`)
-  - "simdjson (from `/Users/sunghoon/Desktop/memo/MemoApp/node_modules/.pnpm/@nozbe+simdjson@3.9.4/node_modules/@nozbe/simdjson`)"
-  - "WatermelonDB (from `../node_modules/@nozbe/watermelondb`)"
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 EXTERNAL SOURCES:
+  AsyncStorage:
+    :path: "../node_modules/@react-native-async-storage/async-storage"
   FBLazyVector:
     :path: "../node_modules/react-native/Libraries/FBLazyVector"
   hermes-engine:
@@ -2323,16 +2342,13 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-svg"
   RNWorklets:
     :path: "../node_modules/react-native-worklets"
-  simdjson:
-    :path: "/Users/sunghoon/Desktop/memo/MemoApp/node_modules/.pnpm/@nozbe+simdjson@3.9.4/node_modules/@nozbe/simdjson"
-  WatermelonDB:
-    :path: "../node_modules/@nozbe/watermelondb"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  AsyncStorage: 857a13f3c66a30d6b02efa09babba3d457e8e8ca
   FBLazyVector: 26fd21c75314e101f280d401e97f27d54f3f7064
-  hermes-engine: 775dcb7b4f4a4df315af22a207d35f7a8ddeb979
+  hermes-engine: eed5cd6e95c579a3b165b7301486814a2bcf5bff
   RCTDeprecation: c7a2768f905d76ca6d2cfefb26e4349eacbdfca3
   RCTRequired: 5e502c3553cfbed090a991c444448da452fb752e
   RCTSwiftUI: 5ce3ccbdc58b78cc4ebbaace01709ec22d58e131
@@ -2341,7 +2357,7 @@ SPEC CHECKSUMS:
   React: 13cf8451582adb1bb324306e1893b91d1cba28c6
   React-callinvoker: 91e6a605826b684ad2e623811253b4d0c4196bef
   React-Core: 46818de5f211b2a2759ac823b591af8a0a95c2c1
-  React-Core-prebuilt: 88943dc06db87d843e636a7a0a022d6b86aad876
+  React-Core-prebuilt: 542da7708381e5a64181ede183dd1d60bc4cc593
   React-CoreModules: a6a37afee48d4a31ab398640b0795462647d5c67
   React-cxxreact: 2ec3e2f7a8ae9303460d4ba94cde183ea90d64cd
   React-debug: 0d21117b897ce0359c9d2c9dfe952f237476a14a
@@ -2409,10 +2425,8 @@ SPEC CHECKSUMS:
   RNScreens: 01b065ded2dfe7987bcce770ff3a196be417ff41
   RNSVG: 04044c3abcf177fd674a1a3d13097efa1adebcbe
   RNWorklets: b9fac9ddfe71f393f5fcd7dd9f6d5faa3dc27da5
-  simdjson: 7bb9e33d87737cec966e7b427773c67baa4458fe
-  WatermelonDB: 75e467adbaf2cb2809780fb3eda7ce4964e11778
   Yoga: 04bb4bfeb02c0000b940c1e6e89e856cd8de5a71
 
-PODFILE CHECKSUM: 09d775898dd064abd5ef8dbfb0fd1e61c836cab6
+PODFILE CHECKSUM: 496670d0fcd4c6c057ab3d5bcd422081f92d0eba
 
 COCOAPODS: 1.16.2

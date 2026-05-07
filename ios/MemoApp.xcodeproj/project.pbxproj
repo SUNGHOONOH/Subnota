@@ -193,13 +193,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoApp/Pods-MemoApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoApp/Pods-MemoApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -236,13 +232,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoApp/Pods-MemoApp-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoApp/Pods-MemoApp-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -284,9 +276,10 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.ios.dev2026;
 				PRODUCT_NAME = MemoApp;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -314,9 +307,10 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.ios.dev2026;
 				PRODUCT_NAME = MemoApp;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";

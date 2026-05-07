@@ -5,11 +5,6 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-simdjson_path = File.dirname(Pod::Executable.execute_command('node', ['-p',
-  'const path = require("path");
-   const watermelonPath = path.dirname(require.resolve("@nozbe/watermelondb/package.json", {paths: [process.argv[1]]}));
-   require.resolve("@nozbe/simdjson/package.json", {paths: [watermelonPath]})', __dir__]).strip)
-
 hermesc_path = File.join(File.dirname(Pod::Executable.execute_command('node', ['-p',
   'const path = require("path");
    const reactNativePath = path.dirname(require.resolve("react-native/package.json", {paths: [process.argv[1]]}));
@@ -26,8 +21,6 @@ end
 
 target 'MemoApp' do
   config = use_native_modules!
-
-  pod 'simdjson', :path => simdjson_path
 
   use_react_native!(
     :path => config[:reactNativePath],
