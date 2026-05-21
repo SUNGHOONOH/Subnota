@@ -1,7 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
-import { Bot, Calendar, FileText } from 'lucide-react-native';
+import { CalendarDays, Coffee, PenLine } from 'lucide-react-native';
+import { Keyboard } from 'react-native';
 
 import MemoScreen from '../features/memo/MemoScreen';
 import CalendarScreen from '../features/calendar/CalendarScreen';
@@ -10,29 +11,32 @@ import BriefingScreen from '../features/briefing/BriefingScreen';
 const Tab = createBottomTabNavigator();
 
 const MemoTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <FileText color={color} size={size} />
+  <PenLine color={color} size={size} />
 );
 
 const CalendarTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <Calendar color={color} size={size} />
+  <CalendarDays color={color} size={size} />
 );
 
 const BriefingTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <Bot color={color} size={size} />
+  <Coffee color={color} size={size} />
 );
 
 const Navigation = () => {
   return (
     <NavigationContainer>
       <Tab.Navigator
+        screenListeners={{
+          tabPress: () => Keyboard.dismiss(),
+        }}
         screenOptions={{
-          tabBarActiveTintColor: '#007AFF',
+          tabBarActiveTintColor: '#8B7355',
           tabBarHideOnKeyboard: false,
-          tabBarInactiveTintColor: '#8E8E93',
+          tabBarInactiveTintColor: '#B5A898',
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#E5E5EA',
+            backgroundColor: '#FAF6F0',
+            borderTopColor: '#E8DFD3',
             height: 62,
             paddingBottom: 7,
             paddingTop: 6,

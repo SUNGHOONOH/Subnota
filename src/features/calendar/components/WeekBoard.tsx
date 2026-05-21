@@ -11,14 +11,14 @@ import DraggableBrick, {
 
 const TIME_SLOTS = [4, 8, 12, 16, 20];
 
-const getSlotIndex = (brick: CalendarDisplayBrick, fallbackIndex: number) => {
+const getSlotIndex = (brick: CalendarDisplayBrick) => {
   if (!brick.time) {
-    return Math.min(fallbackIndex, TIME_SLOTS.length - 1);
+    return clamp(brick.order, 0, TIME_SLOTS.length - 1);
   }
 
   const hour = Number(brick.time.slice(0, 2));
   if (Number.isNaN(hour)) {
-    return Math.min(fallbackIndex, TIME_SLOTS.length - 1);
+    return clamp(brick.order, 0, TIME_SLOTS.length - 1);
   }
 
   if (hour < 8) {
@@ -34,6 +34,30 @@ const getSlotIndex = (brick: CalendarDisplayBrick, fallbackIndex: number) => {
     return 3;
   }
   return 4;
+};
+
+const findNearestEmptySlot = (
+  slots: Array<CalendarDisplayBrick | null>,
+  preferredSlot: number,
+) => {
+  if (slots[preferredSlot] === null) {
+    return preferredSlot;
+  }
+
+  for (let offset = 1; offset < slots.length; offset += 1) {
+    const right = preferredSlot + offset;
+    const left = preferredSlot - offset;
+
+    if (right < slots.length && slots[right] === null) {
+      return right;
+    }
+
+    if (left >= 0 && slots[left] === null) {
+      return left;
+    }
+  }
+
+  return preferredSlot;
 };
 
 interface WeekBoardProps {
@@ -115,21 +139,24 @@ const WeekBoard = ({
               () => null as CalendarDisplayBrick | null,
             );
 
-            dayBricks.forEach((brick, index) => {
-              const preferredSlot = getSlotIndex(brick, index);
-              const emptySlot = slots.findIndex(slot => slot === null);
-              const slotIndex =
-                slots[preferredSlot] === null
-                  ? preferredSlot
-                  : emptySlot === -1
-                  ? preferredSlot
-                  : emptySlot;
+            dayBricks.forEach(brick => {
+              const preferredSlot = getSlotIndex(brick);
+              const slotIndex = findNearestEmptySlot(slots, preferredSlot);
 
               slots[slotIndex] = brick;
             });
+            const isDraggingSourceDay = dayBricks.some(
+              brick => brick.id === dropPreview?.id,
+            );
 
             return (
-              <View key={dayLabel} style={styles.mobileDayRow}>
+              <View
+                key={dayLabel}
+                style={[
+                  styles.mobileDayRow,
+                  isDraggingSourceDay && styles.mobileDraggingSourceRow,
+                ]}
+              >
                 <View style={styles.mobileDayRail}>
                   <Text style={styles.dayLabel}>{dayLabel}</Text>
                   <Text style={styles.dayDateLabel}>
@@ -150,33 +177,46 @@ const WeekBoard = ({
                     ))}
                   </View>
                   <View style={styles.mobileSlotRow}>
-                    {slots.map((brick, slotIndex) => (
-                      <Pressable
-                        key={`${dayLabel}-${slotIndex}`}
-                        onPress={() => {
-                          if (!brick) {
-                            onAddBrick(dayIndex);
-                          }
-                        }}
-                        style={styles.mobileSlot}
-                      >
-                        {brick ? (
-                          <DraggableBrick
-                            brick={brick}
-                            columnWidth={Math.max(1, (boardWidth - 86) / 5)}
-                            index={slotIndex}
-                            onDelete={onDeleteBrick}
-                            onDragStateChange={onDragStateChange}
-                            onMove={onMoveBrick}
-                            onOpen={onOpenBrick}
-                            onPreview={onPreview}
-                            orientation="rows"
-                          />
-                        ) : (
-                          <Text style={styles.emptyMobileText}>+</Text>
-                        )}
-                      </Pressable>
-                    ))}
+                    {slots.map((brick, slotIndex) => {
+                      const isPreviewSlot =
+                        dropPreview?.day === dayIndex &&
+                        clamp(dropPreview.order, 0, TIME_SLOTS.length - 1) ===
+                          slotIndex;
+
+                      return (
+                        <Pressable
+                          key={`${dayLabel}-${slotIndex}`}
+                          onPress={() => {
+                            if (!brick) {
+                              onAddBrick(dayIndex);
+                            }
+                          }}
+                          style={[
+                            styles.mobileSlot,
+                            isPreviewSlot &&
+                              (brick
+                                ? styles.mobileOccupiedSlotPreview
+                                : styles.mobileSlotPreview),
+                          ]}
+                        >
+                          {brick ? (
+                            <DraggableBrick
+                              brick={brick}
+                              columnWidth={Math.max(1, (boardWidth - 86) / 5)}
+                              index={slotIndex}
+                              onDelete={onDeleteBrick}
+                              onDragStateChange={onDragStateChange}
+                              onMove={onMoveBrick}
+                              onOpen={onOpenBrick}
+                              onPreview={onPreview}
+                              orientation="rows"
+                            />
+                          ) : (
+                            <Text style={styles.emptyMobileText}>+</Text>
+                          )}
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               </View>
@@ -360,6 +400,12 @@ const styles = StyleSheet.create({
     minHeight: 94,
     overflow: 'visible',
     paddingVertical: 8,
+    position: 'relative',
+    zIndex: 1,
+  },
+  mobileDraggingSourceRow: {
+    elevation: 200,
+    zIndex: 200,
   },
   mobileDayRail: {
     alignItems: 'center',
@@ -400,6 +446,18 @@ const styles = StyleSheet.create({
     height: 58,
     justifyContent: 'center',
     paddingHorizontal: 2,
+    position: 'relative',
+    zIndex: 1,
+  },
+  mobileSlotPreview: {
+    backgroundColor: 'rgba(221, 243, 228, 0.62)',
+    borderColor: '#7DCB94',
+    borderWidth: 1,
+  },
+  mobileOccupiedSlotPreview: {
+    backgroundColor: 'transparent',
+    borderColor: '#7DCB94',
+    borderWidth: 1,
   },
   emptyMobileText: {
     color: 'rgba(94, 94, 99, 0.5)',

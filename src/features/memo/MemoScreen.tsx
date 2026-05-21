@@ -19,59 +19,103 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Menu, Network, Plus, Trash2 } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  MoreHorizontal,
+  Network,
+  Plus,
+  Trash2,
+} from 'lucide-react-native';
 
 import {
   DateMatch,
-  findNearestDateMatch,
   formatRelativeDisplayDate,
   parseDates,
 } from '../../lib/dateParser';
-import { Memo, useMemoStore } from '../../store/useMemoStore';
+import { hashText } from '../../lib/contentHash';
 import {
+  AMBIENT_COOLDOWN_MS,
+  AMBIENT_IDLE_DELAY_MS,
+  AMBIENT_MAX_RESULT_COUNT,
+  AMBIENT_MIN_CHARS,
+} from '../../lib/constants';
+import { getCursorChunkWindow, MemoChunk } from '../../lib/memoChunker';
+import {
+  NetworkSearchResult,
+  searchCursorNetwork,
+} from '../../services/backend/networkService';
+import { Memo, MemoDateAnchor, useMemoStore } from '../../store/useMemoStore';
+import { SidebarViewMode } from './components/MemoSidebar';
+import {
+  differenceInCalendarDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
   format,
   isToday,
-  isYesterday,
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
 import DateQuickActions from './components/DateQuickActions';
+import AmbientNetworkCard from './components/AmbientNetworkCard';
+import AmbientNetworkDetailPanel from './components/AmbientNetworkDetailPanel';
 import MemoEditor from './components/MemoEditor';
 import MemoNetworkPanel from './components/MemoNetworkPanel';
 import MemoSidebar from './components/MemoSidebar';
 import MiniCalendarPopover from './components/MiniCalendarPopover';
 
-const EDITOR_LINE_HEIGHT = 25;
-const EDITOR_PADDING_TOP = 18;
+const EDITOR_LINE_HEIGHT = 28;
+const EDITOR_PADDING_TOP = 20;
 const TOOLTIP_HEIGHT = 34;
 const TOOLTIP_GAP = 10;
 const SELECTION_TOOLBAR_HEIGHT = 32;
-const ACCESSORY_ID = 'memo-date-accessory';
+const DATE_ACTIONS_ACCESSORY_ID = 'memo-date-actions-accessory';
+const TOOLTIP_APPROX_CHAR_WIDTH = 10;
 
-const getCursorLine = (text: string, cursorIndex: number) => {
-  return text.slice(0, cursorIndex).split('\n').length - 1;
+const getTextIndexLine = (text: string, textIndex: number) => {
+  return text.slice(0, textIndex).split('\n').length - 1;
 };
 
-const getTooltipTop = (
+const getTooltipPosition = (
   text: string,
-  cursorIndex: number,
+  textIndex: number,
   editorHeight: number,
+  editorWidth: number,
 ) => {
-  const activeLine = getCursorLine(text, cursorIndex);
+  const activeLine = getTextIndexLine(text, textIndex);
+  const activeColumn = text.slice(0, textIndex).split('\n').at(-1)?.length ?? 0;
   const activeLineTop = EDITOR_PADDING_TOP + activeLine * EDITOR_LINE_HEIGHT;
   const topCandidate = activeLineTop - TOOLTIP_HEIGHT - TOOLTIP_GAP;
   const bottomCandidate = activeLineTop + EDITOR_LINE_HEIGHT + TOOLTIP_GAP;
+  const top =
+    topCandidate >= EDITOR_PADDING_TOP
+      ? topCandidate
+      : Math.min(
+          Math.max(bottomCandidate, EDITOR_PADDING_TOP),
+          Math.max(EDITOR_PADDING_TOP, editorHeight - TOOLTIP_HEIGHT - 8),
+        );
+  const left = Math.min(
+    Math.max(4, activeColumn * TOOLTIP_APPROX_CHAR_WIDTH),
+    Math.max(4, editorWidth - 280),
+  );
 
-  if (topCandidate >= EDITOR_PADDING_TOP) {
-    return topCandidate;
+  return { left, top };
+};
+
+const findFocusedDateMatch = (
+  matches: DateMatch[],
+  selectionStart: number,
+  selectionEnd: number,
+) => {
+  if (selectionStart !== selectionEnd) {
+    return null;
   }
 
-  return Math.min(
-    Math.max(bottomCandidate, EDITOR_PADDING_TOP),
-    Math.max(EDITOR_PADDING_TOP, editorHeight - TOOLTIP_HEIGHT - 8),
+  return (
+    matches.find(match => {
+      const matchEnd = match.index + match.length;
+      return selectionStart >= match.index && selectionStart <= matchEnd;
+    }) ?? null
   );
 };
 
@@ -117,6 +161,71 @@ const splitHighlightedText = (text: string, matches: DateMatch[]) => {
   return pieces;
 };
 
+const reconcileDateTokenAnchors = (
+  text: string,
+  previousAnchors: MemoDateAnchor[],
+  baseTimestamp = Date.now(),
+) => {
+  const detectedMatches = parseDates(text, baseTimestamp);
+  const availableAnchors = previousAnchors.map(anchor => ({
+    ...anchor,
+    used: false,
+  }));
+
+  return detectedMatches.map(match => {
+    const exactAnchor = availableAnchors.find(
+      anchor =>
+        !anchor.used &&
+        anchor.text === match.text &&
+        anchor.index === match.index &&
+        anchor.length === match.length,
+    );
+    const shiftedAnchor =
+      exactAnchor ??
+      availableAnchors
+        .filter(anchor => !anchor.used && anchor.text === match.text)
+        .sort(
+          (a, b) =>
+            Math.abs(a.index - match.index) - Math.abs(b.index - match.index),
+        )[0];
+    const anchor = shiftedAnchor ?? {
+      baseTimestamp,
+      index: match.index,
+      length: match.length,
+      text: match.text,
+      used: false,
+    };
+
+    anchor.used = true;
+
+    return {
+      baseTimestamp: anchor.baseTimestamp,
+      index: match.index,
+      length: match.length,
+      text: match.text,
+    };
+  });
+};
+
+const buildAnchoredDateMatches = (text: string, anchors: MemoDateAnchor[]) => {
+  return anchors
+    .map(anchor => {
+      const parsed = parseDates(anchor.text, anchor.baseTimestamp)[0];
+
+      if (!parsed) {
+        return null;
+      }
+
+      return {
+        ...parsed,
+        index: anchor.index,
+        length: anchor.length,
+        text: text.slice(anchor.index, anchor.index + anchor.length),
+      };
+    })
+    .filter((match): match is DateMatch => match !== null);
+};
+
 const MemoScreen = () => {
   const { width: screenWidth } = useWindowDimensions();
   const isPhone = screenWidth < 768;
@@ -128,33 +237,86 @@ const MemoScreen = () => {
   const deleteMemo = useMemoStore(state => state.deleteMemo);
   const toggleMemoPinned = useMemoStore(state => state.toggleMemoPinned);
   const updateMemo = useMemoStore(state => state.updateMemo);
+  const activeCategoryFilter = useMemoStore(
+    state => state.activeCategoryFilter,
+  );
+  const setActiveCategoryFilter = useMemoStore(
+    state => state.setActiveCategoryFilter,
+  );
+  const clearActiveCategoryFilter = useMemoStore(
+    state => state.clearActiveCategoryFilter,
+  );
   const [activeMemoId, setActiveMemoId] = useState<string | null>(null);
+  const activeMemoIdRef = useRef<string | null>(null);
   const [isDraftingNewMemo, setDraftingNewMemo] = useState(false);
   const [text, setText] = useState('');
   const [selectionStart, setSelectionStart] = useState(0);
   const [selectionEnd, setSelectionEnd] = useState(0);
+  const [dateTokenAnchors, setDateTokenAnchors] = useState<MemoDateAnchor[]>(
+    [],
+  );
   const [dismissedTooltipKeys, setDismissedTooltipKeys] = useState<string[]>(
     [],
   );
   const [editorHeight, setEditorHeight] = useState(320);
+  const [editorWidth, setEditorWidth] = useState(320);
   const [isDateModalVisible, setDateModalVisible] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(startOfMonth(new Date()));
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [scheduleHour, setScheduleHour] = useState('');
   const [scheduleMinute, setScheduleMinute] = useState('');
   const [isNetworkVisible, setNetworkVisible] = useState(false);
+  const [isMoreMenuVisible, setMoreMenuVisible] = useState(false);
   const [pendingScheduleText, setPendingScheduleText] = useState('');
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [isNetworkLoading, setNetworkLoading] = useState(false);
+  const [networkErrorMessage, setNetworkErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [networkQueryChunk, setNetworkQueryChunk] = useState<MemoChunk | null>(
+    null,
+  );
+  const [networkResults, setNetworkResults] = useState<NetworkSearchResult[]>(
+    [],
+  );
+  const [ambientQueryChunk, setAmbientQueryChunk] =
+    useState<MemoChunk | null>(null);
+  const [ambientResult, setAmbientResult] =
+    useState<NetworkSearchResult | null>(null);
+  const [isAmbientVisible, setAmbientVisible] = useState(false);
+  const [isAmbientDetailVisible, setAmbientDetailVisible] = useState(false);
+  const [sidebarViewMode, setSidebarViewMode] =
+    useState<SidebarViewMode>('chronological');
+  const ambientTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ambientChunkHashRef = useRef<string | null>(null);
+  const lastAmbientRequestAtRef = useRef(0);
+  const ambientRequestIdRef = useRef(0);
 
   useEffect(() => {
     setSidebarOpen(!isPhone);
   }, [isPhone]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+    memos.forEach(memo => {
+      if (!memo.content.trim()) {
+        deleteMemo(memo.id);
+      }
+    });
+  }, [deleteMemo, memos]);
+
+  useEffect(() => {
+    activeMemoIdRef.current = activeMemoId;
+  }, [activeMemoId]);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => {
       setKeyboardVisible(true);
     });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+    const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardVisible(false);
     });
 
@@ -164,35 +326,174 @@ const MemoScreen = () => {
     };
   }, []);
 
+  useEffect(() => {
+    setAmbientVisible(false);
+
+    if (ambientTimerRef.current) {
+      clearTimeout(ambientTimerRef.current);
+      ambientTimerRef.current = null;
+    }
+
+    const collapsedSelection = selectionStart === selectionEnd;
+    const canRunAmbient =
+      activeMemoId &&
+      collapsedSelection &&
+      text.trim().length >= AMBIENT_MIN_CHARS &&
+      !isNetworkVisible &&
+      !isAmbientDetailVisible &&
+      (!isPhone || !isSidebarOpen);
+
+    if (!canRunAmbient) {
+      return;
+    }
+
+    const cursorWindow = getCursorChunkWindow(text, selectionStart, 0);
+    const cursorChunk = cursorWindow.center;
+
+    if (!cursorChunk || cursorChunk.text.trim().length < AMBIENT_MIN_CHARS) {
+      return;
+    }
+
+    const chunkHash = hashText(`${activeMemoId}:${cursorChunk.text.trim()}`);
+
+    ambientTimerRef.current = setTimeout(async () => {
+      if (
+        ambientChunkHashRef.current === chunkHash &&
+        ambientQueryChunk &&
+        ambientResult
+      ) {
+        setAmbientVisible(true);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastAmbientRequestAtRef.current < AMBIENT_COOLDOWN_MS) {
+        return;
+      }
+
+      const requestId = ambientRequestIdRef.current + 1;
+      ambientRequestIdRef.current = requestId;
+      lastAmbientRequestAtRef.current = now;
+
+      try {
+        const result = await searchCursorNetwork({
+          cursorIndex: selectionStart,
+          limit: AMBIENT_MAX_RESULT_COUNT,
+          memoId: activeMemoId,
+          text,
+        });
+        const firstResult = result.results[0] ?? null;
+
+        if (ambientRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (result.queryChunk && firstResult) {
+          ambientChunkHashRef.current = chunkHash;
+          setAmbientQueryChunk(result.queryChunk);
+          setAmbientResult(firstResult);
+          setAmbientVisible(true);
+        }
+      } catch {
+        // Ambient search is intentionally quiet. Manual network keeps visible errors.
+      }
+    }, AMBIENT_IDLE_DELAY_MS);
+
+    return () => {
+      if (ambientTimerRef.current) {
+        clearTimeout(ambientTimerRef.current);
+        ambientTimerRef.current = null;
+      }
+    };
+  }, [
+    activeMemoId,
+    isAmbientDetailVisible,
+    isNetworkVisible,
+    isPhone,
+    isSidebarOpen,
+    selectionEnd,
+    selectionStart,
+    text,
+  ]);
+
   const sortedMemos = useMemo(() => {
-    return [...memos].sort((a, b) => b.createdAt - a.createdAt);
-  }, [memos]);
+    return [...memos]
+      .filter(memo => memo.content.trim())
+      .filter(memo =>
+        activeCategoryFilter ? memo.category === activeCategoryFilter : true,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [activeCategoryFilter, memos]);
 
   const sessionSections = useMemo(() => {
     const pinned = sortedMemos.filter(memo => memo.pinned);
     const unpinned = sortedMemos.filter(memo => !memo.pinned);
+    const recent = unpinned.slice(0, 3);
+    const remaining = unpinned.slice(3);
+    const now = new Date();
+    const today: Memo[] = [];
+    const previousSevenDays: Memo[] = [];
+    const previousThirtyDays: Memo[] = [];
+    const monthSections = new Map<string, Memo[]>();
+    const yearSections = new Map<string, Memo[]>();
+
+    remaining.forEach(memo => {
+      const createdAt = new Date(memo.createdAt);
+      const daysAgo = differenceInCalendarDays(now, createdAt);
+
+      if (isToday(createdAt)) {
+        today.push(memo);
+        return;
+      }
+
+      if (daysAgo <= 7) {
+        previousSevenDays.push(memo);
+        return;
+      }
+
+      if (daysAgo <= 30) {
+        previousThirtyDays.push(memo);
+        return;
+      }
+
+      const sectionTitle =
+        createdAt.getFullYear() === now.getFullYear()
+          ? format(createdAt, 'M월')
+          : format(createdAt, 'yyyy년');
+      const targetSections =
+        createdAt.getFullYear() === now.getFullYear()
+          ? monthSections
+          : yearSections;
+
+      targetSections.set(sectionTitle, [
+        ...(targetSections.get(sectionTitle) ?? []),
+        memo,
+      ]);
+    });
 
     return [
       {
-        title: '고정된 메모',
+        title: '고정',
         data: pinned,
       },
       {
-        title: '오늘',
-        data: unpinned.filter(memo => isToday(new Date(memo.createdAt))),
+        title: '최근 메모',
+        data: recent,
       },
       {
-        title: '어제',
-        data: unpinned.filter(memo => isYesterday(new Date(memo.createdAt))),
+        title: '오늘',
+        data: today,
+      },
+      {
+        title: '이전 7일',
+        data: previousSevenDays,
       },
       {
         title: '이전 30일',
-        data: unpinned.filter(memo => {
-          const createdAt = new Date(memo.createdAt);
-
-          return !isToday(createdAt) && !isYesterday(createdAt);
-        }),
+        data: previousThirtyDays,
       },
+      ...Array.from(monthSections, ([title, data]) => ({ title, data })),
+      ...Array.from(yearSections, ([title, data]) => ({ title, data })),
     ].filter(section => section.data.length > 0);
   }, [sortedMemos]);
 
@@ -203,8 +504,8 @@ const MemoScreen = () => {
   const dateParseBase = Date.now();
 
   const activeMatches = useMemo(
-    () => parseDates(text, dateParseBase),
-    [dateParseBase, text],
+    () => buildAnchoredDateMatches(text, dateTokenAnchors),
+    [dateTokenAnchors, text],
   );
 
   const highlightedPieces = useMemo(() => {
@@ -212,38 +513,47 @@ const MemoScreen = () => {
   }, [activeMatches, text]);
 
   const focusedMatch = useMemo(() => {
-    const nearest = findNearestDateMatch(activeMatches, selectionStart);
+    const nearest = findFocusedDateMatch(
+      activeMatches,
+      selectionStart,
+      selectionEnd,
+    );
 
     if (nearest && dismissedTooltipKeys.includes(nearest.text)) {
       return null;
     }
 
     return nearest;
-  }, [activeMatches, dismissedTooltipKeys, selectionStart]);
+  }, [activeMatches, dismissedTooltipKeys, selectionEnd, selectionStart]);
 
-  const tooltipTop = useMemo(() => {
-    return getTooltipTop(text, selectionStart, editorHeight);
-  }, [editorHeight, selectionStart, text]);
+  const tooltipPosition = useMemo(() => {
+    if (!focusedMatch) {
+      return { left: 4, top: EDITOR_PADDING_TOP };
+    }
+
+    return getTooltipPosition(
+      text,
+      focusedMatch.index,
+      editorHeight,
+      editorWidth,
+    );
+  }, [editorHeight, editorWidth, focusedMatch, text]);
   const selectedText = useMemo(() => {
     const start = Math.min(selectionStart, selectionEnd);
     const end = Math.max(selectionStart, selectionEnd);
 
     return text.slice(start, end).trim();
   }, [selectionEnd, selectionStart, text]);
-  const selectionToolbarTop = useMemo(() => {
-    const activeLine = getCursorLine(
-      text,
-      Math.max(selectionStart, selectionEnd),
-    );
-    const top =
-      EDITOR_PADDING_TOP + activeLine * EDITOR_LINE_HEIGHT - TOOLTIP_GAP;
+  const selectedDateMatch = useMemo(() => {
+    const start = Math.min(selectionStart, selectionEnd);
+    const end = Math.max(selectionStart, selectionEnd);
 
-    return Math.min(
-      Math.max(top, EDITOR_PADDING_TOP),
-      Math.max(EDITOR_PADDING_TOP, editorHeight - SELECTION_TOOLBAR_HEIGHT - 8),
+    return (
+      activeMatches.find(
+        match => match.index >= start && match.index + match.length <= end,
+      ) ?? null
     );
-  }, [editorHeight, selectionEnd, selectionStart, text]);
-
+  }, [activeMatches, selectionEnd, selectionStart]);
   const miniCalendarDays = useMemo(() => {
     const monthStart = startOfMonth(visibleMonth);
     const monthEnd = endOfMonth(visibleMonth);
@@ -256,76 +566,129 @@ const MemoScreen = () => {
 
   useEffect(() => {
     if (!activeMemo && !isDraftingNewMemo && sortedMemos[0]) {
+      activeMemoIdRef.current = sortedMemos[0].id;
       setActiveMemoId(sortedMemos[0].id);
       setText(sortedMemos[0].content);
+      setDateTokenAnchors(
+        reconcileDateTokenAnchors(
+          sortedMemos[0].content,
+          sortedMemos[0].dateAnchors ?? [],
+          sortedMemos[0].createdAt,
+        ),
+      );
     }
   }, [activeMemo, isDraftingNewMemo, sortedMemos]);
 
   const handleEditorLayout = useCallback((event: LayoutChangeEvent) => {
     setEditorHeight(event.nativeEvent.layout.height);
+    setEditorWidth(event.nativeEvent.layout.width);
   }, []);
 
   const persistCurrentMemo = useCallback(() => {
     const trimmed = text.trim();
+    const currentMemoId = activeMemoIdRef.current;
 
     if (!trimmed) {
+      if (currentMemoId) {
+        deleteMemo(currentMemoId);
+        activeMemoIdRef.current = null;
+        setActiveMemoId(null);
+      }
+
       return null;
     }
 
-    if (activeMemoId) {
-      updateMemo(activeMemoId, text);
-      return activeMemoId;
+    if (currentMemoId) {
+      updateMemo(currentMemoId, text, undefined, dateTokenAnchors);
+      return currentMemoId;
     }
 
-    return addMemo(text);
-  }, [activeMemoId, addMemo, text, updateMemo]);
+    const id = addMemo(text, undefined, dateTokenAnchors);
+    activeMemoIdRef.current = id;
+    setActiveMemoId(id);
+    return id;
+  }, [addMemo, dateTokenAnchors, deleteMemo, text, updateMemo]);
 
   const handleSelectMemo = useCallback(
     (memo: Memo) => {
       persistCurrentMemo();
+      activeMemoIdRef.current = memo.id;
       setActiveMemoId(memo.id);
       setDraftingNewMemo(false);
       setText(memo.content);
+      setDateTokenAnchors(
+        reconcileDateTokenAnchors(
+          memo.content,
+          memo.dateAnchors ?? [],
+          memo.createdAt,
+        ),
+      );
       setSelectionStart(0);
       setSelectionEnd(0);
       setDismissedTooltipKeys([]);
+      if (isPhone) {
+        setSidebarOpen(false);
+      }
     },
-    [persistCurrentMemo],
+    [isPhone, persistCurrentMemo],
   );
 
   const handleNewMemo = useCallback(() => {
-    if (activeMemoId && !text.trim()) {
-      deleteMemo(activeMemoId);
+    const currentMemoId = activeMemoIdRef.current;
+
+    if (currentMemoId && !text.trim()) {
+      deleteMemo(currentMemoId);
     } else {
       persistCurrentMemo();
     }
+    activeMemoIdRef.current = null;
     setActiveMemoId(null);
     setDraftingNewMemo(true);
     setText('');
+    setDateTokenAnchors([]);
     setSelectionStart(0);
     setSelectionEnd(0);
     setDismissedTooltipKeys([]);
-  }, [activeMemoId, deleteMemo, persistCurrentMemo, text]);
+    if (isPhone) {
+      setSidebarOpen(false);
+    }
+  }, [deleteMemo, isPhone, persistCurrentMemo, text]);
 
   const handleChangeText = useCallback(
     (nextText: string) => {
+      const nextAnchors = reconcileDateTokenAnchors(nextText, dateTokenAnchors);
+      const currentMemoId = activeMemoIdRef.current;
+      const trimmed = nextText.trim();
+
+      setAmbientVisible(false);
       setText(nextText);
+      setDateTokenAnchors(nextAnchors);
       setDismissedTooltipKeys(previous =>
         previous.filter(token => nextText.includes(token)),
       );
 
-      if (activeMemoId) {
-        updateMemo(activeMemoId, nextText);
+      if (!trimmed) {
+        if (currentMemoId) {
+          deleteMemo(currentMemoId);
+          activeMemoIdRef.current = null;
+          setActiveMemoId(null);
+        }
+
+        setDraftingNewMemo(true);
         return;
       }
 
-      if (nextText.trim()) {
-        const id = addMemo(nextText);
-        setActiveMemoId(id);
-        setDraftingNewMemo(false);
+      if (currentMemoId) {
+        updateMemo(currentMemoId, nextText, undefined, nextAnchors);
+        return;
       }
+
+      const id = addMemo(nextText, undefined, nextAnchors);
+      activeMemoIdRef.current = id;
+      setActiveMemoId(id);
+      setDraftingNewMemo(false);
     },
-    [activeMemoId, addMemo, updateMemo],
+    [addMemo, dateTokenAnchors, deleteMemo, updateMemo],
   );
 
   const deleteActiveMemo = useCallback(() => {
@@ -339,13 +702,23 @@ const MemoScreen = () => {
     deleteMemo(activeMemoId);
 
     if (nextMemo) {
+      activeMemoIdRef.current = nextMemo.id;
       setActiveMemoId(nextMemo.id);
       setDraftingNewMemo(false);
       setText(nextMemo.content);
+      setDateTokenAnchors(
+        reconcileDateTokenAnchors(
+          nextMemo.content,
+          nextMemo.dateAnchors ?? [],
+          nextMemo.createdAt,
+        ),
+      );
     } else {
+      activeMemoIdRef.current = null;
       setActiveMemoId(null);
       setDraftingNewMemo(true);
       setText('');
+      setDateTokenAnchors([]);
     }
 
     setSelectionStart(0);
@@ -377,6 +750,95 @@ const MemoScreen = () => {
       toggleMemoPinned(activeMemoId);
     }
   }, [activeMemoId, toggleMemoPinned]);
+
+  const handleOpenNetwork = useCallback(async () => {
+    setMoreMenuVisible(false);
+    setAmbientVisible(false);
+    setNetworkVisible(true);
+    setNetworkLoading(true);
+    setNetworkErrorMessage(null);
+    setNetworkQueryChunk(null);
+    setNetworkResults([]);
+
+    try {
+      const result = await searchCursorNetwork({
+        cursorIndex: selectionStart,
+        memoId: activeMemoId,
+        text,
+      });
+      setNetworkQueryChunk(result.queryChunk);
+      setNetworkResults(result.results);
+      if (result.message && result.results.length === 0) {
+        setNetworkErrorMessage(result.message);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '네트워크 검색에 실패했습니다.';
+      setNetworkErrorMessage(
+        message.includes('login')
+          ? '기기 연동 로그인 후 온라인 네트워크를 사용할 수 있습니다.'
+          : '온라인 네트워크 검색을 사용할 수 없습니다. backend URL과 연결 상태를 확인해 주세요.',
+      );
+    } finally {
+      setNetworkLoading(false);
+    }
+  }, [activeMemoId, selectionStart, text]);
+
+  const handleSelectCategory = useCallback(
+    (category: string) => {
+      setActiveCategoryFilter(category);
+      setSidebarViewMode('chronological');
+    },
+    [setActiveCategoryFilter],
+  );
+
+  const handleClearCategoryFilter = useCallback(() => {
+    clearActiveCategoryFilter();
+  }, [clearActiveCategoryFilter]);
+
+  const handleNetworkNavigateToMemo = useCallback(
+    (memoId: string) => {
+      const targetMemo = memos.find(m => m.id === memoId);
+
+      if (!targetMemo) {
+        return;
+      }
+
+      setNetworkVisible(false);
+      persistCurrentMemo();
+      activeMemoIdRef.current = targetMemo.id;
+      setActiveMemoId(targetMemo.id);
+      setDraftingNewMemo(false);
+      setText(targetMemo.content);
+      setDateTokenAnchors(
+        reconcileDateTokenAnchors(
+          targetMemo.content,
+          targetMemo.dateAnchors ?? [],
+          targetMemo.createdAt,
+        ),
+      );
+      setSelectionStart(0);
+      setSelectionEnd(0);
+      setDismissedTooltipKeys([]);
+    },
+    [memos, persistCurrentMemo],
+  );
+
+  const handleTogglePinnedFromMenu = useCallback(() => {
+    setMoreMenuVisible(false);
+    handleTogglePinned();
+  }, [handleTogglePinned]);
+
+  const handleDeleteFromMenu = useCallback(() => {
+    setMoreMenuVisible(false);
+    handleDeleteMemo();
+  }, [handleDeleteMemo]);
+
+  const handleOpenMemoList = useCallback(() => {
+    Keyboard.dismiss();
+    setMoreMenuVisible(false);
+    setSidebarOpen(true);
+  }, []);
 
   const insertToken = useCallback(
     (token: string) => {
@@ -427,7 +889,8 @@ const MemoScreen = () => {
   );
 
   const handleScheduleSelection = useCallback(() => {
-    const selectedMatch = parseDates(selectedText, Date.now())[0];
+    const selectedMatch =
+      parseDates(selectedText, Date.now())[0] ?? selectedDateMatch;
 
     if (selectedMatch) {
       registerSelectedTextSchedule(selectedText, selectedMatch.date.getTime());
@@ -437,7 +900,7 @@ const MemoScreen = () => {
     setPendingScheduleText(selectedText);
     Keyboard.dismiss();
     setDateModalVisible(true);
-  }, [registerSelectedTextSchedule, selectedText]);
+  }, [registerSelectedTextSchedule, selectedDateMatch, selectedText]);
 
   const handleApplyDate = useCallback(
     (date: Date) => {
@@ -479,12 +942,17 @@ const MemoScreen = () => {
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            {isPhone && (
+            {isPhone && !isSidebarOpen && (
               <Pressable
-                onPress={() => setSidebarOpen(prev => !prev)}
-                style={styles.iconButton}
+                accessibilityLabel="메모 목록"
+                hitSlop={8}
+                onPress={handleOpenMemoList}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  pressed && styles.controlPressed,
+                ]}
               >
-                <Menu size={19} color="#1D1D1F" />
+                <ChevronLeft size={22} color="#5C4D3C" />
               </Pressable>
             )}
             <View>
@@ -497,98 +965,164 @@ const MemoScreen = () => {
             </View>
           </View>
           <View style={styles.headerActions}>
-            <Pressable
-              accessibilityLabel="네트워크 보기"
-              onPress={() => setNetworkVisible(true)}
-              style={styles.iconButton}
-            >
-              <Network size={18} color="#1D1D1F" />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={!activeMemoId}
-              onPress={handleTogglePinned}
-              style={[
-                styles.pinButton,
-                activeMemo?.pinned && styles.pinButtonActive,
-                !activeMemoId && styles.pinButtonDisabled,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.pinButtonText,
-                  activeMemo?.pinned && styles.pinButtonTextActive,
-                  !activeMemoId && styles.pinButtonTextDisabled,
+            {!(isPhone && isSidebarOpen) && (
+              <Pressable
+                accessibilityLabel="메모 옵션"
+                hitSlop={6}
+                onPress={() => setMoreMenuVisible(previous => !previous)}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  isMoreMenuVisible && styles.iconButtonActive,
+                  pressed && styles.controlPressed,
                 ]}
               >
-                {activeMemo?.pinned ? '고정됨' : '고정'}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="메모 삭제"
-              disabled={!activeMemoId}
-              onPress={handleDeleteMemo}
-              style={[
-                styles.iconButton,
-                !activeMemoId && styles.iconButtonDisabled,
-              ]}
-            >
-              <Trash2 size={18} color="#1D1D1F" />
-            </Pressable>
+                <MoreHorizontal size={20} color="#5C4D3C" />
+              </Pressable>
+            )}
             <Pressable
               accessibilityLabel="새 메모"
+              hitSlop={6}
               onPress={handleNewMemo}
-              style={styles.iconButton}
+              style={({ pressed }) => [
+                styles.iconButton,
+                pressed && styles.controlPressed,
+              ]}
             >
-              <Plus size={19} color="#1D1D1F" />
+              <Plus size={19} color="#5C4D3C" />
             </Pressable>
           </View>
         </View>
 
         <View style={styles.body}>
-          {isPhone && isSidebarOpen && (
-            <Pressable
-              style={styles.sidebarOverlay}
-              onPress={() => setSidebarOpen(false)}
-            />
-          )}
-          {isSidebarOpen && (
+          {(!isPhone || isSidebarOpen) && (
             <MemoSidebar
+              activeCategoryFilter={activeCategoryFilter}
               activeMemoId={activeMemoId}
               isDraftingNewMemo={isDraftingNewMemo}
               isPhone={isPhone}
               memoCount={sortedMemos.length}
+              onClearCategoryFilter={handleClearCategoryFilter}
+              onSelectCategory={handleSelectCategory}
               onSelectMemo={handleSelectMemo}
               sections={sessionSections}
+              viewMode={sidebarViewMode}
+              onChangeViewMode={setSidebarViewMode}
             />
           )}
 
-          <MemoEditor
-            dateParseBase={dateParseBase}
-            focusedMatch={focusedMatch}
-            formatTooltip={formatDateMatchTooltip}
-            highlightedPieces={highlightedPieces}
-            inputAccessoryViewID={
-              Platform.OS === 'ios' ? ACCESSORY_ID : undefined
-            }
-            onCancelMatch={handleCancelMatch}
-            onChangeText={handleChangeText}
-            onLayout={handleEditorLayout}
-            onScheduleSelection={handleScheduleSelection}
-            onSelectionChange={(start, end) => {
-              setSelectionStart(start);
-              setSelectionEnd(end);
-            }}
-            selectedText={selectedText}
-            selectionToolbarTop={selectionToolbarTop}
-            text={text}
-            tooltipTop={tooltipTop}
-          />
+          {(!isPhone || !isSidebarOpen) && (
+            <MemoEditor
+              dateParseBase={dateParseBase}
+              focusedMatch={focusedMatch}
+              formatTooltip={formatDateMatchTooltip}
+              highlightedPieces={highlightedPieces}
+              inputAccessoryViewID={
+                Platform.OS === 'ios' ? DATE_ACTIONS_ACCESSORY_ID : undefined
+              }
+              onCancelMatch={handleCancelMatch}
+              onChangeText={handleChangeText}
+              onLayout={handleEditorLayout}
+              onScheduleSelection={handleScheduleSelection}
+              onSelectionChange={(start, end) => {
+                setSelectionStart(start);
+                setSelectionEnd(end);
+              }}
+              selectedText={selectedText}
+              text={text}
+              tooltipLeft={tooltipPosition.left}
+              tooltipTop={tooltipPosition.top}
+            />
+          )}
         </View>
+
+        {isAmbientVisible &&
+          ambientQueryChunk &&
+          ambientResult &&
+          !isNetworkVisible &&
+          (!isPhone || !isSidebarOpen) && (
+            <View
+              pointerEvents="box-none"
+              style={styles.ambientCardLayer}
+            >
+              <AmbientNetworkCard
+                onPress={() => {
+                  setAmbientVisible(false);
+                  setAmbientDetailVisible(true);
+                }}
+                queryChunk={ambientQueryChunk}
+                result={ambientResult}
+              />
+            </View>
+          )}
       </KeyboardAvoidingView>
 
-      {Platform.OS === 'ios' && (
-        <InputAccessoryView nativeID={ACCESSORY_ID}>
+      {isMoreMenuVisible && (
+        <>
+          <Pressable
+            accessibilityLabel="메모 옵션 닫기"
+            onPress={() => setMoreMenuVisible(false)}
+            style={styles.moreMenuBackdrop}
+          />
+          <View style={styles.moreMenu}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleOpenNetwork}
+              style={({ pressed }) => [
+                styles.moreMenuItem,
+                pressed && styles.moreMenuItemPressed,
+              ]}
+            >
+              <Network size={17} color="#5C4D3C" />
+              <Text style={styles.moreMenuText}>네트워크 보기</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!activeMemoId}
+              onPress={handleTogglePinnedFromMenu}
+              style={({ pressed }) => [
+                styles.moreMenuItem,
+                !activeMemoId && styles.moreMenuItemDisabled,
+                pressed && activeMemoId && styles.moreMenuItemPressed,
+              ]}
+            >
+              <Text style={styles.moreMenuIconText}>핀</Text>
+              <Text
+                style={[
+                  styles.moreMenuText,
+                  !activeMemoId && styles.moreMenuTextDisabled,
+                ]}
+              >
+                {activeMemo?.pinned ? '고정 해제' : '메모 고정'}
+              </Text>
+            </Pressable>
+            <View style={styles.moreMenuDivider} />
+            <Pressable
+              accessibilityRole="button"
+              disabled={!activeMemoId}
+              onPress={handleDeleteFromMenu}
+              style={({ pressed }) => [
+                styles.moreMenuItem,
+                !activeMemoId && styles.moreMenuItemDisabled,
+                pressed && activeMemoId && styles.moreMenuItemPressed,
+              ]}
+            >
+              <Trash2 size={17} color={activeMemoId ? '#B5453A' : '#9C8E7C'} />
+              <Text
+                style={[
+                  styles.moreMenuText,
+                  styles.moreMenuDeleteText,
+                  !activeMemoId && styles.moreMenuTextDisabled,
+                ]}
+              >
+                메모 삭제
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+
+      {Platform.OS === 'ios' ? (
+        <InputAccessoryView nativeID={DATE_ACTIONS_ACCESSORY_ID}>
           <View style={styles.keyboardAccessory}>
             <DateQuickActions
               onDismissKeyboard={Keyboard.dismiss}
@@ -597,6 +1131,18 @@ const MemoScreen = () => {
             />
           </View>
         </InputAccessoryView>
+      ) : (
+        isKeyboardVisible && (
+          <View
+            style={[styles.keyboardAccessory, styles.keyboardAccessoryFloating]}
+          >
+            <DateQuickActions
+              onDismissKeyboard={Keyboard.dismiss}
+              onInsertToken={insertToken}
+              onOpenCalendar={() => setDateModalVisible(true)}
+            />
+          </View>
+        )
       )}
 
       {isDateModalVisible && (
@@ -618,18 +1164,24 @@ const MemoScreen = () => {
       )}
 
       <MemoNetworkPanel
+        errorMessage={networkErrorMessage}
+        isLoading={isNetworkLoading}
         onClose={() => setNetworkVisible(false)}
+        onNavigateToMemo={handleNetworkNavigateToMemo}
+        queryChunk={networkQueryChunk}
+        results={networkResults}
         visible={isNetworkVisible}
       />
-      {isKeyboardVisible && (
-        <Pressable
-          accessibilityLabel="키보드 닫기"
-          onPress={Keyboard.dismiss}
-          style={styles.keyboardDismissFloating}
-        >
-          <Text style={styles.keyboardDismissText}>키보드 닫기</Text>
-        </Pressable>
-      )}
+      <AmbientNetworkDetailPanel
+        onClose={() => setAmbientDetailVisible(false)}
+        onNavigateToMemo={memoId => {
+          setAmbientDetailVisible(false);
+          handleNetworkNavigateToMemo(memoId);
+        }}
+        queryChunk={ambientQueryChunk}
+        result={ambientResult}
+        visible={isAmbientDetailVisible}
+      />
     </SafeAreaView>
   );
 };
@@ -643,7 +1195,7 @@ const editorTextBase = {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
     flex: 1,
   },
   keyboardAvoider: {
@@ -653,22 +1205,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingBottom: 10,
-    paddingHorizontal: 22,
-    paddingTop: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   headerLeft: {
-    flexDirection: 'row',
     alignItems: 'center',
+    flexDirection: 'row',
     gap: 10,
   },
   title: {
-    color: '#1D1D1F',
-    fontSize: 31,
-    fontWeight: '700',
+    color: '#2C2520',
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
   subtitle: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 13,
     marginTop: 3,
   },
@@ -677,40 +1230,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   pinButton: {
-    borderColor: '#E4E4E7',
-    borderRadius: 6,
+    alignItems: 'center',
+    backgroundColor: '#FAF6F0',
+    borderColor: '#E5DDD0',
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    marginRight: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    justifyContent: 'center',
+    marginRight: 8,
+    minHeight: 36,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
   },
   pinButtonActive: {
-    backgroundColor: '#1D1D1F',
-    borderColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
+    borderColor: '#5C4D3C',
   },
   pinButtonDisabled: {
     opacity: 0.35,
   },
   pinButtonText: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 12,
     fontWeight: '800',
   },
   pinButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
   },
   pinButtonTextDisabled: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
   },
   iconButton: {
     alignItems: 'center',
-    borderColor: '#E4E4E7',
-    borderRadius: 6,
+    backgroundColor: '#FAF6F0',
+    borderColor: '#E5DDD0',
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
+    height: 36,
     justifyContent: 'center',
-    marginRight: 12,
-    width: 34,
+    marginRight: 8,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    width: 36,
+  },
+  iconButtonActive: {
+    backgroundColor: '#EDE6D8',
+  },
+  controlPressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.97 }],
   },
   iconButtonDisabled: {
     opacity: 0.35,
@@ -719,22 +1292,29 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
+  ambientCardLayer: {
+    bottom: 26,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 60,
+  },
   sessionRail: {
-    borderRightColor: '#ECECEC',
+    borderRightColor: '#E5DDD0',
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingLeft: 12,
     paddingRight: 8,
     width: 190,
   },
   sessionRailPhone: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
     borderRightWidth: 0,
     elevation: 10,
     left: 0,
     position: 'absolute',
-    shadowColor: '#000',
+    shadowColor: '#5C4D3C',
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     top: 0,
     bottom: 0,
@@ -742,7 +1322,7 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   sidebarOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(44, 37, 32, 0.15)',
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -759,12 +1339,12 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   sessionTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 12,
     fontWeight: '800',
   },
   sessionCount: {
-    color: '#9A9AA0',
+    color: '#9C8E7C',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -772,7 +1352,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sessionSectionTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 20,
     fontWeight: '800',
     paddingBottom: 8,
@@ -785,15 +1365,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   memoRowActive: {
-    backgroundColor: '#F3F3F0',
+    backgroundColor: '#EDE6D8',
   },
   memoRowTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 13,
     fontWeight: '700',
   },
   memoRowMeta: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 11,
     marginTop: 4,
   },
@@ -822,18 +1402,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.13,
     shadowRadius: 8,
-  },
-  highlightText: {
-    ...editorTextBase,
-    color: '#1D1D1F',
-  },
-  highlightLayer: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 2,
   },
   linedPaper: {
     bottom: 0,
@@ -872,18 +1440,18 @@ const styles = StyleSheet.create({
   },
   selectionFloatingButton: {
     alignItems: 'center',
-    backgroundColor: '#1D1D1F',
-    borderRadius: 5,
+    backgroundColor: '#5C4D3C',
+    borderRadius: 8,
     height: SELECTION_TOOLBAR_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: 12,
-    shadowColor: '#000',
+    shadowColor: '#5C4D3C',
     shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.18,
     shadowRadius: 12,
   },
   selectionFloatingText: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -922,27 +1490,84 @@ const styles = StyleSheet.create({
     width: 26,
   },
   keyboardAccessory: {
-    backgroundColor: '#F7F7F7',
-    borderTopColor: '#D8D8DC',
+    backgroundColor: '#F5EFE5',
+    borderTopColor: '#E5DDD0',
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    paddingTop: 8,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
   },
-  keyboardDismissFloating: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#1D1D1F',
-    borderRadius: 16,
-    bottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  keyboardAccessoryFloating: {
+    left: 0,
     position: 'absolute',
+    right: 0,
+    zIndex: 90,
+  },
+  moreMenuBackdrop: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 70,
+  },
+  moreMenu: {
+    backgroundColor: '#FAF6F0',
+    borderColor: '#E5DDD0',
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    position: 'absolute',
+    right: 18,
+    shadowColor: '#5C4D3C',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    top: 66,
+    width: 188,
     zIndex: 80,
   },
-  keyboardDismissText: {
-    color: '#FFFFFF',
+  moreMenuItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 42,
+    paddingHorizontal: 13,
+  },
+  moreMenuItemPressed: {
+    backgroundColor: '#EDE6D8',
+  },
+  moreMenuItemDisabled: {
+    opacity: 0.45,
+  },
+  moreMenuText: {
+    color: '#2C2520',
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  moreMenuTextDisabled: {
+    color: '#9C8E7C',
+  },
+  moreMenuIconText: {
+    color: '#2C2520',
     fontSize: 12,
     fontWeight: '800',
+    textAlign: 'center',
+    width: 17,
+  },
+  moreMenuDeleteText: {
+    color: '#B5453A',
+  },
+  moreMenuDivider: {
+    backgroundColor: '#E5DDD0',
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 40,
+    marginVertical: 4,
   },
   dateAccessoryChip: {
     backgroundColor: '#EEF2FF',

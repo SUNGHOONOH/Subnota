@@ -1,0 +1,29 @@
+[project]
+name = "memoapp-backend"
+version = "0.1.0"
+description = "MemoApp topic discovery backend"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "huggingface-hub>=0.23.0",
+  "kiwipiepy>=0.21.0",
+  "numpy>=1.26.0",
+  "pydantic>=2.8.0",
+  "pydantic-settings>=2.4.0",
+  "python-dotenv>=1.0.1",
+  "scikit-learn>=1.5.0",
+  "supabase>=2.6.0",
+  "uvicorn[standard]>=0.30.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

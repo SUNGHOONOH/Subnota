@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, Vibration } from 'react-native';
+import { Animated, PanResponder, StyleSheet } from 'react-native';
 
 import BrickBlock from '../../../components/BrickBlock';
 
@@ -131,7 +131,6 @@ const DraggableBrick = ({
         },
         onPanResponderGrant: () => {
           longPressTimer.current = setTimeout(() => {
-            Vibration.vibrate(12);
             onDelete(brick);
             finishInteraction(false);
           }, 600);
@@ -182,9 +181,10 @@ const DraggableBrick = ({
 
   const animatedBrickStyle = useMemo(
     () => ({
+      elevation: isDragging ? 1000 : index + 1,
       opacity: isDragging ? 0.92 : 1,
       transform: [{ translateX: drag.x }, { translateY: drag.y }, { scale }],
-      zIndex: isDragging ? 20 : index + 1,
+      zIndex: isDragging ? 1000 : index + 1,
     }),
     [drag.x, drag.y, index, isDragging, scale],
   );
@@ -199,6 +199,7 @@ const DraggableBrick = ({
       ]}
     >
       <BrickBlock
+        emptyNoteCompact={orientation === 'rows'}
         note={brick.note}
         time={brick.time}
         title={brick.title}
@@ -210,6 +211,7 @@ const DraggableBrick = ({
 
 const styles = StyleSheet.create({
   brickOffset: {
+    position: 'relative',
     width: '100%',
   },
   brickInset: {

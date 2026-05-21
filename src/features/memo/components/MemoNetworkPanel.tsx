@@ -2,14 +2,29 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { X } from 'lucide-react-native';
 
-import MemoNetworkGraph from './MemoNetworkGraph';
+import { MemoChunk } from '../../../lib/memoChunker';
+import { NetworkSearchResult } from '../../../services/backend/networkService';
+import LocalKnnGraph from './LocalKnnGraph';
 
 interface MemoNetworkPanelProps {
+  errorMessage?: string | null;
+  isLoading: boolean;
   onClose: () => void;
+  onNavigateToMemo: (memoId: string) => void;
+  queryChunk: MemoChunk | null;
+  results: NetworkSearchResult[];
   visible: boolean;
 }
 
-const MemoNetworkPanel = ({ onClose, visible }: MemoNetworkPanelProps) => {
+const MemoNetworkPanel = ({
+  errorMessage,
+  isLoading,
+  onClose,
+  onNavigateToMemo,
+  queryChunk,
+  results,
+  visible,
+}: MemoNetworkPanelProps) => {
   return (
     <Modal
       animationType="fade"
@@ -21,20 +36,24 @@ const MemoNetworkPanel = ({ onClose, visible }: MemoNetworkPanelProps) => {
         <View style={styles.networkPanel}>
           <View style={styles.networkHeader}>
             <View>
-              <Text style={styles.networkTitle}>네트워크</Text>
-              <Text style={styles.networkSubtitle}>
-                메모가 주제별 노드로 묶이는 초안
-              </Text>
+              <Text style={styles.networkTitle}>🕸️ 네트워크</Text>
+              <Text style={styles.networkSubtitle}>커서 문장 기준으로 탐색합니다</Text>
             </View>
             <Pressable
               accessibilityLabel="네트워크 닫기"
               onPress={onClose}
               style={styles.iconButton}
             >
-              <X size={18} color="#1D1D1F" />
+              <X size={18} color="#5C4D3C" />
             </Pressable>
           </View>
-          <MemoNetworkGraph />
+          <LocalKnnGraph
+            errorMessage={errorMessage}
+            isLoading={isLoading}
+            onNavigateToMemo={onNavigateToMemo}
+            queryChunk={queryChunk}
+            results={results}
+          />
         </View>
       </View>
     </Modal>
@@ -44,22 +63,28 @@ const MemoNetworkPanel = ({ onClose, visible }: MemoNetworkPanelProps) => {
 const styles = StyleSheet.create({
   networkBackdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(29, 29, 31, 0.22)',
+    backgroundColor: 'rgba(44, 37, 32, 0.28)',
     flex: 1,
     justifyContent: 'center',
     padding: 18,
   },
   networkPanel: {
-    backgroundColor: '#FAFAF8',
-    borderRadius: 8,
-    height: '82%',
+    backgroundColor: '#FAF6F0',
+    borderColor: '#E5DDD0',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: '78%',
     overflow: 'hidden',
+    shadowColor: '#5C4D3C',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.15,
+    shadowRadius: 32,
     width: '100%',
   },
   networkHeader: {
     alignItems: 'center',
-    backgroundColor: '#FAFAF8',
-    borderBottomColor: '#E5E0D6',
+    backgroundColor: '#FAF6F0',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -67,20 +92,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   networkTitle: {
-    color: '#1D1D1F',
-    fontSize: 22,
+    color: '#2C2520',
+    fontSize: 20,
     fontWeight: '800',
   },
   networkSubtitle: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 3,
   },
   iconButton: {
     alignItems: 'center',
-    borderColor: '#E4E4E7',
-    borderRadius: 6,
+    borderColor: '#E5DDD0',
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     height: 34,
     justifyContent: 'center',

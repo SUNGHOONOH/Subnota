@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 interface BrickBlockProps {
+  emptyNoteCompact?: boolean;
   note?: string;
   time?: string | null;
   title: string;
@@ -15,7 +16,13 @@ const TONE_COLOR = {
   steel: '#5D6A73',
 };
 
-const BrickBlock = ({ note, time, title, tone }: BrickBlockProps) => {
+const BrickBlock = ({
+  emptyNoteCompact = false,
+  note,
+  time,
+  title,
+  tone,
+}: BrickBlockProps) => {
   return (
     <View style={[styles.shadowBrick, { backgroundColor: TONE_COLOR[tone] }]}>
       <View style={styles.topEdge} />
@@ -36,7 +43,15 @@ const BrickBlock = ({ note, time, title, tone }: BrickBlockProps) => {
           {note}
         </Text>
       ) : (
-        <Text style={styles.emptyNote}>메모 추가</Text>
+        <Text
+          style={[
+            styles.emptyNote,
+            emptyNoteCompact && styles.emptyNoteCompact,
+          ]}
+          numberOfLines={1}
+        >
+          눌러서 메모 추가
+        </Text>
       )}
     </View>
   );
@@ -96,6 +111,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 13,
     marginTop: 4,
+  },
+  emptyNoteCompact: {
+    fontSize: 7,
+    lineHeight: 9,
+    marginTop: 2,
   },
 });
 

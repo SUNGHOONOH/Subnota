@@ -27,23 +27,23 @@ const TodayContextPanel = ({ scheduledMemos }: TodayContextPanelProps) => {
 
 const styles = StyleSheet.create({
   section: {
-    borderBottomColor: '#E5E0D6',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: 16,
   },
   sectionTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 14,
     fontWeight: '800',
     marginBottom: 10,
   },
   emptyText: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 14,
     fontWeight: '600',
   },
   scheduleLine: {
-    color: '#3A3A3D',
+    color: '#3A352E',
     fontSize: 14,
     fontWeight: '700',
     paddingVertical: 5,

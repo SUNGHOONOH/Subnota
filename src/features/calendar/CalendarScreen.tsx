@@ -29,7 +29,6 @@ import {
 
 import { CalendarBrick, Memo, useMemoStore } from '../../store/useMemoStore';
 import {
-  clamp,
   getDateForWeekDay,
   getWeekOfMonth,
   normalizeTime,
@@ -44,6 +43,7 @@ import MonthGrid from './components/MonthGrid';
 import WeekBoard from './components/WeekBoard';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const MOBILE_SLOT_TIMES = ['04:00', '08:00', '12:00', '16:00', '20:00'];
 
 type CalendarMode = 'month' | 'week';
 
@@ -68,6 +68,99 @@ const applyTimeToTimestamp = (timestamp: number, time: string | null) => {
   }
 
   return date.getTime();
+};
+
+const getMobileSlotTime = (slotIndex: number, currentTime?: string | null) => {
+  if (!currentTime) {
+    return currentTime ?? null;
+  }
+
+  return (
+    MOBILE_SLOT_TIMES[
+      Math.min(Math.max(slotIndex, 0), MOBILE_SLOT_TIMES.length - 1)
+    ] ?? currentTime
+  );
+};
+
+const getMobileSlotIndex = (brick: CalendarDisplayBrick) => {
+  if (!brick.time) {
+    return Math.min(Math.max(brick.order, 0), MOBILE_SLOT_TIMES.length - 1);
+  }
+
+  const hour = Number(brick.time.slice(0, 2));
+
+  if (Number.isNaN(hour)) {
+    return Math.min(Math.max(brick.order, 0), MOBILE_SLOT_TIMES.length - 1);
+  }
+
+  if (hour < 8) {
+    return 0;
+  }
+  if (hour < 12) {
+    return 1;
+  }
+  if (hour < 16) {
+    return 2;
+  }
+  if (hour < 20) {
+    return 3;
+  }
+
+  return 4;
+};
+
+const findNearestEmptySlot = (
+  slots: Array<CalendarDisplayBrick | null>,
+  preferredSlot: number,
+) => {
+  if (slots[preferredSlot] === null) {
+    return preferredSlot;
+  }
+
+  for (let offset = 1; offset < slots.length; offset += 1) {
+    const right = preferredSlot + offset;
+    const left = preferredSlot - offset;
+
+    if (right < slots.length && slots[right] === null) {
+      return right;
+    }
+
+    if (left >= 0 && slots[left] === null) {
+      return left;
+    }
+  }
+
+  return preferredSlot;
+};
+
+const getRenderedMobileSlots = (bricks: CalendarDisplayBrick[]) => {
+  const slots = MOBILE_SLOT_TIMES.map(
+    () => null as CalendarDisplayBrick | null,
+  );
+
+  bricks
+    .sort((a, b) => {
+      const aTime = a.time;
+      const bTime = b.time;
+      if (aTime && bTime) {
+        return aTime.localeCompare(bTime);
+      }
+      if (aTime && !bTime) {
+        return -1;
+      }
+      if (!aTime && bTime) {
+        return 1;
+      }
+      return a.order - b.order;
+    })
+    .forEach(brick => {
+      const preferredSlot = getMobileSlotIndex(brick);
+      const slotIndex = findNearestEmptySlot(slots, preferredSlot);
+
+      slots[slotIndex] = brick;
+    });
+
+  return slots;
 };
 
 const getDateKey = (timestamp: number) =>
@@ -151,9 +244,6 @@ const CalendarScreen = () => {
   const updateMemo = useMemoStore(state => state.updateMemo);
   const updateCalendarBrick = useMemoStore(state => state.updateCalendarBrick);
   const deleteCalendarBrick = useMemoStore(state => state.deleteCalendarBrick);
-  const batchUpdateCalendarBricks = useMemoStore(
-    state => state.batchUpdateCalendarBricks,
-  );
   const [mode, setMode] = useState<CalendarMode>('month');
   const [visibleMonth, setVisibleMonth] = useState(startOfMonth(new Date()));
   const [visibleWeekStart, setVisibleWeekStart] = useState(
@@ -314,54 +404,68 @@ const CalendarScreen = () => {
         return;
       }
 
-      const targetDayBricks = visibleBricks
-        .filter(brick => brick.id !== id && brick.day === nextDay)
-        .sort((a, b) => a.order - b.order);
-      const insertIndex = clamp(requestedOrder, 0, targetDayBricks.length);
-      const reorderedTargetDay = [
-        ...targetDayBricks.slice(0, insertIndex),
-        { ...moving, day: nextDay },
-        ...targetDayBricks.slice(insertIndex),
-      ].map((brick, order) => ({ ...brick, order }));
+      const targetOrder = isPhone
+        ? Math.min(Math.max(requestedOrder, 0), MOBILE_SLOT_TIMES.length - 1)
+        : requestedOrder;
+      const sourceDay = moving.day;
+      const sourceOrder = isPhone ? getMobileSlotIndex(moving) : moving.order;
+      const targetBrick = isPhone
+        ? getRenderedMobileSlots(
+            visibleBricks.filter(
+              brick => brick.id !== id && brick.day === nextDay,
+            ),
+          )[targetOrder]
+        : null;
 
-      setMemoBrickOverrides(previous => {
-        const next = { ...previous };
+      const moveSingleBrick = (
+        brick: CalendarDisplayBrick,
+        day: number,
+        order: number,
+      ) => {
+        const nextTime = isPhone
+          ? getMobileSlotTime(order, brick.time)
+          : brick.time ?? null;
 
-        reorderedTargetDay.forEach(brick => {
-          if (brick.id.startsWith('memo-')) {
-            const memoId = brick.id.replace('memo-', '');
-            next[memoId] = { ...next[memoId], order: brick.order };
-          }
-        });
+        if (brick.id.startsWith('memo-')) {
+          const memoId = brick.id.replace('memo-', '');
+          setMemoBrickOverrides(previous => ({
+            ...previous,
+            [memoId]: {
+              ...previous[memoId],
+              order,
+            },
+          }));
+          updateMemoScheduledAt(
+            memoId,
+            applyTimeToTimestamp(
+              getDateForWeekDay(visibleWeekStart, day),
+              nextTime,
+            ),
+          );
+          return;
+        }
 
-        return next;
-      });
-
-      if (id.startsWith('memo-')) {
-        updateMemoScheduledAt(
-          id.replace('memo-', ''),
-          getDateForWeekDay(visibleWeekStart, nextDay),
-        );
-      }
-
-      const brickUpdates = reorderedTargetDay
-        .filter(b => !b.id.startsWith('memo-'))
-        .map(b => ({
-          id: b.id,
-          day: b.day,
-          order: b.order,
+        updateCalendarBrick(brick.id, {
+          day,
+          order,
           scheduledAt: applyTimeToTimestamp(
-            getDateForWeekDay(visibleWeekStart, b.day),
-            b.time ?? null,
+            getDateForWeekDay(visibleWeekStart, day),
+            nextTime,
           ),
-        }));
-      if (brickUpdates.length > 0) {
-        batchUpdateCalendarBricks(brickUpdates);
+          time: nextTime,
+        });
+      };
+
+      moveSingleBrick(moving, nextDay, targetOrder);
+
+      if (targetBrick) {
+        moveSingleBrick(targetBrick, sourceDay, sourceOrder);
       }
     },
     [
-      batchUpdateCalendarBricks,
+      updateCalendarBrick,
       updateMemoScheduledAt,
+      isPhone,
       visibleBricks,
       visibleWeekStart,
     ],
@@ -557,7 +661,7 @@ const CalendarScreen = () => {
             <TextInput
               onChangeText={setAddBrickTitle}
               placeholder="블럭 제목"
-              placeholderTextColor="#A8A8AD"
+              placeholderTextColor="#B5A898"
               style={styles.addBrickTitleInput}
               value={addBrickTitle}
             />
@@ -568,7 +672,7 @@ const CalendarScreen = () => {
                 maxLength={2}
                 onChangeText={setAddBrickHour}
                 placeholder="시"
-                placeholderTextColor="#A8A8AD"
+                placeholderTextColor="#B5A898"
                 style={styles.addTimeInput}
                 value={addBrickHour}
               />
@@ -578,7 +682,7 @@ const CalendarScreen = () => {
                 maxLength={2}
                 onChangeText={setAddBrickMinute}
                 placeholder="분"
-                placeholderTextColor="#A8A8AD"
+                placeholderTextColor="#B5A898"
                 style={styles.addTimeInput}
                 value={addBrickMinute}
               />
@@ -587,7 +691,7 @@ const CalendarScreen = () => {
               multiline
               onChangeText={setAddBrickNote}
               placeholder="작은 메모"
-              placeholderTextColor="#A8A8AD"
+              placeholderTextColor="#B5A898"
               style={styles.nestedMemoInput}
               textAlignVertical="top"
               value={addBrickNote}
@@ -627,7 +731,7 @@ const CalendarScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FAFAF8',
+    backgroundColor: '#FAF6F0',
     flex: 1,
   },
   header: {
@@ -639,17 +743,17 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   title: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 31,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 13,
     marginTop: 4,
   },
   modeSwitch: {
-    backgroundColor: '#ECEAE4',
+    backgroundColor: '#EDE6D8',
     borderRadius: 6,
     flexDirection: 'row',
     padding: 3,
@@ -660,15 +764,15 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   modeActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
   },
   modeText: {
-    color: '#6E6E73',
+    color: '#9C8E7C',
     fontSize: 13,
     fontWeight: '700',
   },
   modeTextActive: {
-    color: '#1D1D1F',
+    color: '#2C2520',
   },
   monthPanel: {
     flex: 1,
@@ -687,12 +791,12 @@ const styles = StyleSheet.create({
     width: 38,
   },
   monthNavText: {
-    color: '#1D1D1F',
+    color: '#5C4D3C',
     fontSize: 30,
     fontWeight: '300',
   },
   monthTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 20,
     fontWeight: '800',
   },
@@ -700,7 +804,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   monthWeekLabel: {
-    color: '#7A7A7E',
+    color: '#9C8E7C',
     flex: 1,
     fontSize: 12,
     fontWeight: '800',
@@ -708,17 +812,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   monthGrid: {
-    borderLeftColor: '#E1DED5',
+    borderLeftColor: '#E5DDD0',
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E1DED5',
+    borderTopColor: '#E5DDD0',
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   monthCell: {
-    borderBottomColor: '#E1DED5',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderRightColor: '#E1DED5',
+    borderRightColor: '#E5DDD0',
     borderRightWidth: StyleSheet.hairlineWidth,
     minHeight: 82,
     padding: 7,
@@ -728,15 +832,15 @@ const styles = StyleSheet.create({
     opacity: 0.32,
   },
   monthDayNumber: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 13,
     fontWeight: '800',
     marginBottom: 5,
   },
   monthMemo: {
-    backgroundColor: '#E8F2EA',
+    backgroundColor: '#EDE6D8',
     borderRadius: 3,
-    color: '#2F3437',
+    color: '#5C4D3C',
     fontSize: 10,
     fontWeight: '700',
     marginBottom: 3,
@@ -744,7 +848,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   monthMore: {
-    color: '#6E6E73',
+    color: '#9C8E7C',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -755,7 +859,7 @@ const styles = StyleSheet.create({
   },
   weekBoardHeader: {
     alignItems: 'center',
-    borderBottomColor: '#DDD8CC',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -763,13 +867,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   weekBoardTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 18,
     fontWeight: '800',
   },
   addBrickButton: {
     alignItems: 'center',
-    borderColor: '#DEDAD0',
+    borderColor: '#E5DDD0',
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     height: 32,
@@ -780,20 +884,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   column: {
-    borderLeftColor: '#E6E3DA',
+    borderLeftColor: '#E5DDD0',
     borderLeftWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 5,
   },
   dayHeader: {
     alignItems: 'center',
-    borderBottomColor: '#DDD8CC',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     height: 38,
     justifyContent: 'center',
   },
   dayLabel: {
-    color: '#5E5E63',
+    color: '#8B7355',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -818,29 +922,29 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(29, 29, 31, 0.18)',
+    backgroundColor: 'rgba(44, 37, 32, 0.15)',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
   editorPanel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
     borderRadius: 7,
     padding: 18,
     width: '100%',
   },
   editorTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 19,
     fontWeight: '700',
     marginBottom: 12,
   },
   nestedMemoInput: {
-    backgroundColor: '#FAFAF8',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 16,
     lineHeight: 23,
     minHeight: 142,
@@ -848,11 +952,11 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   addBrickTitleInput: {
-    backgroundColor: '#FAFAF8',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 10,
@@ -865,17 +969,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   addTimeLabel: {
-    color: '#5E5E63',
+    color: '#8B7355',
     fontSize: 13,
     fontWeight: '800',
     marginRight: 8,
   },
   addTimeInput: {
-    backgroundColor: '#FAFAF8',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 15,
     fontWeight: '700',
     paddingHorizontal: 10,
@@ -884,7 +988,7 @@ const styles = StyleSheet.create({
     width: 48,
   },
   addTimeColon: {
-    color: '#5E5E63',
+    color: '#8B7355',
     fontSize: 17,
     fontWeight: '800',
     paddingHorizontal: 6,
@@ -900,37 +1004,37 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   cancelText: {
-    color: '#6E6E73',
+    color: '#9C8E7C',
     fontSize: 15,
     fontWeight: '600',
   },
   saveNestedButton: {
-    backgroundColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
     borderRadius: 4,
     marginLeft: 10,
     paddingHorizontal: 17,
     paddingVertical: 10,
   },
   saveNestedText: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
     fontSize: 15,
     fontWeight: '700',
   },
   yearBackdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(29, 29, 31, 0.2)',
+    backgroundColor: 'rgba(44, 37, 32, 0.18)',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
   yearPanel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
     borderRadius: 7,
     padding: 18,
     width: '100%',
   },
   yearTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 14,
@@ -941,7 +1045,7 @@ const styles = StyleSheet.create({
   },
   yearButton: {
     alignItems: 'center',
-    borderColor: '#E1DED5',
+    borderColor: '#E5DDD0',
     borderRadius: 5,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 8,
@@ -950,16 +1054,16 @@ const styles = StyleSheet.create({
     width: 86,
   },
   yearButtonActive: {
-    backgroundColor: '#1D1D1F',
-    borderColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
+    borderColor: '#5C4D3C',
   },
   yearButtonText: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 14,
     fontWeight: '800',
   },
   yearButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
   },
 });
 

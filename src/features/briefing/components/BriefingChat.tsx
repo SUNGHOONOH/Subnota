@@ -49,7 +49,7 @@ const BriefingChat = ({
           onChangeText={onChangeDraft}
           onSubmitEditing={onSend}
           placeholder="지금 뭐부터 하지?"
-          placeholderTextColor="#9A9AA0"
+          placeholderTextColor="#B5A898"
           returnKeyType="send"
           style={styles.input}
           value={draft}
@@ -72,8 +72,8 @@ const styles = StyleSheet.create({
   },
   messageBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 7,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 10,
@@ -83,21 +83,21 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#1D1D1F',
-    borderColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
+    borderColor: '#5C4D3C',
   },
   messageText: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
   },
   userMessageText: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
   },
   composer: {
     alignItems: 'center',
-    borderTopColor: '#E5E0D6',
+    borderTopColor: '#E5DDD0',
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: 10,
@@ -105,11 +105,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#1D1D1F',
+    color: '#2C2520',
     flex: 1,
     fontSize: 15,
     paddingHorizontal: 12,
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
-    backgroundColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
     borderRadius: 6,
     height: 42,
     justifyContent: 'center',

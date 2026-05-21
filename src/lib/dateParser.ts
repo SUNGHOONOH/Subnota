@@ -31,21 +31,21 @@ const NUMERIC_DATE_REGEX =
   /(?<!\d)(\d{2}|\d{4})[./-](\d{1,2})[./-](\d{1,2})(?!\d)/g;
 
 // Relative dates (longer tokens first to avoid partial match)
-const RELATIVE_DATE_REGEX = /내일모레|오늘|내일|모레|글피/g;
+const RELATIVE_DATE_REGEX = /내일\s*모레|오늘|내일|모레|글피|어제|엊그제|낼모레|낼/g;
 
 // N일 후 / N일 뒤
-const N_DAYS_LATER_REGEX = /(\d{1,3})일\s*(후|뒤)/g;
+const N_DAYS_LATER_REGEX = /(하루|이틀|사흘|나흘|(?:\d{1,3})일|(?:\d{1,2})주|(?:\d{1,2})달|(?:\d{1,2})개월)\s*(후|뒤|뒤에|후에)/g;
 
 // Weekday with optional 이번주/다음주 prefix
 const WEEKDAY_REGEX =
-  /(이번\s*주|다음\s*주)?\s*(일요일|월요일|화요일|수요일|목요일|금요일|토요일|일욜|월욜|화욜|수욜|목욜|금욜|토욜|일|월|화|수|목|금|토)(?![가-힣])/g;
+  /(?<![가-힣\d])(이번\s*주|다음\s*주|다다음\s*주|이번주|다음주|다다음주|담주)?\s*(일요일|월요일|화요일|수요일|목요일|금요일|토요일|일욜|월욜|화욜|수욜|목욜|금욜|토욜|일|월|화|수|목|금|토)(?![가-힣])/g;
 
 // Weekend: 이번 주말, 다음 주말
-const WEEKEND_REGEX = /(이번|다음)\s*주말/g;
+const WEEKEND_REGEX = /(이번|다음|다다음)\s*주말/g;
 
 // Korean month-day: N월 N일 or (이번 달|다음 달) N일
 const MONTH_DAY_KR_REGEX =
-  /(?:(이번\s*달|다음\s*달)\s*(\d{1,2})일|(\d{1,2})월\s*(\d{1,2})일)/g;
+  /(?:(이번\s*달|다음\s*달|다다음\s*달|이번달|다음달|다다음달)\s*(\d{1,2})일|(\d{1,2})월\s*(\d{1,2})일)/g;
 
 // Short date without year: M.D or MM.DD (must not be part of Y.M.D)
 const SHORT_DATE_REGEX =
@@ -53,7 +53,7 @@ const SHORT_DATE_REGEX =
 
 // Time expression that may follow a date token
 const TIME_AFTER_REGEX =
-  /^\s*(오전|오후)?\s*(\d{1,2})(?:(?::|시\s*)(\d{1,2})?)?\s*(반)?(?:\s*분)?/;
+  /^\s*(오전|오후|아침|점심|저녁|낮|밤|새벽)?\s*(\d{1,2})(?:(?::|시\s*)(\d{1,2})?)?\s*(반)?(?:\s*분)?/;
 
 // ── Lookup tables ───────────────────────────────────────────────
 
@@ -82,11 +82,16 @@ const WEEKDAY_INDEX: Record<string, number> = {
 };
 
 const RELATIVE_DAYS: Record<string, number> = {
+  엊그제: -2,
+  어제: -1,
   오늘: 0,
   내일: 1,
+  낼: 1,
   모레: 2,
+  내일모레: 2,
+  '내일 모레': 2,
+  낼모레: 2,
   글피: 3,
-  내일모레: 3,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -138,8 +143,11 @@ const buildWeekdayDate = (
 
   let dayDelta = (targetDay - currentDay + 7) % 7;
 
-  if (prefix?.replace(/\s/g, '') === '다음주') {
+  const normalizedPrefix = prefix?.replace(/\s/g, '');
+  if (normalizedPrefix === '다음주' || normalizedPrefix === '담주') {
     dayDelta = dayDelta === 0 ? 7 : dayDelta + 7;
+  } else if (normalizedPrefix === '다다음주') {
+    dayDelta = dayDelta === 0 ? 14 : dayDelta + 14;
   }
 
   return addDays(today, dayDelta);
@@ -151,8 +159,11 @@ const buildWeekendDate = (prefix: string, baseDate: Date) => {
   // Saturday
   let dayDelta = (6 - currentDay + 7) % 7;
 
-  if (prefix === '다음') {
+  const normalizedPrefix = prefix.replace(/\s/g, '');
+  if (normalizedPrefix === '다음') {
     dayDelta += 7;
+  } else if (normalizedPrefix === '다다음') {
+    dayDelta += 14;
   }
 
   if (dayDelta === 0) {
@@ -183,12 +194,15 @@ const withParsedTime = (
     return { date, length: matchLength };
   }
 
-  if (timeMatch[1] === '오후' && hour < 12) {
-    hour += 12;
-  }
-
-  if (timeMatch[1] === '오전' && hour === 12) {
-    hour = 0;
+  const ampm = timeMatch[1];
+  if (ampm) {
+    if (['오후', '저녁', '밤'].includes(ampm) && hour < 12) {
+      hour += 12;
+    } else if (['오전', '아침', '새벽'].includes(ampm) && hour === 12) {
+      hour = 0;
+    } else if (ampm === '낮' && hour < 8) {
+      hour += 12;
+    }
   }
 
   if (hour === 24 && minute !== 0) {
@@ -238,8 +252,13 @@ export const parseDates = (
     if (m[1]) {
       // 이번 달 / 다음 달 N일
       const day = Number(m[2]);
-      const isNext = m[1].replace(/\s/g, '') === '다음달';
-      const targetMonth = isNext ? addMonths(baseDate, 1) : baseDate;
+      const normalizedPrefix = m[1].replace(/\s/g, '');
+      let targetMonth = baseDate;
+      if (normalizedPrefix === '다음달') {
+        targetMonth = addMonths(baseDate, 1);
+      } else if (normalizedPrefix === '다다음달') {
+        targetMonth = addMonths(baseDate, 2);
+      }
       date = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), day);
       if (date.getDate() !== day) {
         date = null;
@@ -284,12 +303,26 @@ export const parseDates = (
   // 4. N일 후 / N일 뒤
   N_DAYS_LATER_REGEX.lastIndex = 0;
   while ((m = N_DAYS_LATER_REGEX.exec(text)) !== null) {
-    const n = Number(m[1]);
-    if (n > 365) {
-      continue;
+    const val = m[1];
+    let targetDate: Date;
+
+    if (val.endsWith('달') || val.endsWith('개월')) {
+      const months = Number(val.replace(/달|개월/, ''));
+      targetDate = addMonths(baseDate, months);
+    } else {
+      let n = 0;
+      if (val === '하루') n = 1;
+      else if (val === '이틀') n = 2;
+      else if (val === '사흘') n = 3;
+      else if (val === '나흘') n = 4;
+      else if (val.endsWith('주')) n = Number(val.replace('주', '')) * 7;
+      else n = Number(val.replace('일', ''));
+
+      if (n > 365) continue;
+      targetDate = addDays(baseDate, n);
     }
-    const date = addDays(baseDate, n);
-    const scheduled = withParsedTime(text, date, m.index, m[0].length);
+
+    const scheduled = withParsedTime(text, targetDate, m.index, m[0].length);
     matches.push({
       text: text.slice(m.index, m.index + scheduled.length),
       date: scheduled.date,

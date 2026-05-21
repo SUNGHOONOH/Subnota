@@ -1,93 +1,179 @@
-# memo_plan
-Memo application for really LAZY person 
+# MemoApp
 
----
+Local-first React Native memo app for quick capture, manual calendar blocks, online schedule inbox, and cursor-based memo networking.
 
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+## Current Architecture
 
-# Getting Started
+MemoApp is split into three user-facing tabs:
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+- `메모`: local-first text editor, memo list, date hints, manual schedule registration, manual network graph, ambient memory peek
+- `캘린더`: local calendar blocks with month/week views and draggable weekly layout
+- `브리핑`: local priority view, Supabase `schedule_inbox` bottom sheet, and daily briefing archive
 
-## Step 1: Start Metro
+Online enrichment is handled by a separate Python FastAPI backend:
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- nightly schedule candidate extraction into `schedule_inbox`
+- memo chunk indexing with Kiwi + Hugging Face embeddings
+- cursor-based State B network search through pgvector, with manual graph and 3-second idle Ambient Mirror
+- State A topic discovery only when synced memos are marked dirty
+- Gemini daily briefing that connects tomorrow's schedule, recent memos, and a resurfaced memory from around one month ago
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+The app remains usable without login or network for memo writing and manual calendar registration.
 
-```sh
-# Using pnpm
-pnpm start
+## Important Docs
+
+- [Code map](./docs/CODEMAP.md): current file responsibilities
+- [Flow](./docs/flow.md): current runtime/data flow
+- [Backend README](./backend/README.md): backend setup and endpoint notes
+
+Older network/state planning docs were removed. `CODEMAP.md` and `flow.md` are the current source of truth.
+
+## Stack
+
+- React Native CLI 0.85
+- TypeScript
+- Zustand persist + AsyncStorage
+- Supabase client for optional sync and online inbox
+- Python FastAPI backend
+- Kiwi / kiwipiepy for Korean sentence chunking
+- Hugging Face Inference API for embeddings
+- Supabase pgvector for chunk similarity search
+- Gemini Edge Function exists for daily briefing generation
+
+## Local-First Rules
+
+- Memo writing does not require login.
+- Manual calendar registration does not require login.
+- Supabase sync runs only when a user is signed in.
+- Automatic schedule suggestions are online batch results, not realtime editor UI.
+- State B network search requires login, backend URL, and indexed chunks. Manual search keeps the graph UI; automatic Ambient Mirror fails silently when unavailable.
+- Service role keys, HF tokens, Gemini keys, and backend admin keys must never be placed in the app bundle.
+
+## Environment
+
+App `.env`:
+
+```text
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+MEMO_BACKEND_URL=http://localhost:8000
 ```
 
-## Step 2: Build and run your app
+Backend `backend/.env`:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using pnpm
-pnpm android
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+HF_TOKEN=
+BACKEND_ADMIN_KEY=
+BACKEND_ENV=development
+LOG_LEVEL=INFO
 ```
 
-### iOS
+Supabase Edge Function `supabase/.env.local`:
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.1-flash-lite
+DAILY_BRIEFING_CRON_KEY=
 ```
 
-Then, and every time you update your native dependencies, run:
+## App Development
+
+Install JS dependencies:
 
 ```sh
-bundle exec pod install
+corepack pnpm install
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Start Metro:
 
 ```sh
-# Using pnpm
-pnpm ios
+corepack pnpm start --reset-cache
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+Run iOS:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+```sh
+corepack pnpm ios
+```
 
-## Step 3: Modify your app
+For real iPhone testing, set `MEMO_BACKEND_URL` to the Mac's LAN address, for example:
 
-Now that you have successfully run the app, let's make changes!
+```text
+MEMO_BACKEND_URL=http://192.168.x.x:8000
+```
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+## Backend Development
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+```sh
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+Health check:
 
-## Congratulations! :tada:
+```sh
+curl http://localhost:8000/health
+```
 
-You've successfully run and modified your React Native App. :partying_face:
+Run daily maintenance for all profiles:
 
-### Now what?
+```sh
+curl -X POST http://localhost:8000/maintenance/daily-all \
+  -H "Content-Type: application/json" \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
+  -d '{}'
+```
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+## Supabase
 
-# Troubleshooting
+Current schema:
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+```text
+supabase/migrations/20260519_final_schema.sql
+```
 
-# Learn More
+The schema defines:
 
-To learn more about React Native, take a look at the following resources:
+- `profiles`
+- `memos`
+- `calendar_blocks`
+- `schedule_inbox`
+- `memo_chunks`
+- `chunk_embedding_cache`
+- `briefings`
+- `topic_clusters`
+- `topic_cluster_memos`
+- `match_memo_chunks` pgvector RPC with memo timestamp metadata
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Apply this migration before using online sync, schedule inbox, network search, or topic discovery.
+
+## Verification
+
+TypeScript:
+
+```sh
+corepack pnpm exec tsc --noEmit
+```
+
+Python syntax:
+
+```sh
+backend/.venv/bin/python -m compileall backend/app
+find backend/app -type d -name __pycache__ -prune -exec rm -rf {} +
+```
+
+## Current Limitations
+
+- Login/account UI is not yet the main entry flow.
+- Supabase sync is service-backed but not a full conflict-resolution system.
+- Automatic schedule suggestions appear only after backend batch has run.
+- Daily briefings are generated by the Supabase Edge Function and shown in a separate briefing archive inbox.
+- State B quality depends on indexed `memo_chunks`.
+- State A topic clusters are produced by backend batch, while the app displays them with `최근 1달 / 최근 6개월 / 최근 1년 / 전체` filters and local category fallback.

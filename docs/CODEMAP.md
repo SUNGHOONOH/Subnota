@@ -1,89 +1,135 @@
 # MemoApp Code Map
 
-Last updated: 2026-05-07
+Last updated: 2026-05-21
 
-이 문서는 현재 리팩토링된 MemoApp 코드 구조에서 각 코드 파일이 맡는 역할을 설명한다. 기준은 `src/features/*`, `src/store`, `src/lib` 중심 구조다.
+이 문서는 현재 코드에 존재하는 구조만 설명한다. 이전 `network.md`, `state_A.md`, `state_B.md`의 계획성 내용은 폐기했고, 실제 파일과 현재 연결된 흐름만 남겼다.
 
 ## App Entry
 
-| File                     | Role                                                                                            |
-| ------------------------ | ----------------------------------------------------------------------------------------------- |
-| `App.tsx`                | 앱 최상위 엔트리 컴포넌트. `GestureHandlerRootView`, `SafeAreaProvider`, `Navigation`을 감싼다. |
-| `index.js`               | React Native 런타임에 `App`을 등록하는 네이티브 엔트리 파일.                                    |
-| `src/app/Navigation.tsx` | 하단 탭 내비게이션을 정의한다. 현재 메인 탭은 `메모`, `캘린더`, `브리핑`이다.                   |
+| File | Role |
+| --- | --- |
+| `App.tsx` | 앱 최상위 엔트리. `GestureHandlerRootView`, `SafeAreaProvider`, `Navigation`을 감싼다. |
+| `index.js` | React Native 런타임에 앱을 등록한다. |
+| `src/app/Navigation.tsx` | 하단 탭 내비게이션. 현재 탭은 `메모`, `캘린더`, `브리핑`이며 탭 전환 시 키보드를 닫는다. |
 
-## Feature: Memo
+## Memo Feature
 
-| File                                                   | Role                                                                                                                          |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/features/memo/MemoScreen.tsx`                     | 메모 탭의 컨테이너 화면. 메모 선택/생성/삭제/고정, 날짜 감지 상태, 선택 텍스트 일정 등록, 네트워크 패널 표시 상태를 조율한다. |
-| `src/features/memo/components/MemoEditor.tsx`          | 노란 종이 형태의 메모 입력 UI. 날짜 하이라이트, 감지 날짜 tooltip, 선택 텍스트 일정 등록 버튼을 렌더링한다.                   |
-| `src/features/memo/components/MemoSidebar.tsx`         | 왼쪽 세션/메모 목록 사이드바. 고정 메모, 오늘, 어제, 이전 30일 섹션을 표시하고 메모 선택 이벤트를 부모로 전달한다.            |
-| `src/features/memo/components/MiniCalendarPopover.tsx` | 메모 화면의 날짜 선택 팝오버. 월 이동, 날짜 선택, 시간/분 입력을 처리한다.                                                    |
-| `src/features/memo/components/DateQuickActions.tsx`    | iOS 키보드 accessory의 날짜 빠른 입력 칩. 오늘/내일/요일 토큰 삽입과 날짜 선택 열기를 담당한다.                               |
-| `src/features/memo/components/MemoNetworkPanel.tsx`    | 메모 화면 안에서 열리는 네트워크 모달 패널. 네트워크 그래프의 헤더, 닫기 버튼, 모달 레이아웃을 담당한다.                      |
-| `src/features/memo/components/MemoNetworkGraph.tsx`    | 메모를 카테고리별 노드 그래프로 시각화한다. Zustand store에서 메모를 읽고 SVG 기반 그래프를 그린다.                           |
+| File | Role |
+| --- | --- |
+| `src/features/memo/MemoScreen.tsx` | 메모 탭 컨테이너. 메모 생성/선택/삭제/고정, 날짜 anchor, 선택 텍스트 수동 일정 등록, `...` 메뉴 수동 네트워크 그래프, idle 기반 Ambient Mirror 상태를 조율한다. |
+| `src/features/memo/components/MemoEditor.tsx` | 메모 입력 UI. 따뜻한 종이 배경, 날짜 하이라이트 레이어, 날짜 tooltip, 선택 텍스트 일정 등록 버튼, iOS keyboard accessory 연결을 담당한다. |
+| `src/features/memo/components/MemoSidebar.tsx` | 메모 목록. 시간순/무의식 지도 모드, 고정/최근/오늘/이전 7일/이전 30일/월별/연도별 섹션, 카테고리 필터를 렌더링한다. |
+| `src/features/memo/components/DateQuickActions.tsx` | 키보드 위 빠른 입력 바. 오늘/내일/모레, 날짜 선택, 키보드 닫기 액션을 제공한다. |
+| `src/features/memo/components/MiniCalendarPopover.tsx` | 메모 화면의 날짜 선택 팝오버. 날짜와 시간 입력을 받아 토큰 삽입 또는 선택 텍스트 일정 등록에 사용된다. |
+| `src/features/memo/components/MemoNetworkPanel.tsx` | `... > 네트워크 보기` 수동 모달. 기존 State B SVG 그래프를 유지한다. |
+| `src/features/memo/components/LocalKnnGraph.tsx` | State B 수동 그래프 렌더러. backend `/network/search` 결과를 중심 chunk와 주변 chunk 노드로 SVG 표시한다. |
+| `src/features/memo/components/AmbientNetworkCard.tsx` | 입력 idle 후 뜨는 자동 State B peek 카드. 가장 유사한 과거 문장 1개만 흐리게 보여준다. |
+| `src/features/memo/components/AmbientNetworkDetailPanel.tsx` | Ambient 카드 탭 시 열리는 작은 세부 창. 현재 문장, 유사 문장, 과거 메모 전체를 세로 스크롤로 보여주고 유사 문장만 임시 초록 하이라이트한다. |
+| `src/features/memo/components/GlobalNetworkGraph.tsx` | 사이드바 무의식 지도. Supabase `topic_clusters`를 우선 사용하고, 없으면 store 메모의 로컬 카테고리 그래프로 fallback한다. |
 
-## Feature: Calendar
+## Calendar Feature
 
-| File                                                       | Role                                                                                                                        |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/features/calendar/CalendarScreen.tsx`                 | 캘린더 탭의 컨테이너 화면. 월/주간 모드 전환, 캘린더 블럭 추가/삭제/편집, 메모 일정 블럭 병합, 드래그 결과 저장을 조율한다. |
-| `src/features/calendar/components/MonthGrid.tsx`           | 월별 캘린더 그리드. 월 이동, 연도 선택 열기, 날짜별 scheduled memo 요약 표시를 담당한다.                                    |
-| `src/features/calendar/components/WeekBoard.tsx`           | 주간 블럭 보드. `n월 n주차` 헤더, 요일 컬럼, 시간순 정렬, 드래그 가능한 블럭 목록, 요일별 추가 버튼을 렌더링한다.           |
-| `src/features/calendar/components/DraggableBrick.tsx`      | 개별 캘린더 블럭의 드래그/탭/길게 누르기 상호작용. 위치 이동, drop preview, 삭제 요청, 편집 열기를 부모로 전달한다.         |
-| `src/features/calendar/components/CalendarBrickEditor.tsx` | 블럭 내부 메모 편집 모달. memo 블럭과 일반 calendar brick 모두의 note 편집 UI로 사용된다.                                   |
-| `src/features/calendar/components/AddBrickButton.tsx`      | 캘린더 블럭 추가 버튼. 주간 보드 상단 버튼과 요일 헤더의 compact 버튼을 같은 컴포넌트로 처리한다.                           |
+| File | Role |
+| --- | --- |
+| `src/features/calendar/CalendarScreen.tsx` | 캘린더 탭 컨테이너. 월/주 모드, 주차 이동, 블럭 추가/삭제/편집, 드래그 이동, 모바일 슬롯 교환을 조율한다. |
+| `src/features/calendar/components/MonthGrid.tsx` | 월별 캘린더 그리드. 날짜별 일정 미리보기와 날짜 탭 일정 목록 모달 진입을 담당한다. |
+| `src/features/calendar/components/WeekBoard.tsx` | 주간 블럭 보드. 모바일에서는 요일 행과 04/08/12/16/20 시간 슬롯, 데스크톱에서는 요일 컬럼을 렌더링한다. |
+| `src/features/calendar/components/DraggableBrick.tsx` | 개별 캘린더 블럭. 탭, 드래그, 길게 누르기 삭제 요청, drop preview 전달을 담당한다. |
+| `src/features/calendar/components/CalendarBrickEditor.tsx` | 블럭 note 편집 모달. memo 블럭과 일반 calendar brick 모두에 사용된다. |
+| `src/features/calendar/components/AddBrickButton.tsx` | 캘린더 블럭 추가 버튼. 주간 보드 상단과 요일별 compact 버튼에 쓰인다. |
+| `src/features/calendar/components/DayScheduleModal.tsx` | 월별 캘린더에서 특정 날짜를 눌렀을 때 뜨는 일정 목록 모달. |
 
-## Feature: Briefing
+## Briefing Feature
 
-| File                                                     | Role                                                                                                       |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/features/briefing/BriefingScreen.tsx`               | 브리핑 탭의 컨테이너 화면. store의 메모를 읽어 우선순위 목록, 다가오는 일정, 로컬 챗 응답 상태를 구성한다. |
-| `src/features/briefing/components/PriorityQueue.tsx`     | 브리핑의 우선순위 목록 UI. scheduled memo, pinned memo, 일반 memo 순서로 계산된 결과를 표시한다.           |
-| `src/features/briefing/components/TodayContextPanel.tsx` | 다가오는 일정 패널. scheduled memo를 시간 라벨과 함께 보여준다.                                            |
-| `src/features/briefing/components/BriefingChat.tsx`      | 브리핑 챗 UI. 메시지 로그, 입력창, 전송 버튼을 렌더링한다. 현재는 로컬 stub 응답을 받는 구조다.            |
-| `src/features/briefing/components/briefingFormat.ts`     | 브리핑 컴포넌트들이 공유하는 표시 포맷 유틸. 메모 제목 추출과 일정 라벨 포맷을 담당한다.                   |
+| File | Role |
+| --- | --- |
+| `src/features/briefing/BriefingScreen.tsx` | 브리핑 탭 컨테이너. 로컬 우선순위/다가오는 일정/챗 stub, `schedule_inbox` 일정 인박스, `briefings` 과거 브리핑 인박스를 정리한다. |
+| `src/features/briefing/components/PriorityQueue.tsx` | scheduled memo, pinned memo, 일반 memo 순서로 계산된 우선순위 목록을 표시한다. |
+| `src/features/briefing/components/TodayContextPanel.tsx` | 다가오는 scheduled memo 목록을 시간 라벨과 함께 보여준다. |
+| `src/features/briefing/components/BriefingChat.tsx` | 브리핑 챗 UI. 현재는 로컬 stub 응답 구조다. |
+| `src/features/briefing/components/briefingFormat.ts` | 메모 제목 추출과 일정 라벨 포맷 유틸. |
 
 ## Store
 
-| File                        | Role                                                                                                                                                                                                                                                                  |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/store/useMemoStore.ts` | 앱의 로컬 상태 저장소. Zustand persist + AsyncStorage로 `memos`와 `calendarBricks`를 저장한다. 메모 mutation, 사용자가 확정 등록한 일정 생성, 캘린더 블럭 추가/수정/삭제/배치 이동을 제공한다. 본문 날짜 표현은 후보/hint이며 자동으로 `scheduledAt`을 만들지 않는다. |
+| File | Role |
+| --- | --- |
+| `src/store/useMemoStore.ts` | 로컬 우선 상태 저장소. Zustand persist v5 + AsyncStorage로 `memos`, `calendarBricks`를 저장한다. 메모 UUID, `contentHash`, `syncStatus`, `scheduleScanStatus`, `topicDirty`를 관리한다. |
+
+현재 store 원칙:
+
+- 메모 작성/수정은 네트워크 없이 즉시 로컬 반영된다.
+- 수동 일정 등록은 `calendarBricks`에 바로 저장된다.
+- 새 메모에 실제 내용이 들어가면 `topicDirty`가 true로 잡힌다.
+- sync 관련 필드는 온라인 기능의 대상 판별용이며, 메모 작성 자체를 막지 않는다.
 
 ## Lib
 
-| File                       | Role                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib/dateParser.ts`    | 한국어/단축 날짜 표현을 파싱한다. 메모 본문에서 날짜/시간 후보를 찾아 `DateMatch`로 반환하고, 상대 날짜 표시 및 시간 표시 유틸도 제공한다. |
-| `src/lib/calendarUtils.ts` | 캘린더 전용 순수 유틸. 값 clamp, 요일 기준 다음 날짜 계산, 월 기준 주차 계산, 시간 입력 정규화를 담당한다.                                 |
-
-## Shared Components
-
-| File                            | Role                                                                              |
-| ------------------------------- | --------------------------------------------------------------------------------- |
-| `src/components/BrickBlock.tsx` | 캘린더 블럭의 공용 프레젠테이션 컴포넌트. 제목, note, tone, time 표시를 담당한다. |
+| File | Role |
+| --- | --- |
+| `src/lib/dateParser.ts` | 한국어/단축 날짜 표현을 `DateMatch`로 파싱한다. 현재 메모 tooltip과 수동 일정 등록에 쓰인다. |
+| `src/lib/calendarUtils.ts` | 캘린더 계산 유틸. 요일 기준 날짜, 월 기준 주차, 시간 입력 정규화 등을 담당한다. |
+| `src/lib/constants.ts` | 앱 조절 상수. Ambient delay/cooldown/result count, State A 시간 필터와 노드 감쇠 기준을 모은다. |
+| `src/lib/contentHash.ts` | 로컬 sync 판단용 hash, UUID 생성, UUID 검증 유틸. |
+| `src/lib/memoChunker.ts` | RN 로컬 fallback chunker. backend Kiwi를 쓰지 못할 때 커서 주변 문장 계산에 쓸 수 있다. |
+| `src/lib/scheduleParser.ts` | RN 로컬 일정 후보 파서. 현재 자동 일정 추천의 정식 실행은 backend batch가 담당하므로 보조 유틸로 남아 있다. |
 
 ## Services
 
-| File                                  | Role                                                                                                     |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `src/services/ml/categorizeMemo.ts`   | 메모 내용을 간단한 규칙 기반으로 `Work`, `Life`, `Todo`, `Ideas`, `Misc` 카테고리로 분류한다.            |
-| `src/services/llm/briefingService.ts` | 향후 LLM 브리핑 연동을 위한 서비스 stub. 현재는 입력 메모 일부를 schedule hint로 되돌리는 placeholder다. |
-| `src/services/supabase/client.ts`     | Supabase 클라이언트 초기화. 환경변수 기반으로 Supabase URL/key를 읽는다.                                 |
-| `src/services/supabase/index.ts`      | Supabase service barrel export. 현재는 client export만 담당한다.                                         |
+| File | Role |
+| --- | --- |
+| `src/services/supabase/client.ts` | Supabase client 초기화. 앱 `.env`의 `SUPABASE_URL`, `SUPABASE_ANON_KEY`를 사용한다. |
+| `src/services/supabase/memoSyncService.ts` | 로그인된 사용자의 로컬 pending memo를 Supabase `memos`로 upsert한다. 타이핑 중 자동 호출하지 않는다. |
+| `src/services/supabase/briefingService.ts` | Supabase `briefings` daily 항목을 최신순으로 조회해 과거 브리핑 인박스에 제공한다. |
+| `src/services/supabase/scheduleInboxService.ts` | Supabase `schedule_inbox` pending 항목 조회와 `accepted/dismissed` 상태 업데이트를 담당한다. |
+| `src/services/supabase/topicService.ts` | State A client. `topic_clusters`, `topic_cluster_memos`를 읽어 무의식 지도에 제공한다. |
+| `src/services/backend/networkService.ts` | State B client. 현재 텍스트와 cursor index를 backend `/network/search`로 보내고 pgvector 검색 결과와 memo timestamp를 받는다. Supabase bearer token이 필요하다. |
+| `src/services/ml/categorizeMemo.ts` | 로컬 규칙 기반 카테고리 분류. |
 
-## Current Architecture Notes
+## Backend
 
-- 메인 기능 경계는 `memo`, `calendar`, `briefing` feature 단위로 분리되어 있다.
-- 화면 파일은 여전히 container 역할을 맡고, 복잡한 UI 조각은 각 feature의 `components/` 아래로 이동했다.
-- `useMemoStore`는 아직 메모와 캘린더 상태를 함께 가진다. Supabase sync를 붙이기 전까지는 로컬 MVP 상태의 단일 store로 유지한다.
-- 메모 본문의 날짜 표현은 후보/hint다. `scheduledAt`은 사용자가 `일정 등록`을 눌러 확정한 일정에만 저장한다.
-- `dateParser`는 메모와 store 모두에서 쓰이는 공통 도메인 로직이므로 `src/lib`에 둔다.
-- `calendarUtils`는 캘린더 화면과 하위 컴포넌트에서 공유되는 순수 계산 로직만 담는다.
+| File | Role |
+| --- | --- |
+| `backend/app/main.py` | FastAPI 엔트리. health, chunk split/index, network search, schedule inbox batch, topic discovery, daily maintenance endpoint를 노출한다. |
+| `backend/app/auth.py` | Supabase bearer token 검증과 batch endpoint admin key 검증. |
+| `backend/app/config.py` | backend `.env` 설정. service role, HF token, admin key 등 서버 전용 secret을 읽는다. |
+| `backend/app/constants.py` | embedding 모델, chunk 크기, topic clustering 기준 상수. |
+| `backend/app/db.py` | Supabase service-role DB 접근 레이어. memo 조회, schedule inbox upsert, memo chunk 저장, pgvector RPC 호출, topic 저장을 담당한다. |
+| `backend/app/memo_chunking.py` | Kiwi 기반 문장 분리와 network chunk 생성. cursor index가 속한 chunk를 찾는다. |
+| `backend/app/schedule_parser.py` | backend 일정 후보 파서. Kiwi sentence chunk에서 날짜/시간/제목 후보를 만든다. |
+| `backend/app/schedule_batch.py` | 자동 일정 추천 batch. scan 대상 memo를 파싱해 `schedule_inbox`에 upsert하고 scanned hash를 갱신한다. |
+| `backend/app/memo_indexing.py` | dirty memo를 chunk로 쪼개고 HF embedding을 생성해 `memo_chunks`에 저장한다. |
+| `backend/app/network_search.py` | State B 검색. 현재 cursor chunk 1개를 embedding하고 `match_memo_chunks` RPC로 유사 chunk를 찾는다. |
+| `backend/app/topic_discovery.py` | State A topic discovery. `topic_dirty`가 있는 사용자만 embedding clustering을 실행하고 topic tables에 저장한다. |
+| `backend/app/maintenance.py` | daily batch 조합. schedule inbox, memo chunk indexing, topic discovery를 사용자별 또는 전체 사용자 대상으로 실행한다. |
+| `backend/app/hashing.py` | backend hash 유틸. |
+| `backend/pyproject.toml` | FastAPI, Supabase, Kiwi, Hugging Face, scikit-learn 의존성 정의. |
 
-## Follow-up Refactoring Candidates
+## Supabase
 
-- `MemoScreen.tsx`의 스타일 객체와 날짜 적용 로직을 더 분리하면 파일 크기를 추가로 줄일 수 있다.
-- `CalendarScreen.tsx`의 블럭 추가 모달을 `AddCalendarBrickModal.tsx`로 빼면 컨테이너 책임이 더 명확해진다.
-- `BriefingScreen.tsx`의 priority 계산은 나중에 LLM 입력 컨텍스트 생성 로직과 함께 `briefingSelectors.ts`로 분리할 수 있다.
+| File | Role |
+| --- | --- |
+| `supabase/migrations/20260519_final_schema.sql` | 현재 통합 schema. `profiles`, `memos`, `calendar_blocks`, `schedule_inbox`, `memo_chunks`, `chunk_embedding_cache`, `briefings`, `topic_clusters`, `topic_cluster_memos`, RLS, `match_memo_chunks` RPC를 정의한다. |
+| `supabase/functions/daily-briefing/index.ts` | Gemini 기반 daily briefing Edge Function. 내일 일정, 최근 메모, 한 달 전쯤의 과거 chunk를 엮어 `briefings`에 upsert한다. |
+| `supabase/functions/deno.json` | Supabase Edge Function용 Deno 설정. |
+
+## Environment Files
+
+| File | Role |
+| --- | --- |
+| `.env` | React Native 앱 번들용. `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `MEMO_BACKEND_URL`을 둔다. |
+| `.env.example` | 앱 환경변수 예시. secret 값은 넣지 않는다. |
+| `backend/.env` | backend 로컬 실행용 secret. `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `HF_TOKEN`, `BACKEND_ADMIN_KEY`를 둔다. |
+| `backend/.env.example` | backend 환경변수 예시. |
+| `supabase/.env.local` | Supabase CLI/Edge Function 로컬 실행용 secret. |
+
+## Current Runtime Boundaries
+
+- 메모 작성, 메모 수정, 수동 일정 등록은 로컬에서 끝난다.
+- Supabase sync는 사용자가 로그인한 경우에만 동작한다.
+- 자동 일정 추천은 앱에서 실시간으로 돌지 않고 backend batch가 `schedule_inbox`에 쌓는다.
+- 브리핑 탭은 `schedule_inbox` pending 항목을 읽어 등록/수정/무시 액션을 제공한다.
+- 브리핑 탭은 `briefings` daily 항목을 별도 과거 브리핑 인박스로 보여준다.
+- State B 수동 네트워크는 버튼 클릭 시 기존 그래프 모달을 연다.
+- State B 자동 Ambient Mirror는 입력 idle 3초 후 현재 cursor chunk 기준으로 유사 문장 1개만 조용히 찾는다.
+- State A 토픽은 `topic_dirty`가 있는 synced memo가 있을 때 backend batch에서 실행되고, 앱은 `topic_clusters`를 우선 표시한다.
+- backend service role, HF token, admin key는 앱 번들에 들어가지 않는다.

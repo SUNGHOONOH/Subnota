@@ -45,7 +45,7 @@ const CalendarBrickEditor = ({
             multiline
             onChangeText={onChangeNote}
             placeholder="이 벽돌 안에 들어갈 작은 메모"
-            placeholderTextColor="#A8A8AD"
+            placeholderTextColor="#B5A898"
             style={styles.nestedMemoInput}
             textAlignVertical="top"
             value={draftNote}
@@ -67,29 +67,29 @@ const CalendarBrickEditor = ({
 const styles = StyleSheet.create({
   modalBackdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(29, 29, 31, 0.18)',
+    backgroundColor: 'rgba(44, 37, 32, 0.15)',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
   editorPanel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF6F0',
     borderRadius: 7,
     padding: 18,
     width: '100%',
   },
   editorTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 19,
     fontWeight: '700',
     marginBottom: 12,
   },
   nestedMemoInput: {
-    backgroundColor: '#FAFAF8',
-    borderColor: '#E5E0D6',
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
     borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 16,
     lineHeight: 23,
     minHeight: 142,
@@ -107,19 +107,19 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   cancelText: {
-    color: '#6E6E73',
+    color: '#9C8E7C',
     fontSize: 15,
     fontWeight: '600',
   },
   saveNestedButton: {
-    backgroundColor: '#1D1D1F',
+    backgroundColor: '#5C4D3C',
     borderRadius: 4,
     marginLeft: 10,
     paddingHorizontal: 17,
     paddingVertical: 10,
   },
   saveNestedText: {
-    color: '#FFFFFF',
+    color: '#FAF6F0',
     fontSize: 15,
     fontWeight: '700',
   },

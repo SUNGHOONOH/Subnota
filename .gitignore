@@ -78,9 +78,33 @@ yarn-error.log
 .pnpm-store/
 pnpm-debug.log
 
-# Environment variables (DO NOT COMMIT)
+# Environment variables / secrets (DO NOT COMMIT)
 .env
-.env.local
-.env.development
-.env.production
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Supabase local secrets
+supabase/.env
 supabase/.env.local
+supabase/.env.*.local
+supabase/.branches/
+supabase/.temp/
+
+# Local backend/runtime secrets
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Private keys / service account files
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*service-role*.json
+*service-account*.json
+google-services.json
+GoogleService-Info.plist

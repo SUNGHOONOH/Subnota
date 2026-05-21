@@ -35,12 +35,12 @@ const PriorityQueue = ({ memos }: PriorityQueueProps) => {
 
 const styles = StyleSheet.create({
   section: {
-    borderBottomColor: '#E5E0D6',
+    borderBottomColor: '#E5DDD0',
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: 16,
   },
   sectionTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 14,
     fontWeight: '800',
     marginBottom: 10,
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   priorityRank: {
-    color: '#A75C4A',
+    color: '#8B7355',
     fontSize: 16,
     fontWeight: '900',
     width: 28,
@@ -60,18 +60,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   priorityTitle: {
-    color: '#1D1D1F',
+    color: '#2C2520',
     fontSize: 15,
     fontWeight: '800',
   },
   priorityMeta: {
-    color: '#7A7A7E',
+    color: '#9C8E7C',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 3,
   },
   emptyText: {
-    color: '#8A8A8E',
+    color: '#9C8E7C',
     fontSize: 14,
     fontWeight: '600',
   },
