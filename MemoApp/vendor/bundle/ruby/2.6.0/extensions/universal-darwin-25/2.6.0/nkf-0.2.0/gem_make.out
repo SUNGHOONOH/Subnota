@@ -1,0 +1,16 @@
+current directory: /Users/sunghoon/Desktop/memo/MemoApp/vendor/bundle/ruby/2.6.0/gems/nkf-0.2.0/ext/nkf
+/System/Library/Frameworks/Ruby.framework/Versions/2.6/usr/bin/ruby -I /System/Library/Frameworks/Ruby.framework/Versions/2.6/usr/lib/ruby/2.6.0 -r ./siteconf20260502-40329-1b9nagm.rb extconf.rb
+creating Makefile
+
+current directory: /Users/sunghoon/Desktop/memo/MemoApp/vendor/bundle/ruby/2.6.0/gems/nkf-0.2.0/ext/nkf
+make "DESTDIR=" clean
+
+current directory: /Users/sunghoon/Desktop/memo/MemoApp/vendor/bundle/ruby/2.6.0/gems/nkf-0.2.0/ext/nkf
+make "DESTDIR="
+compiling nkf.c
+linking shared-object nkf.bundle
+ld: warning: search path '/AppleInternal/Library/BuildRoots/4~CJjgugCJ4ENyM-QIheSyiY0FNL8vspelLyB3fTk/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.Internal.sdk/usr/local/lib' not found
+
+current directory: /Users/sunghoon/Desktop/memo/MemoApp/vendor/bundle/ruby/2.6.0/gems/nkf-0.2.0/ext/nkf
+make "DESTDIR=" install
+/usr/bin/install -c -m 0755 nkf.bundle ./.gem.20260502-40329-26031v

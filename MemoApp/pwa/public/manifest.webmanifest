@@ -1,0 +1,33 @@
+{
+  "name": "Subnota",
+  "short_name": "Subnota",
+  "description": "적기만 하면 정리되는 메모, 캘린더, 브리핑.",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#FAF6F0",
+  "background_color": "#FAF6F0",
+  "categories": ["productivity", "utilities"],
+  "lang": "ko-KR",
+  "icons": [
+    {
+      "src": "/app/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app/icons/subnota.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
