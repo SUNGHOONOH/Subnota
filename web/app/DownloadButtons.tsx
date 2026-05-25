@@ -2,24 +2,24 @@ import { ArrowRight, Laptop, MonitorDown, Smartphone } from 'lucide-react';
 
 const downloadTargets = [
   {
-    href: process.env.NEXT_PUBLIC_MACOS_DOWNLOAD_URL ?? '#download',
+    href: '/app',
     icon: Laptop,
     label: 'Mac용 다운로드',
-    meta: 'macOS Universal',
+    meta: 'macOS PWA',
     platform: 'macOS',
   },
   {
-    href: process.env.NEXT_PUBLIC_WINDOWS_DOWNLOAD_URL ?? '#download',
+    href: '/app',
     icon: MonitorDown,
     label: 'Windows용 다운로드',
-    meta: 'Windows 10 이상',
+    meta: 'Windows PWA',
     platform: 'Windows',
   },
   {
-    href: process.env.NEXT_PUBLIC_IOS_DOWNLOAD_URL ?? '#download',
+    href: '/app',
     icon: Smartphone,
     label: 'iOS 앱 받기',
-    meta: 'iPhone',
+    meta: 'iPhone PWA',
     platform: 'iOS',
   },
 ];
