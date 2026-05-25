@@ -7,6 +7,7 @@ import { categorizeMemo } from '../services/ml/categorizeMemo';
 export type BrickTone = 'ink' | 'clay' | 'olive' | 'steel';
 export type MemoSyncStatus = 'pending' | 'synced' | 'failed';
 export type MemoScheduleScanStatus = 'pending' | 'scanned' | 'failed';
+export type CalendarSyncStatus = 'pending' | 'synced' | 'failed';
 
 export interface MemoDateAnchor {
   baseTimestamp: number;
@@ -40,9 +41,12 @@ export interface Memo {
 export interface CalendarBrick {
   id: string;
   day: number;
+  deletedAt?: number;
   note: string;
   order: number;
   scheduledAt?: number;
+  syncStatus?: CalendarSyncStatus;
+  syncedHash?: string;
   time?: string | null;
   title: string;
   tone: BrickTone;
@@ -51,6 +55,7 @@ export interface CalendarBrick {
 interface MemoState {
   memos: Memo[];
   calendarBricks: CalendarBrick[];
+  deletedMemoIds: string[];
   activeCategoryFilter: string | null;
   addCalendarBrick: (
     brick: Omit<CalendarBrick, 'id' | 'order'> & { order?: number },
@@ -64,9 +69,13 @@ interface MemoState {
   deleteMemo: (id: string) => void;
   toggleMemoPinned: (id: string) => void;
   markMemoSynced: (id: string, contentHash: string) => void;
+  markMemoDeletedSynced: (id: string) => void;
   markMemoSyncFailed: (id: string) => void;
   markMemoScheduleScanned: (id: string, contentHash: string) => void;
   markMemoIndexed: (id: string, contentHash: string) => void;
+  markCalendarBrickSynced: (id: string, syncedHash: string) => void;
+  markCalendarBrickSyncFailed: (id: string) => void;
+  purgeCalendarBrick: (id: string) => void;
   updateMemo: (
     id: string,
     content: string,
@@ -130,7 +139,7 @@ const DEFAULT_BRICKS: CalendarBrick[] = [
 let idSequence = 0;
 
 const createEntityId = (prefix: string) => {
-  if (prefix === 'memo') {
+  if (prefix === 'memo' || prefix === 'brick' || prefix === 'schedule') {
     return createUuid();
   }
 
@@ -156,7 +165,7 @@ const withLocalMemoMetadata = (
       contentChanged || memo.scheduleScannedHash !== contentHash
         ? 'pending'
         : memo.scheduleScanStatus ?? 'scanned',
-    topicDirty: options.isNew ? true : memo.topicDirty ?? false,
+    topicDirty: contentChanged || options.isNew ? true : memo.topicDirty ?? false,
   };
 };
 
@@ -208,6 +217,7 @@ const buildScheduleBrick = (
     note,
     order,
     scheduledAt,
+    syncStatus: 'pending',
     time: formatBrickTime(scheduledAt),
     title: getScheduleTitle(text),
     tone: 'olive',
@@ -219,13 +229,14 @@ export const useMemoStore = create<MemoState>()(
     set => ({
       memos: [],
       calendarBricks: DEFAULT_BRICKS,
+      deletedMemoIds: [],
       activeCategoryFilter: null,
 
       addCalendarBrick: brick => {
         const id = createEntityId('brick');
         set(state => {
           const dayBricks = state.calendarBricks.filter(
-            b => b.day === brick.day,
+            b => !b.deletedAt && b.day === brick.day,
           );
 
           return {
@@ -235,6 +246,7 @@ export const useMemoStore = create<MemoState>()(
                 ...brick,
                 id,
                 order: brick.order ?? dayBricks.length,
+                syncStatus: 'pending',
               },
             ],
           };
@@ -288,7 +300,7 @@ export const useMemoStore = create<MemoState>()(
           const preservedBrick =
             memo?.scheduledAt &&
             buildScheduleBrick(
-              `schedule-from-memo-${memo.id}`,
+              createEntityId('schedule'),
               memo.content,
               memo.scheduledAt,
               state.calendarBricks,
@@ -299,6 +311,9 @@ export const useMemoStore = create<MemoState>()(
             calendarBricks: preservedBrick
               ? [...state.calendarBricks, preservedBrick]
               : state.calendarBricks,
+            deletedMemoIds: isUuid(id)
+              ? [...new Set([...state.deletedMemoIds, id])]
+              : state.deletedMemoIds,
             memos: state.memos.filter(m => m.id !== id),
           };
         }),
@@ -330,6 +345,11 @@ export const useMemoStore = create<MemoState>()(
                 }
               : m,
           ),
+        })),
+
+      markMemoDeletedSynced: id =>
+        set(state => ({
+          deletedMemoIds: state.deletedMemoIds.filter(memoId => memoId !== id),
         })),
 
       markMemoSyncFailed: id =>
@@ -407,13 +427,21 @@ export const useMemoStore = create<MemoState>()(
       updateCalendarBrick: (id, updates) =>
         set(state => ({
           calendarBricks: state.calendarBricks.map(b =>
-            b.id === id ? { ...b, ...updates } : b,
+            b.id === id
+              ? { ...b, ...updates, syncStatus: b.deletedAt ? b.syncStatus : 'pending' }
+              : b,
           ),
         })),
 
       deleteCalendarBrick: id =>
         set(state => ({
-          calendarBricks: state.calendarBricks.filter(b => b.id !== id),
+          calendarBricks: state.calendarBricks
+            .map(b =>
+              b.id === id && isUuid(b.id) && (b.syncedHash || b.syncStatus)
+                ? { ...b, deletedAt: Date.now(), syncStatus: 'pending' as const }
+                : b,
+            )
+            .filter(b => b.id !== id || (isUuid(b.id) && (b.syncedHash || b.syncStatus))),
         })),
 
       batchUpdateCalendarBricks: updates =>
@@ -426,9 +454,35 @@ export const useMemoStore = create<MemoState>()(
                   day: u.day,
                   order: u.order,
                   scheduledAt: u.scheduledAt ?? b.scheduledAt,
+                  syncStatus: b.deletedAt ? b.syncStatus : 'pending',
                 }
               : b;
           }),
+        })),
+
+      markCalendarBrickSynced: (id, syncedHash) =>
+        set(state => ({
+          calendarBricks: state.calendarBricks.map(b =>
+            b.id === id
+              ? {
+                  ...b,
+                  syncStatus: 'synced',
+                  syncedHash,
+                }
+              : b,
+          ),
+        })),
+
+      markCalendarBrickSyncFailed: id =>
+        set(state => ({
+          calendarBricks: state.calendarBricks.map(b =>
+            b.id === id ? { ...b, syncStatus: 'failed' } : b,
+          ),
+        })),
+
+      purgeCalendarBrick: id =>
+        set(state => ({
+          calendarBricks: state.calendarBricks.filter(b => b.id !== id),
         })),
 
       setActiveCategoryFilter: category =>
@@ -439,7 +493,7 @@ export const useMemoStore = create<MemoState>()(
     }),
     {
       name: 'memo-calendar-store',
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted: any, version: number) => {
         const s = (persisted ?? {}) as any;
@@ -510,10 +564,20 @@ export const useMemoStore = create<MemoState>()(
           });
         }
 
+        if (version < 6) {
+          calendarBricks = calendarBricks.map(brick => ({
+            ...brick,
+            id: isUuid(brick.id) ? brick.id : createUuid(),
+            syncStatus: brick.syncStatus ?? (brick.scheduledAt ? 'pending' : undefined),
+            syncedHash: isUuid(brick.id) ? brick.syncedHash : undefined,
+          }));
+        }
+
         return {
           ...s,
           memos,
           calendarBricks,
+          deletedMemoIds: s.deletedMemoIds ?? [],
         } as MemoState;
       },
     },

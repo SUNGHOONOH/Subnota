@@ -20,5 +20,5 @@ export const DEFAULT_TOPIC_TIME_FILTER: TopicTimeFilterKey = '6m';
 export const TOPIC_NODE_MIN_OPACITY = 0.34;
 export const TOPIC_NODE_MAX_OPACITY = 1;
 export const TOPIC_NODE_ACTIVE_BOOST = 0.24;
-export const TOPIC_NODE_MIN_RADIUS = 22;
-export const TOPIC_NODE_MAX_RADIUS = 42;
+export const TOPIC_NODE_MIN_RADIUS = 9;
+export const TOPIC_NODE_MAX_RADIUS = 24;

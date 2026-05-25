@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   },
   mobileBoard: {
     paddingHorizontal: 10,
-    paddingBottom: 18,
+    paddingBottom: 8,
   },
   weekBoardHeader: {
     alignItems: 'center',
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center',
-    paddingBottom: 10,
+    paddingBottom: 7,
     paddingHorizontal: 4,
   },
   weekBoardTitle: {
@@ -397,9 +397,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#DDD8CC',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    minHeight: 94,
+    minHeight: 76,
     overflow: 'visible',
-    paddingVertical: 8,
+    paddingVertical: 5,
     position: 'relative',
     zIndex: 1,
   },
@@ -413,18 +413,18 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     paddingRight: 4,
-    width: 58,
+    width: 54,
   },
   mobileTimeArea: {
     flex: 1,
-    minHeight: 84,
+    minHeight: 66,
     overflow: 'visible',
-    paddingLeft: 10,
+    paddingLeft: 6,
     position: 'relative',
   },
   timeLabelRow: {
     flexDirection: 'row',
-    height: 18,
+    height: 16,
   },
   timeLabel: {
     color: 'rgba(94, 94, 99, 0.52)',
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   },
   mobileSlotRow: {
     flexDirection: 'row',
-    minHeight: 58,
+    minHeight: 48,
   },
   mobileSlot: {
     alignItems: 'center',
@@ -443,9 +443,9 @@ const styles = StyleSheet.create({
     borderStyle: 'dotted',
     borderLeftWidth: StyleSheet.hairlineWidth,
     flex: 1,
-    height: 58,
+    height: 48,
     justifyContent: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 1,
     position: 'relative',
     zIndex: 1,
   },

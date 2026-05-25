@@ -13,9 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { format, startOfToday } from 'date-fns';
-import { Sparkles } from 'lucide-react-native';
 
-import { Memo, useMemoStore } from '../../store/useMemoStore';
+import { useMemoStore } from '../../store/useMemoStore';
 import {
   DailyBriefing,
   fetchDailyBriefings,
@@ -25,29 +24,10 @@ import {
   fetchPendingScheduleInbox,
   updateScheduleInboxStatus,
 } from '../../services/supabase/scheduleInboxService';
-import { syncPendingMemos } from '../../services/supabase/memoSyncService';
-import BriefingChat, { ChatMessage } from './components/BriefingChat';
-import { getMemoTitle } from './components/briefingFormat';
+import { requireOnlineLogin } from '../../services/supabase/authGate';
+import { syncLocalData } from '../../services/supabase/syncService';
 import PriorityQueue from './components/PriorityQueue';
 import TodayContextPanel from './components/TodayContextPanel';
-
-const buildPriorityReply = (memos: Memo[]) => {
-  const scheduled = memos
-    .filter(
-      memo => memo.scheduledAt && memo.scheduledAt >= startOfToday().getTime(),
-    )
-    .sort((a, b) => (a.scheduledAt ?? 0) - (b.scheduledAt ?? 0));
-  const pinned = memos.filter(memo => memo.pinned);
-  const first = scheduled[0] ?? pinned[0] ?? memos[0];
-
-  if (!first) {
-    return '아직 판단할 메모가 없습니다. 먼저 메모나 캘린더 블럭을 추가하면 우선순위를 정리할 수 있습니다.';
-  }
-
-  return `지금은 "${getMemoTitle(
-    first,
-  )}"부터 보는 게 좋겠습니다. 일정이 있는 항목을 먼저 처리하고, 남는 시간에는 고정된 메모를 정리하는 순서가 안전합니다.`;
-};
 
 const formatInboxDate = (timestamp: number) => {
   return format(new Date(timestamp), 'M월 d일 HH:mm');
@@ -90,7 +70,6 @@ const BriefingScreen = () => {
   const { width } = useWindowDimensions();
   const memos = useMemoStore(state => state.memos);
   const addCalendarBrick = useMemoStore(state => state.addCalendarBrick);
-  const [draft, setDraft] = useState('');
   const [editingInboxId, setEditingInboxId] = useState<string | null>(null);
   const [inboxDraftTitle, setInboxDraftTitle] = useState('');
   const [inboxDraftTime, setInboxDraftTime] = useState('');
@@ -104,23 +83,16 @@ const BriefingScreen = () => {
   const [isBriefingInboxOpen, setBriefingInboxOpen] = useState(false);
   const [selectedBriefing, setSelectedBriefing] =
     useState<DailyBriefing | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'intro',
-      role: 'assistant',
-      text: '오늘의 메모와 캘린더를 기준으로 우선순위를 정리합니다.',
-    },
-  ]);
 
   const loadScheduleInbox = useCallback(async () => {
     setInboxLoading(true);
     setInboxError(null);
 
     try {
-      await syncPendingMemos();
+      await syncLocalData({ force: true });
       const items = await fetchPendingScheduleInbox();
       setInboxItems(items);
-    } catch (_error) {
+    } catch {
       setInboxError('온라인 일정 inbox를 불러오지 못했습니다.');
     } finally {
       setInboxLoading(false);
@@ -134,7 +106,7 @@ const BriefingScreen = () => {
     try {
       const items = await fetchDailyBriefings();
       setBriefingItems(items);
-    } catch (_error) {
+    } catch {
       setBriefingError('과거 브리핑을 불러오지 못했습니다.');
     } finally {
       setBriefingInboxLoading(false);
@@ -147,6 +119,22 @@ const BriefingScreen = () => {
   }, [loadBriefingInbox, loadScheduleInbox]);
 
   const latestBriefing = briefingItems[0] ?? null;
+
+  const openBriefingInbox = async () => {
+    const canUseBriefingInbox = await requireOnlineLogin('과거 브리핑 인박스');
+
+    if (canUseBriefingInbox) {
+      setBriefingInboxOpen(true);
+    }
+  };
+
+  const openScheduleInbox = async () => {
+    const canUseScheduleInbox = await requireOnlineLogin('흩어진 일정 모아보기');
+
+    if (canUseScheduleInbox) {
+      setInboxOpen(true);
+    }
+  };
 
   const scheduledMemos = useMemo(() => {
     return memos
@@ -172,25 +160,6 @@ const BriefingScreen = () => {
       ...memos.filter(memo => !memo.scheduledAt),
     ].slice(0, 4);
   }, [memos]);
-
-  const handleSend = () => {
-    const text = draft.trim();
-
-    if (!text) {
-      return;
-    }
-
-    setMessages(previous => [
-      ...previous,
-      { id: `user-${Date.now()}`, role: 'user', text },
-      {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        text: buildPriorityReply(memos),
-      },
-    ]);
-    setDraft('');
-  };
 
   const startEditingInboxItem = (item: ScheduleInboxItem) => {
     setEditingInboxId(item.id);
@@ -228,8 +197,9 @@ const BriefingScreen = () => {
     removeInboxItem(item.id);
 
     try {
+      await syncLocalData({ force: true });
       await updateScheduleInboxStatus(item.id, 'accepted');
-    } catch (_error) {
+    } catch {
       setInboxError('등록은 로컬에 완료됐지만 inbox 상태 동기화에 실패했습니다.');
     }
   };
@@ -239,7 +209,7 @@ const BriefingScreen = () => {
 
     try {
       await updateScheduleInboxStatus(item.id, 'dismissed');
-    } catch (_error) {
+    } catch {
       setInboxError('inbox 상태 동기화에 실패했습니다.');
     }
   };
@@ -253,11 +223,7 @@ const BriefingScreen = () => {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>브리핑</Text>
-            <Text style={styles.subtitle}>할 일 우선순위 전용 챗</Text>
-          </View>
-          <View style={styles.badge}>
-            <Sparkles size={15} color="#8B7355" />
-            <Text style={styles.badgeText}>LOCAL</Text>
+            <Text style={styles.subtitle}>오늘의 정리와 기억 인박스</Text>
           </View>
         </View>
 
@@ -266,10 +232,34 @@ const BriefingScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <Pressable
+            disabled={!latestBriefing}
+            onPress={() => {
+              if (latestBriefing) {
+                setSelectedBriefing(latestBriefing);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.latestBriefingCard,
+              pressed && latestBriefing && styles.inboxCardPressed,
+            ]}
+          >
+            <Text style={styles.latestBriefingLabel}>최근 브리핑</Text>
+            <Text style={styles.latestBriefingTitle}>
+              {latestBriefing
+                ? formatBriefingDate(latestBriefing)
+                : '아직 생성된 브리핑이 없습니다'}
+            </Text>
+            <Text style={styles.latestBriefingContent} numberOfLines={7}>
+              {latestBriefing
+                ? latestBriefing.content
+                : '저녁 batch가 실행되면 내일 일정, 최근 메모, 한 달 전쯤의 생각을 엮은 브리핑이 여기에 표시됩니다.'}
+            </Text>
+          </Pressable>
           <PriorityQueue memos={priorityMemos} />
           <TodayContextPanel scheduledMemos={scheduledMemos} />
           <Pressable
-            onPress={() => setBriefingInboxOpen(true)}
+            onPress={openBriefingInbox}
             style={({ pressed }) => [
               styles.briefingInboxCard,
               pressed && styles.inboxCardPressed,
@@ -293,7 +283,7 @@ const BriefingScreen = () => {
             <Text style={styles.inboxError}>{briefingError}</Text>
           )}
           <Pressable
-            onPress={() => setInboxOpen(true)}
+            onPress={openScheduleInbox}
             style={({ pressed }) => [
               styles.inboxCard,
               pressed && styles.inboxCardPressed,
@@ -310,12 +300,6 @@ const BriefingScreen = () => {
             </Text>
           </Pressable>
           {inboxError && <Text style={styles.inboxError}>{inboxError}</Text>}
-          <BriefingChat
-            draft={draft}
-            messages={messages}
-            onChangeDraft={setDraft}
-            onSend={handleSend}
-          />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -542,24 +526,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
-  badge: {
-    alignItems: 'center',
-    borderColor: '#E5DDD0',
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  badgeText: {
-    color: '#5C4D3C',
-    fontSize: 11,
-    fontWeight: '800',
-  },
   content: {
     paddingBottom: 18,
     paddingHorizontal: 18,
+  },
+  latestBriefingCard: {
+    backgroundColor: '#F5EFE5',
+    borderColor: '#E5DDD0',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  latestBriefingLabel: {
+    color: '#8B7355',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  latestBriefingTitle: {
+    color: '#2C2520',
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  latestBriefingContent: {
+    color: '#3A352E',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 23,
   },
   inboxCard: {
     alignItems: 'center',
@@ -656,62 +652,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     paddingVertical: 5,
-  },
-  chatLog: {
-    paddingTop: 18,
-  },
-  messageBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#F5EFE5',
-    borderColor: '#E5DDD0',
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
-    maxWidth: '86%',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#5C4D3C',
-    borderColor: '#5C4D3C',
-  },
-  messageText: {
-    color: '#2C2520',
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  userMessageText: {
-    color: '#FAF6F0',
-  },
-  composer: {
-    alignItems: 'center',
-    borderTopColor: '#E5DDD0',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  input: {
-    backgroundColor: '#F5EFE5',
-    borderColor: '#E5DDD0',
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: '#2C2520',
-    flex: 1,
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  sendButton: {
-    alignItems: 'center',
-    backgroundColor: '#5C4D3C',
-    borderRadius: 6,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
   },
   sheetBackdrop: {
     backgroundColor: 'rgba(44, 37, 32, 0.24)',

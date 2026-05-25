@@ -81,6 +81,9 @@ importers:
       '@react-native-community/cli-platform-android':
         specifier: 20.1.0
         version: 20.1.0
+      '@react-native-community/cli-platform-apple':
+        specifier: 20.1.0
+        version: 20.1.0
       '@react-native-community/cli-platform-ios':
         specifier: 20.1.0
         version: 20.1.0

@@ -9,7 +9,10 @@ const MAX_PAST_CHUNK_CANDIDATES = 12
 const OLD_RANDOM_CHUNK_LIMIT = 20
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const supabaseServiceKey =
+  Deno.env.get('SERVICE_ROLE_KEY') ??
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+  ''
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY') ?? ''
 const geminiModel = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite'
 const dailyBriefingCronKey = Deno.env.get('DAILY_BRIEFING_CRON_KEY') ?? ''

@@ -31,6 +31,7 @@ interface MemoSidebarProps {
   memoCount: number;
   onClearCategoryFilter: () => void;
   onSelectCategory: (category: string) => void;
+  onSelectDraft: () => void;
   onSelectMemo: (memo: Memo) => void;
   sections: MemoSection[];
   viewMode: SidebarViewMode;
@@ -94,6 +95,7 @@ const MemoSidebar = ({
   memoCount,
   onClearCategoryFilter,
   onSelectCategory,
+  onSelectDraft,
   onSelectMemo,
   sections,
   viewMode,
@@ -217,14 +219,22 @@ const MemoSidebar = ({
             showsVerticalScrollIndicator={false}
           >
             {isDraftingNewMemo && (
-              <View style={[styles.memoRow, styles.memoRowActive]}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onSelectDraft}
+                style={({ pressed }) => [
+                  styles.memoRow,
+                  styles.memoRowActive,
+                  pressed && styles.memoRowPressed,
+                ]}
+              >
                 <Text style={styles.memoRowTitle} numberOfLines={1}>
                   새 메모
                 </Text>
                 <Text style={styles.memoRowMeta} numberOfLines={1}>
                   작성 중
                 </Text>
-              </View>
+              </Pressable>
             )}
             {sections.map(section => (
               <View key={section.title} style={styles.sessionSection}>

@@ -44,6 +44,7 @@ import {
   NetworkSearchResult,
   searchCursorNetwork,
 } from '../../services/backend/networkService';
+import { requireOnlineLogin } from '../../services/supabase/authGate';
 import { Memo, MemoDateAnchor, useMemoStore } from '../../store/useMemoStore';
 import { SidebarViewMode } from './components/MemoSidebar';
 import {
@@ -407,6 +408,8 @@ const MemoScreen = () => {
     };
   }, [
     activeMemoId,
+    ambientQueryChunk,
+    ambientResult,
     isAmbientDetailVisible,
     isNetworkVisible,
     isPhone,
@@ -633,6 +636,20 @@ const MemoScreen = () => {
     [isPhone, persistCurrentMemo],
   );
 
+  const handleSelectDraft = useCallback(() => {
+    activeMemoIdRef.current = null;
+    setActiveMemoId(null);
+    setDraftingNewMemo(true);
+    setText('');
+    setDateTokenAnchors([]);
+    setSelectionStart(0);
+    setSelectionEnd(0);
+    setDismissedTooltipKeys([]);
+    if (isPhone) {
+      setSidebarOpen(false);
+    }
+  }, [isPhone]);
+
   const handleNewMemo = useCallback(() => {
     const currentMemoId = activeMemoIdRef.current;
 
@@ -753,6 +770,13 @@ const MemoScreen = () => {
 
   const handleOpenNetwork = useCallback(async () => {
     setMoreMenuVisible(false);
+
+    const canUseOnlineNetwork = await requireOnlineLogin('네트워크 보기');
+
+    if (!canUseOnlineNetwork) {
+      return;
+    }
+
     setAmbientVisible(false);
     setNetworkVisible(true);
     setNetworkLoading(true);
@@ -1003,6 +1027,7 @@ const MemoScreen = () => {
               memoCount={sortedMemos.length}
               onClearCategoryFilter={handleClearCategoryFilter}
               onSelectCategory={handleSelectCategory}
+              onSelectDraft={handleSelectDraft}
               onSelectMemo={handleSelectMemo}
               sections={sessionSections}
               viewMode={sidebarViewMode}

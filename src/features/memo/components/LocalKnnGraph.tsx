@@ -69,25 +69,28 @@ const LocalKnnGraph = ({
         label: truncateLabel(queryChunk.text, 10),
         x: centerX,
         y: centerY,
-        radius: 32,
+        radius: 23,
         similarity: 1,
         isCenter: true,
       });
     }
 
     const count = results.length;
-    const orbitRadius = Math.min(centerX, centerY) * 0.62;
+    const minOrbit = Math.min(centerX, centerY) * 0.35;
+    const maxOrbit = Math.min(centerX, centerY) * 0.82;
 
     results.forEach((resultItem, index) => {
       const angle = (2 * Math.PI * index) / count - Math.PI / 2;
       const similarity = Math.max(0, Math.min(resultItem.similarity, 1));
-      const nodeRadius = 18 + similarity * 14;
+      // Proportions matching landing page mock: radius 6px to 18px (diameter 12px to 36px)
+      const nodeRadius = Math.max(6, Math.min(18, 6 + Math.round((similarity - 0.4) * 25)));
+      const distance = maxOrbit - similarity * (maxOrbit - minOrbit);
 
       result.push({
         id: resultItem.memoId,
         label: truncateLabel(resultItem.chunkText),
-        x: centerX + Math.cos(angle) * orbitRadius,
-        y: centerY + Math.sin(angle) * orbitRadius,
+        x: centerX + Math.cos(angle) * distance,
+        y: centerY + Math.sin(angle) * distance,
         radius: nodeRadius,
         similarity,
         isCenter: false,
@@ -138,19 +141,23 @@ const LocalKnnGraph = ({
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <View style={styles.graphShell}>
         <Svg width={svgWidth} height={svgHeight}>
-          {/* Connection lines — thickness based on similarity */}
-          {peripheralNodes.map(node => (
-            <Line
-              key={`line-${node.id}`}
-              stroke="#5C4D3C"
-              strokeWidth={0.5 + node.similarity * 2.5}
-              strokeOpacity={0.12 + node.similarity * 0.25}
-              x1={centerNode.x}
-              y1={centerNode.y}
-              x2={node.x}
-              y2={node.y}
-            />
-          ))}
+          {/* Concentric gray orbits (solar system style) */}
+          {[0.28, 0.56, 0.82].map((ratio, index) => {
+            const orbitR = Math.min(centerX, centerY) * ratio;
+            return (
+              <Circle
+                key={`orbit-${index}`}
+                cx={centerX}
+                cy={centerY}
+                r={orbitR}
+                fill="none"
+                stroke="#5C4D3C"
+                strokeWidth={1}
+                strokeDasharray="4,4"
+                strokeOpacity={0.20}
+              />
+            );
+          })}
 
           {/* Center node */}
           <Circle

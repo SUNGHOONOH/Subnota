@@ -30,14 +30,29 @@ export interface TopicMembership {
   topicId: string;
 }
 
+interface TopicMemoEdgeRow {
+  similarity: number;
+  source_memo_id: string;
+  target_memo_id: string;
+  topic_id: string;
+}
+
+export interface TopicMemoEdge {
+  similarity: number;
+  sourceMemoId: string;
+  targetMemoId: string;
+  topicId: string;
+}
+
 export interface TopicMapData {
   clusters: TopicCluster[];
+  edges: TopicMemoEdge[];
   memberships: TopicMembership[];
 }
 
 export const fetchTopicMap = async (): Promise<TopicMapData> => {
   if (!isSupabaseConfigured()) {
-    return { clusters: [], memberships: [] };
+    return { clusters: [], edges: [], memberships: [] };
   }
 
   const {
@@ -45,7 +60,7 @@ export const fetchTopicMap = async (): Promise<TopicMapData> => {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { clusters: [], memberships: [] };
+    return { clusters: [], edges: [], memberships: [] };
   }
 
   const { data: clusterData, error: clusterError } = await supabase
@@ -68,6 +83,11 @@ export const fetchTopicMap = async (): Promise<TopicMapData> => {
     throw membershipError;
   }
 
+  const edgeResult = await supabase
+    .from('topic_memo_edges')
+    .select('topic_id, source_memo_id, target_memo_id, similarity');
+  const edgeData = edgeResult.error ? [] : edgeResult.data ?? [];
+
   return {
     clusters: ((clusterData ?? []) as TopicClusterRow[]).map(row => ({
       confidence: row.confidence,
@@ -80,6 +100,12 @@ export const fetchTopicMap = async (): Promise<TopicMapData> => {
     memberships: ((membershipData ?? []) as TopicMembershipRow[]).map(row => ({
       memoId: row.memo_id,
       score: row.score,
+      topicId: row.topic_id,
+    })),
+    edges: (edgeData as TopicMemoEdgeRow[]).map(row => ({
+      similarity: row.similarity,
+      sourceMemoId: row.source_memo_id,
+      targetMemoId: row.target_memo_id,
       topicId: row.topic_id,
     })),
   };

@@ -169,6 +169,17 @@ create table public.topic_cluster_memos (
   primary key (topic_id, memo_id)
 );
 
+-- 9. Topic memo edges: memo-to-memo links inside a topic for State A detail relation view.
+create table public.topic_memo_edges (
+  topic_id uuid references public.topic_clusters(id) on delete cascade not null,
+  source_memo_id uuid references public.memos(id) on delete cascade not null,
+  target_memo_id uuid references public.memos(id) on delete cascade not null,
+  similarity double precision not null,
+  created_at timestamptz default now(),
+  primary key (topic_id, source_memo_id, target_memo_id),
+  check (source_memo_id <> target_memo_id)
+);
+
 -- Timestamp helper.
 create or replace function public.set_updated_at()
 returns trigger
@@ -270,6 +281,25 @@ as $$
   limit greatest(p_match_count, 1);
 $$;
 
+-- API grants.
+-- RLS policies decide row-level access, but PostgREST roles still need table/function privileges.
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.memos to authenticated;
+grant select, insert, update, delete on public.calendar_blocks to authenticated;
+grant select, update on public.schedule_inbox to authenticated;
+grant select on public.memo_chunks to authenticated;
+grant select on public.briefings to authenticated;
+grant select on public.topic_clusters to authenticated;
+grant select on public.topic_cluster_memos to authenticated;
+grant select on public.topic_memo_edges to authenticated;
+
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+grant execute on function public.match_memo_chunks(uuid, vector(1024), int, uuid) to authenticated, service_role;
+
 -- RLS
 alter table public.profiles enable row level security;
 alter table public.memos enable row level security;
@@ -280,6 +310,7 @@ alter table public.chunk_embedding_cache enable row level security;
 alter table public.briefings enable row level security;
 alter table public.topic_clusters enable row level security;
 alter table public.topic_cluster_memos enable row level security;
+alter table public.topic_memo_edges enable row level security;
 
 -- Profiles.
 create policy "Users can view own profile"
@@ -363,6 +394,17 @@ using (
     select 1
     from public.topic_clusters
     where topic_clusters.id = topic_cluster_memos.topic_id
+      and topic_clusters.user_id = auth.uid()
+  )
+);
+
+create policy "Users can view own topic memo edges"
+on public.topic_memo_edges for select
+using (
+  exists (
+    select 1
+    from public.topic_clusters
+    where topic_clusters.id = topic_memo_edges.topic_id
       and topic_clusters.user_id = auth.uid()
   )
 );

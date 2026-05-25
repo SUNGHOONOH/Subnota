@@ -2,7 +2,12 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseUrl = typeof SUPABASE_URL === 'string' ? SUPABASE_URL : '';
+const supabaseAnonKey =
+  typeof SUPABASE_ANON_KEY === 'string' ? SUPABASE_ANON_KEY : '';
+const fallbackSupabaseUrl = 'https://example.supabase.co';
+
+export const supabase = createClient(supabaseUrl || fallbackSupabaseUrl, supabaseAnonKey, {
   auth: {
     detectSessionInUrl: false,
     persistSession: true,
@@ -10,5 +15,5 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 export const isSupabaseConfigured = () => {
-  return SUPABASE_URL.length > 0 && SUPABASE_ANON_KEY.length > 0;
+  return supabaseUrl.length > 0 && supabaseAnonKey.length > 0;
 };

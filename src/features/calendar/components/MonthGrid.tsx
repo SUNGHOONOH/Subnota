@@ -95,7 +95,7 @@ const MonthGrid = ({
     });
 
     calendarBricks.forEach(brick => {
-      if (!brick.scheduledAt) {
+      if (brick.deletedAt || !brick.scheduledAt) {
         return;
       }
 

@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import require_admin_key, require_user_id
 from app.config import settings
@@ -18,6 +19,18 @@ app = FastAPI(
     title="MemoApp Backend",
     version="0.1.0",
     debug=settings.backend_env == "development",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=[
+        origin.strip()
+        for origin in settings.cors_allow_origins.split(",")
+        if origin.strip()
+    ],
 )
 
 

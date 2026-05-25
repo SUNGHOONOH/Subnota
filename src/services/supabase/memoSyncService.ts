@@ -31,30 +31,69 @@ export const syncPendingMemos = async (
     return { skippedReason: 'signed-out', syncedCount: 0 };
   }
 
-  const { markMemoSynced, markMemoSyncFailed } = useMemoStore.getState();
+  const {
+    deletedMemoIds,
+    markMemoDeletedSynced,
+    markMemoSynced,
+    markMemoSyncFailed,
+  } = useMemoStore.getState();
   const pendingMemos = memos.filter(needsSync);
   let syncedCount = 0;
 
-  await supabase.from('profiles').upsert({ id: user.id }, { onConflict: 'id' });
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({ id: user.id }, { onConflict: 'id' });
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  for (const memoId of deletedMemoIds) {
+    try {
+      const { error } = await supabase
+        .from('memos')
+        .delete()
+        .eq('id', memoId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      markMemoDeletedSynced(memoId);
+      syncedCount += 1;
+    } catch {
+      markMemoSyncFailed(memoId);
+    }
+  }
 
   for (const memo of pendingMemos) {
     const contentHash = memo.contentHash ?? hashText(memo.content);
+    const contentChanged = memo.syncedContentHash !== contentHash;
+    const memoRow = {
+      id: memo.id,
+      user_id: user.id,
+      content: memo.content,
+      content_hash: contentHash,
+      synced_content_hash: contentHash,
+      sync_status: 'synced',
+      is_archived: Boolean(memo.deletedAt),
+      created_at: new Date(memo.createdAt).toISOString(),
+      updated_at: new Date(memo.updatedAt).toISOString(),
+      ...(contentChanged
+        ? {
+            indexed_content_hash: null,
+            schedule_scanned_hash: null,
+            schedule_scan_status: 'pending',
+            topic_dirty: true,
+          }
+        : {}),
+    };
 
     try {
-      const { error } = await supabase.from('memos').upsert(
-        {
-          id: memo.id,
-          user_id: user.id,
-          content: memo.content,
-          content_hash: contentHash,
-          synced_content_hash: contentHash,
-          sync_status: 'synced',
-          is_archived: Boolean(memo.deletedAt),
-          created_at: new Date(memo.createdAt).toISOString(),
-          updated_at: new Date(memo.updatedAt).toISOString(),
-        },
-        { onConflict: 'id' },
-      );
+      const { error } = await supabase
+        .from('memos')
+        .upsert(memoRow, { onConflict: 'id' });
 
       if (error) {
         throw error;
@@ -62,7 +101,7 @@ export const syncPendingMemos = async (
 
       markMemoSynced(memo.id, contentHash);
       syncedCount += 1;
-    } catch (_error) {
+    } catch {
       markMemoSyncFailed(memo.id);
     }
   }

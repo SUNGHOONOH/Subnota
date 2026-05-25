@@ -216,6 +216,7 @@ const getDayScheduleItems = (
   const brickItems: DayScheduleItem[] = calendarBricks
     .filter(
       brick =>
+        !brick.deletedAt &&
         brick.scheduledAt && getDateKey(brick.scheduledAt) === selectedKey,
     )
     .map(brick => ({
@@ -327,6 +328,10 @@ const CalendarScreen = () => {
     const isCurrentWeek =
       visibleWeekStart.getTime() === currentWeekStart.getTime();
     const visibleCalendarBricks = calendarBricks.filter(brick => {
+      if (brick.deletedAt) {
+        return false;
+      }
+
       if (!brick.scheduledAt) {
         return isCurrentWeek;
       }

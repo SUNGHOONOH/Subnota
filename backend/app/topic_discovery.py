@@ -96,7 +96,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
     embeddings = encode_texts(normalized_texts)
     labels, clustering_method = cluster_embeddings(embeddings)
     grouped = group_memos_by_cluster(memos, labels)
-    results, storage_clusters, memberships = build_topic_results(
+    results, storage_clusters, memberships, edges = build_topic_results(
         request.user_id,
         grouped,
         embeddings,
@@ -106,7 +106,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
     )
 
     if request.persist:
-        replace_topic_clusters(request.user_id, storage_clusters, memberships)
+        replace_topic_clusters(request.user_id, storage_clusters, memberships, edges)
         mark_topic_memos_clean(request.user_id)
 
     return TopicDiscoveryResponse(
@@ -244,10 +244,16 @@ def build_topic_results(
     memos: list[MemoRecord],
     input_hash: str,
     clustering_method: str,
-) -> tuple[list[TopicClusterResult], list[DatabaseRow], list[list[DatabaseRow]]]:
+) -> tuple[
+    list[TopicClusterResult],
+    list[DatabaseRow],
+    list[list[DatabaseRow]],
+    list[list[DatabaseRow]],
+]:
     results: list[TopicClusterResult] = []
     storage_clusters: list[DatabaseRow] = []
     memberships: list[list[DatabaseRow]] = []
+    edges: list[list[DatabaseRow]] = []
     keywords_by_group = extract_keywords_by_group(grouped_indices, memos)
 
     for group_index, indices in enumerate(grouped_indices):
@@ -288,8 +294,61 @@ def build_topic_results(
                 for memo in cluster_memos
             ]
         )
+        edges.append(build_topic_memo_edges(indices, embeddings, memos))
 
-    return results, storage_clusters, memberships
+    return results, storage_clusters, memberships, edges
+
+
+def build_topic_memo_edges(
+    indices: list[int],
+    embeddings: FloatArray,
+    memos: list[MemoRecord],
+) -> list[DatabaseRow]:
+    if len(indices) <= 1:
+        return []
+
+    vectors = embeddings[indices]
+    similarities: Any = cosine_similarity(cast(Any, vectors))
+    candidates: list[tuple[int, int, float]] = []
+
+    for source_local_index in range(len(indices)):
+        ranked_targets = sorted(
+            (
+                (
+                    target_local_index,
+                    float(similarities[source_local_index][target_local_index]),
+                )
+                for target_local_index in range(len(indices))
+                if target_local_index != source_local_index
+            ),
+            key=lambda item: item[1],
+            reverse=True,
+        )[: constants.TOPIC_MEMO_EDGE_TOP_K]
+
+        for target_local_index, similarity in ranked_targets:
+            if similarity < constants.TOPIC_MEMO_EDGE_MIN_SIMILARITY:
+                continue
+            left = min(source_local_index, target_local_index)
+            right = max(source_local_index, target_local_index)
+            candidates.append((left, right, similarity))
+
+    deduped: dict[tuple[int, int], float] = {}
+    for left, right, similarity in candidates:
+        key = (left, right)
+        deduped[key] = max(deduped.get(key, 0), similarity)
+
+    return [
+        {
+            "source_memo_id": memos[indices[left]].id,
+            "target_memo_id": memos[indices[right]].id,
+            "similarity": round(similarity, 4),
+        }
+        for (left, right), similarity in sorted(
+            deduped.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
 
 
 def extract_keywords_by_group(

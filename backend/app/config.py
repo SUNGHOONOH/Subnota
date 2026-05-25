@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     backend_admin_key: str = ""
     backend_env: str = "development"
+    cors_allow_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://subnota.com"
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

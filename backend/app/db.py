@@ -74,6 +74,7 @@ def replace_topic_clusters(
     user_id: str,
     clusters: list[DatabaseRow],
     memberships_by_cluster_index: list[list[DatabaseRow]],
+    edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
 ) -> None:
     client = get_supabase()
 
@@ -86,7 +87,12 @@ def replace_topic_clusters(
     existing_rows = cast(list[DatabaseRow], existing.data or [])
     existing_ids = [row["id"] for row in existing_rows if row.get("id")]
 
+    can_write_edges = True
     if existing_ids:
+        try:
+            client.table("topic_memo_edges").delete().in_("topic_id", existing_ids).execute()
+        except Exception:
+            can_write_edges = False
         client.table("topic_cluster_memos").delete().in_("topic_id", existing_ids).execute()
         client.table("topic_clusters").delete().eq("user_id", user_id).execute()
 
@@ -97,15 +103,24 @@ def replace_topic_clusters(
     inserted_rows = cast(list[DatabaseRow], inserted.data or [])
 
     memberships: list[DatabaseRow] = []
+    edges: list[DatabaseRow] = []
     for index, topic in enumerate(inserted_rows):
         topic_id = topic.get("id")
         if not topic_id:
             continue
         for membership in memberships_by_cluster_index[index]:
             memberships.append({"topic_id": topic_id, **membership})
+        if edges_by_cluster_index:
+            for edge in edges_by_cluster_index[index]:
+                edges.append({"topic_id": topic_id, **edge})
 
     if memberships:
         client.table("topic_cluster_memos").insert(memberships).execute()
+    if edges and can_write_edges:
+        try:
+            client.table("topic_memo_edges").insert(edges).execute()
+        except Exception:
+            pass
 
 
 def has_topic_dirty_memos(user_id: str) -> bool:

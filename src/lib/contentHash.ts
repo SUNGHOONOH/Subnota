@@ -1,3 +1,5 @@
+/* eslint-disable no-bitwise */
+
 export const hashText = (text: string) => {
   let hash = 2166136261;
 

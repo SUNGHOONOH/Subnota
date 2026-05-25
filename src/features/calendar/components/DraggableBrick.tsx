@@ -5,6 +5,7 @@ import BrickBlock from '../../../components/BrickBlock';
 
 export const BRICK_HEIGHT = 68;
 export const BRICK_GAP = 7;
+const MOBILE_ROW_HEIGHT = 76;
 
 export interface CalendarDisplayBrick {
   id: string;
@@ -59,7 +60,7 @@ const DraggableBrick = ({
     (translationX: number, translationY: number) => {
       const dayDelta =
         orientation === 'rows'
-          ? Math.round(translationY / 94)
+          ? Math.round(translationY / MOBILE_ROW_HEIGHT)
           : Math.round(translationX / columnWidth);
       const orderDelta =
         orientation === 'rows'
@@ -77,7 +78,7 @@ const DraggableBrick = ({
     (translationX: number, translationY: number) => {
       const dayDelta =
         orientation === 'rows'
-          ? Math.round(translationY / 94)
+          ? Math.round(translationY / MOBILE_ROW_HEIGHT)
           : Math.round(translationX / columnWidth);
       const orderDelta =
         orientation === 'rows'
@@ -194,11 +195,12 @@ const DraggableBrick = ({
       {...responder.panHandlers}
       style={[
         styles.brickOffset,
-        index % 2 === 1 && styles.brickInset,
+        orientation === 'columns' && index % 2 === 1 && styles.brickInset,
         animatedBrickStyle,
       ]}
     >
       <BrickBlock
+        compact={orientation === 'rows'}
         emptyNoteCompact={orientation === 'rows'}
         note={brick.note}
         time={brick.time}

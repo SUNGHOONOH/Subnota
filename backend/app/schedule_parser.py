@@ -274,6 +274,8 @@ def apply_time(
                 hour = 0
             elif ampm == "낮" and hour < 8:
                 hour += 12
+        elif 1 <= hour <= 5:
+            hour += 12
 
     if hour > 23 or minute > 59:
         return date, None

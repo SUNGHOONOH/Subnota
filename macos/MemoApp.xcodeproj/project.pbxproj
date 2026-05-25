@@ -410,7 +410,7 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.macos.dev2026;
-				PRODUCT_NAME = MemoApp;
+				PRODUCT_NAME = Subnota;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -433,7 +433,7 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.macos.dev2026;
-				PRODUCT_NAME = MemoApp;
+				PRODUCT_NAME = Subnota;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};
