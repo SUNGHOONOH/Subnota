@@ -65,7 +65,10 @@ export const signUpWithPassword = async (email: string, password: string) => {
 export const signInWithProvider = async (provider: 'google' | 'kakao') => {
   const { error } = await supabase.auth.signInWithOAuth({
     options: {
-      redirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+      redirectTo: new URL(
+        `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}auth/callback`,
+        window.location.origin,
+      ).toString(),
     },
     provider,
   });

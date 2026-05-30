@@ -11,6 +11,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   LayoutChangeEvent,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -1202,6 +1203,9 @@ const MemoScreen = () => {
         onNavigateToMemo={memoId => {
           setAmbientDetailVisible(false);
           handleNetworkNavigateToMemo(memoId);
+        }}
+        onOpenSourceUrl={url => {
+          Linking.openURL(url).catch(() => undefined);
         }}
         queryChunk={ambientQueryChunk}
         result={ambientResult}

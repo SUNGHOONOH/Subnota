@@ -15,6 +15,7 @@ import { NetworkSearchResult } from '../../../services/backend/networkService';
 interface AmbientNetworkDetailPanelProps {
   onClose: () => void;
   onNavigateToMemo: (memoId: string) => void;
+  onOpenSourceUrl: (url: string) => void;
   queryChunk: MemoChunk | null;
   result: NetworkSearchResult | null;
   visible: boolean;
@@ -57,14 +58,22 @@ const splitHighlight = (text: string, start: number, end: number) => {
   };
 };
 
+const sourceLabel = (result: NetworkSearchResult) => {
+  if (result.sourceKind === 'inbox') {
+    return result.sourceLabel ?? '수집함';
+  }
+  return `${formatRelativeMemoTime(result.memoCreatedAt)} 메모`;
+};
+
 const AmbientNetworkDetailPanel = ({
   onClose,
   onNavigateToMemo,
+  onOpenSourceUrl,
   queryChunk,
   result,
   visible,
 }: AmbientNetworkDetailPanelProps) => {
-  const highlightedMemo = result
+  const highlightedMemo = result?.memoContent
     ? splitHighlight(result.memoContent, result.startIndex, result.endIndex)
     : null;
 
@@ -93,9 +102,46 @@ const AmbientNetworkDetailPanel = ({
           </View>
 
           {!queryChunk || !result || !highlightedMemo ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>표시할 연결 문장이 없습니다.</Text>
-            </View>
+            result?.sourceKind === 'inbox' && queryChunk ? (
+              <>
+                <ScrollView
+                  contentContainerStyle={styles.content}
+                  showsVerticalScrollIndicator
+                >
+                  <View style={styles.compareSection}>
+                    <Text style={styles.sectionLabel}>지금 쓰는 문장</Text>
+                    <Text style={styles.queryText}>{queryChunk.text}</Text>
+                  </View>
+                  <View style={styles.compareSection}>
+                    <Text style={styles.sectionLabel}>
+                      {`${sourceLabel(result)} · 유사도 ${Math.round(result.similarity * 100)}%`}
+                    </Text>
+                    {result.title ? (
+                      <Text style={styles.sourceTitle}>{result.title}</Text>
+                    ) : null}
+                    <Text style={styles.resultText}>{result.chunkText}</Text>
+                  </View>
+                </ScrollView>
+                {result.sourceUrl ? (
+                  <View style={styles.footer}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onOpenSourceUrl(result.sourceUrl!)}
+                      style={({ pressed }) => [
+                        styles.navigateButton,
+                        pressed && styles.navigateButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.navigateButtonText}>원문 열기</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>표시할 연결 문장이 없습니다.</Text>
+              </View>
+            )
           ) : (
             <>
               <ScrollView
@@ -109,9 +155,7 @@ const AmbientNetworkDetailPanel = ({
 
                 <View style={styles.compareSection}>
                   <Text style={styles.sectionLabel}>
-                    {`${formatRelativeMemoTime(
-                      result.memoCreatedAt,
-                    )} · 유사도 ${Math.round(result.similarity * 100)}%`}
+                    {`${sourceLabel(result)} · 유사도 ${Math.round(result.similarity * 100)}%`}
                   </Text>
                   <Text style={styles.resultText}>{result.chunkText}</Text>
                 </View>
@@ -131,7 +175,7 @@ const AmbientNetworkDetailPanel = ({
               <View style={styles.footer}>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => onNavigateToMemo(result.memoId)}
+                  onPress={() => result.memoId && onNavigateToMemo(result.memoId)}
                   style={({ pressed }) => [
                     styles.navigateButton,
                     pressed && styles.navigateButtonPressed,
@@ -240,6 +284,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 21,
+  },
+  sourceTitle: {
+    color: '#2C2520',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 19,
+    marginBottom: 8,
   },
   memoSection: {
     paddingTop: 4,

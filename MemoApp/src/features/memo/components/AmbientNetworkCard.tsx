@@ -41,6 +41,13 @@ const formatAge = (timestamp: number | null) => {
   return `${Math.floor(months / 12)}년 전`;
 };
 
+const sourceLabel = (result: NetworkSearchResult) => {
+  if (result.sourceKind === 'inbox') {
+    return result.sourceLabel ?? '수집함';
+  }
+  return `${formatAge(result.memoCreatedAt)} 메모`;
+};
+
 const AmbientNetworkCard = ({
   onPress,
   queryChunk,
@@ -57,7 +64,7 @@ const AmbientNetworkCard = ({
     >
       <View style={styles.headerRow}>
         <Text style={styles.kicker}>비슷한 기억</Text>
-        <Text style={styles.meta}>{formatAge(result.memoCreatedAt)}</Text>
+        <Text style={styles.meta}>{sourceLabel(result)}</Text>
       </View>
       <Text style={styles.query} numberOfLines={1}>
         {snippet(queryChunk.text)}

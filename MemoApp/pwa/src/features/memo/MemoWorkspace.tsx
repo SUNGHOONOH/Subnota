@@ -280,6 +280,16 @@ const buildFallbackTopicEdges = (
 };
 
 const HighlightedMemo = ({ result }: { result: NetworkSearchResult }) => {
+  if (result.sourceKind === 'inbox' || !result.memoContent) {
+    return (
+      <p className="network-memo-body">
+        {result.title && <strong>{result.title}</strong>}
+        {result.title && <br />}
+        {result.chunkText}
+      </p>
+    );
+  }
+
   const start = Math.max(0, Math.min(result.startIndex, result.memoContent.length));
   const end = Math.max(start, Math.min(result.endIndex, result.memoContent.length));
   const before = result.memoContent.slice(0, start);
@@ -293,6 +303,27 @@ const HighlightedMemo = ({ result }: { result: NetworkSearchResult }) => {
       {after}
     </p>
   );
+};
+
+const formatNetworkSourceLabel = (result: NetworkSearchResult) => {
+  if (result.sourceKind === 'inbox') {
+    return result.sourceLabel ?? '수집함';
+  }
+
+  const timestamp = result.memoCreatedAt;
+  if (!timestamp) {
+    return '이전 메모';
+  }
+
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24)),
+  );
+
+  if (days === 0) {
+    return '오늘 메모';
+  }
+  return `${days}일 전 메모`;
 };
 
 const MemoWorkspace = ({
@@ -665,7 +696,7 @@ const MemoWorkspace = ({
             onClick={() => openNetworkDetail(ambientQueryChunk, ambientResult)}
             type="button"
           >
-            <span>떠오른 과거 문장</span>
+            <span>{formatNetworkSourceLabel(ambientResult)}</span>
             <strong>{truncate(ambientResult.chunkText, 72)}</strong>
           </button>
         )}
@@ -760,9 +791,12 @@ const MemoWorkspace = ({
                   onClick={() => openNetworkDetail(networkQueryChunk, result)}
                   type="button"
                 >
-                  <span>유사도 {Math.round(result.similarity * 100)}%</span>
+                  <span>
+                    {formatNetworkSourceLabel(result)} · 유사도{' '}
+                    {Math.round(result.similarity * 100)}%
+                  </span>
                   <strong>{result.chunkText}</strong>
-                  <p>{truncate(result.memoContent, 130)}</p>
+                  <p>{truncate(result.memoContent ?? result.title ?? '', 130)}</p>
                 </button>
               ))}
             </div>
@@ -964,22 +998,40 @@ const MemoWorkspace = ({
                 <p>{networkDetail.queryChunk?.text ?? '현재 문장 없음'}</p>
               </article>
               <article>
-                <span>과거의 유사 문장</span>
+                <span>
+                  {formatNetworkSourceLabel(networkDetail.result)} · 유사도{' '}
+                  {Math.round(networkDetail.result.similarity * 100)}%
+                </span>
                 <p>{networkDetail.result.chunkText}</p>
               </article>
             </div>
             <HighlightedMemo result={networkDetail.result} />
             <div className="sheet-actions">
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  onSelectMemoById(networkDetail.result.memoId);
-                  setNetworkDetail(null);
-                }}
-                type="button"
-              >
-                이 메모로 이동
-              </button>
+              {networkDetail.result.sourceKind === 'inbox' ? (
+                networkDetail.result.sourceUrl && (
+                  <a
+                    className="secondary-button"
+                    href={networkDetail.result.sourceUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    원문 열기
+                  </a>
+                )
+              ) : (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    if (networkDetail.result.memoId) {
+                      onSelectMemoById(networkDetail.result.memoId);
+                    }
+                    setNetworkDetail(null);
+                  }}
+                  type="button"
+                >
+                  이 메모로 이동
+                </button>
+              )}
             </div>
           </section>
         </div>

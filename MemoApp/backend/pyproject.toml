@@ -1,13 +1,17 @@
 [project]
 name = "memoapp-backend"
 version = "0.1.0"
-description = "MemoApp topic discovery backend"
+description = "Subnota backend"
 requires-python = ">=3.11"
 dependencies = [
+  "beautifulsoup4>=4.12.3",
   "fastapi>=0.115.0",
+  "google-genai>=1.20.0",
   "huggingface-hub>=0.23.0",
+  "httpx>=0.27.0",
   "kiwipiepy>=0.21.0",
   "numpy>=1.26.0",
+  "playwright>=1.52.0",
   "pydantic>=2.8.0",
   "pydantic-settings>=2.4.0",
   "python-dotenv>=1.0.1",

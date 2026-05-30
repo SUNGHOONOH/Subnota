@@ -3,7 +3,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app import constants
-from app.db import fetch_cached_embedding, search_similar_chunks, upsert_cached_embedding
+from app.db import (
+    fetch_cached_embedding,
+    search_similar_chunks,
+    search_similar_inbox_embeddings,
+    upsert_cached_embedding,
+)
 from app.hashing import short_hash
 from app.memo_chunking import MemoChunk, MemoChunkRequest, split_memo_chunks
 from app.topic_discovery import encode_texts
@@ -18,15 +23,23 @@ class NetworkSearchRequest(BaseModel):
 
 
 class NetworkSearchResult(BaseModel):
-    memo_id: str
+    source_kind: str = "memo"
+    source_label: str | None = None
+    memo_id: str | None = None
+    inbox_session_id: str | None = None
     chunk_id: str
     chunk_text: str
-    memo_content: str
+    memo_content: str | None = None
     memo_created_at: str | None = None
     memo_updated_at: str | None = None
     start_index: int
     end_index: int
     similarity: float
+    source_type: str | None = None
+    title: str | None = None
+    source_url: str | None = None
+    thumbnail_url: str | None = None
+    created_at: str | None = None
 
 
 class NetworkSearchResponse(BaseModel):
@@ -58,23 +71,36 @@ def search_network_chunks(request: NetworkSearchRequest) -> NetworkSearchRespons
         embedding = encode_texts([query_chunk.text])[0]
         upsert_cached_embedding(request.user_id, chunk_hash, query_chunk.text, embedding)
 
-    rows = search_similar_chunks(
+    memo_rows = search_similar_chunks(
         request.user_id,
         embedding,
         request.memo_id,
         request.limit,
     )
+    try:
+        inbox_rows = search_similar_inbox_embeddings(
+            request.user_id,
+            embedding,
+            request.limit,
+        )
+    except Exception:
+        inbox_rows = []
+    results = [memo_row_to_result(row) for row in memo_rows] + [
+        inbox_row_to_result(row) for row in inbox_rows
+    ]
+    results.sort(key=lambda result: result.similarity, reverse=True)
 
     return NetworkSearchResponse(
         status="ok",
         model=constants.EMBEDDING_MODEL,
         query_chunk=query_chunk,
-        results=[row_to_result(row) for row in rows],
+        results=results[: request.limit],
     )
 
 
-def row_to_result(row: dict[str, Any]) -> NetworkSearchResult:
+def memo_row_to_result(row: dict[str, Any]) -> NetworkSearchResult:
     return NetworkSearchResult(
+        source_kind="memo",
         memo_id=str(row.get("memo_id") or ""),
         chunk_id=str(row.get("chunk_id") or ""),
         chunk_text=str(row.get("chunk_text") or ""),
@@ -84,6 +110,24 @@ def row_to_result(row: dict[str, Any]) -> NetworkSearchResult:
         start_index=int(row.get("start_index") or 0),
         end_index=int(row.get("end_index") or 0),
         similarity=float(row.get("similarity") or 0),
+    )
+
+
+def inbox_row_to_result(row: dict[str, Any]) -> NetworkSearchResult:
+    return NetworkSearchResult(
+        source_kind="inbox",
+        source_label=optional_str(row.get("source_label")),
+        inbox_session_id=optional_str(row.get("inbox_session_id")),
+        chunk_id=str(row.get("chunk_id") or ""),
+        chunk_text=str(row.get("chunk_text") or ""),
+        start_index=0,
+        end_index=len(str(row.get("chunk_text") or "")),
+        similarity=float(row.get("similarity") or 0),
+        source_type=optional_str(row.get("source_type")),
+        title=optional_str(row.get("title")),
+        source_url=optional_str(row.get("source_url")),
+        thumbnail_url=optional_str(row.get("thumbnail_url")),
+        created_at=optional_str(row.get("created_at")),
     )
 
 

@@ -1,12 +1,14 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
-import { CalendarDays, Coffee, PenLine } from 'lucide-react-native';
+import { CalendarDays, Coffee, Inbox, PenLine } from 'lucide-react-native';
 import { Keyboard } from 'react-native';
 
 import MemoScreen from '../features/memo/MemoScreen';
 import CalendarScreen from '../features/calendar/CalendarScreen';
 import BriefingScreen from '../features/briefing/BriefingScreen';
+import InboxScreen from '../features/inbox/InboxScreen';
+import { flushPendingNavigation, navigationRef } from './navigationRef';
 
 const Tab = createBottomTabNavigator();
 
@@ -22,9 +24,13 @@ const BriefingTabIcon = ({ color, size }: { color: string; size: number }) => (
   <Coffee color={color} size={size} />
 );
 
+const InboxTabIcon = ({ color, size }: { color: string; size: number }) => (
+  <Inbox color={color} size={size} />
+);
+
 const Navigation = () => {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
       <Tab.Navigator
         screenListeners={{
           tabPress: () => Keyboard.dismiss(),
@@ -61,6 +67,14 @@ const Navigation = () => {
           options={{
             tabBarLabel: '캘린더',
             tabBarIcon: CalendarTabIcon,
+          }}
+        />
+        <Tab.Screen
+          name="Inbox"
+          component={InboxScreen}
+          options={{
+            tabBarLabel: '수집함',
+            tabBarIcon: InboxTabIcon,
           }}
         />
         <Tab.Screen

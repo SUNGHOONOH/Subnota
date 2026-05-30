@@ -8,22 +8,51 @@
 
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-MemoApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-MemoApp.a */; };
+		0D70636552EB9949E4DC8E70 /* SubnotaShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 385F5B210C718E46ACF58580 /* SubnotaShareExtension.appex */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		23BE017E288943E35E6A1110 /* SubnotaShareInboxModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 305F6A50FE10E2E5E0C1E014 /* SubnotaShareInboxModuleBridge.m */; };
+		46D6E340FFC66F1C93BB6204 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3859A18EA7E50B6A7069C3EC /* Foundation.framework */; };
+		5D9D0EA867BEBB0F2150644F /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B7A76C702BFE446304E265D0 /* MainInterface.storyboard */; };
 		5FF0099134A7282324690F34 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		6FB761E4B8C3579B5B2B3C05 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DB4C5951B91F0CA1CF9029 /* ShareViewController.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		E303CF0A1537D25821C1E71D /* SubnotaShareInboxModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8CDEBA7FA50A2F3319A156 /* SubnotaShareInboxModule.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		924EA5E83ACF9DB55507A6A2 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0D70636552EB9949E4DC8E70 /* SubnotaShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* MemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* Subnota.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Subnota.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = MemoApp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MemoApp/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = MemoApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2C8A00244CB58592FF857449 /* MemoApp.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = MemoApp.entitlements; path = MemoApp/MemoApp.entitlements; sourceTree = "<group>"; };
+		305F6A50FE10E2E5E0C1E014 /* SubnotaShareInboxModuleBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = SubnotaShareInboxModuleBridge.m; path = MemoApp/SubnotaShareInboxModuleBridge.m; sourceTree = "<group>"; };
+		37DB4C5951B91F0CA1CF9029 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = SubnotaShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
+		3859A18EA7E50B6A7069C3EC /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		385F5B210C718E46ACF58580 /* SubnotaShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = SubnotaShareExtension.appex; path = SubnotaShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B4392A12AC88292D35C810B /* Pods-MemoApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoApp.debug.xcconfig"; path = "Target Support Files/Pods-MemoApp/Pods-MemoApp.debug.xcconfig"; sourceTree = "<group>"; };
+		3DFBC7A14DFAF38D247D599D /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = SubnotaShareExtension/Info.plist; sourceTree = "<group>"; };
+		4A8CDEBA7FA50A2F3319A156 /* SubnotaShareInboxModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SubnotaShareInboxModule.swift; path = MemoApp/SubnotaShareInboxModule.swift; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-MemoApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoApp.release.xcconfig"; path = "Target Support Files/Pods-MemoApp/Pods-MemoApp.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-MemoApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-MemoApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7252D1A8FF4C293779850948 /* SubnotaShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = SubnotaShareExtension.entitlements; path = SubnotaShareExtension/SubnotaShareExtension.entitlements; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MemoApp/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MemoApp/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		B7A76C702BFE446304E265D0 /* MainInterface.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = MainInterface.storyboard; path = SubnotaShareExtension/Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -33,6 +62,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				0C80B921A6F3F58F76C31292 /* libPods-MemoApp.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		75C1135E985B649BB95A9224 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				46D6E340FFC66F1C93BB6204 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,6 +84,9 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				2C8A00244CB58592FF857449 /* MemoApp.entitlements */,
+				4A8CDEBA7FA50A2F3319A156 /* SubnotaShareInboxModule.swift */,
+				305F6A50FE10E2E5E0C1E014 /* SubnotaShareInboxModuleBridge.m */,
 			);
 			name = MemoApp;
 			sourceTree = "<group>";
@@ -56,6 +96,7 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5DCACB8F33CDC322A6C60F78 /* libPods-MemoApp.a */,
+				F76DCB28D93F52D137B486AB /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -75,6 +116,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				981B203065A012928FB5B39D /* SubnotaShareExtension */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -84,9 +126,21 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* MemoApp.app */,
+				13B07F961A680F5B00A75B9A /* Subnota.app */,
+				385F5B210C718E46ACF58580 /* SubnotaShareExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		981B203065A012928FB5B39D /* SubnotaShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				37DB4C5951B91F0CA1CF9029 /* ShareViewController.swift */,
+				B7A76C702BFE446304E265D0 /* MainInterface.storyboard */,
+				3DFBC7A14DFAF38D247D599D /* Info.plist */,
+				7252D1A8FF4C293779850948 /* SubnotaShareExtension.entitlements */,
+			);
+			name = SubnotaShareExtension;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -96,6 +150,14 @@
 				5709B34CF0A7D63546082F79 /* Pods-MemoApp.release.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		F76DCB28D93F52D137B486AB /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				3859A18EA7E50B6A7069C3EC /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -112,6 +174,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				924EA5E83ACF9DB55507A6A2 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
@@ -119,8 +182,25 @@
 			);
 			name = MemoApp;
 			productName = MemoApp;
-			productReference = 13B07F961A680F5B00A75B9A /* MemoApp.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* Subnota.app */;
 			productType = "com.apple.product-type.application";
+		};
+		50F4120A77F0D294D3E45390 /* SubnotaShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01A50CBA9C8CC2214E4FC0CF /* Build configuration list for PBXNativeTarget "SubnotaShareExtension" */;
+			buildPhases = (
+				D06384A06B2309C0B961515D /* Sources */,
+				75C1135E985B649BB95A9224 /* Frameworks */,
+				3126A17786A9125D8EFA6594 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SubnotaShareExtension;
+			productName = SubnotaShareExtension;
+			productReference = 385F5B210C718E46ACF58580 /* SubnotaShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -150,6 +230,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* MemoApp */,
+				50F4120A77F0D294D3E45390 /* SubnotaShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -162,6 +243,14 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				5FF0099134A7282324690F34 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3126A17786A9125D8EFA6594 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5D9D0EA867BEBB0F2150644F /* MainInterface.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -249,6 +338,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				E303CF0A1537D25821C1E71D /* SubnotaShareInboxModule.swift in Sources */,
+				23BE017E288943E35E6A1110 /* SubnotaShareInboxModuleBridge.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D06384A06B2309C0B961515D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6FB761E4B8C3579B5B2B3C05 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -261,6 +360,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MemoApp/MemoApp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -276,8 +376,8 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.ios.dev2026;
-				PRODUCT_NAME = MemoApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.subnota.ios;
+				PRODUCT_NAME = Subnota;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -293,6 +393,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MemoApp/MemoApp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = MemoApp/Info.plist;
@@ -307,13 +408,58 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.memoapp.ios.dev2026;
-				PRODUCT_NAME = MemoApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.subnota.ios;
+				PRODUCT_NAME = Subnota;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		41E60B2B1238ADAA58EA4200 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = SubnotaShareExtension/SubnotaShareExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SubnotaShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.subnota.ios.share;
+				PRODUCT_NAME = SubnotaShareExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		61B247312B8B1E424F6A41A4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = SubnotaShareExtension/SubnotaShareExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SubnotaShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunghoon.subnota.ios.share;
+				PRODUCT_NAME = SubnotaShareExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -483,6 +629,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		01A50CBA9C8CC2214E4FC0CF /* Build configuration list for PBXNativeTarget "SubnotaShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				61B247312B8B1E424F6A41A4 /* Release */,
+				41E60B2B1238ADAA58EA4200 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "MemoApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

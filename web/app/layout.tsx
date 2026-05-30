@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Subnota - 메모가 일정과 기억으로 이어지는 앱',
+  title: 'Subnota - 적기만 하면 일정과 기억으로 이어지는 메모',
   description:
-    '메모를 캘린더 블럭, 비슷한 기억, 데일리 브리핑으로 이어주는 개인 메모 앱입니다.',
+    '그저 기록하는 것만으로 충분합니다. 약속을 메모하면 캘린더 일정이 되고, 잊고 있던 예전의 생각들은 오늘의 기록과 연결되어 자연스럽게 살아납니다.',
   openGraph: {
-    title: 'Subnota - 메모가 일정과 아이디어로 이어지는 앱',
+    title: '쓰기만 하세요, 정리는 Subnota가 할게요.',
     description:
-      '빠르게 쓰고, 일정을 자동으로 등록하고, 예전 아이디어를 무의식에서 다시 꺼내주는 메모 경험.',
+      '메모가 일정이 되고, 과거의 생각이 오늘의 아이디어로 이어지는 가장 편안한 메모장.',
     type: 'website',
   },
 };
@@ -21,9 +21,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" as="style" crossOrigin="anonymous" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
       </head>
       <body>{children}</body>
     </html>

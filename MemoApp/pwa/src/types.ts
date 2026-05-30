@@ -70,4 +70,4 @@ export interface TopicMapData {
   memberships: TopicMembership[];
 }
 
-export type TabKey = 'memo' | 'calendar' | 'briefing';
+export type TabKey = 'memo' | 'calendar' | 'inbox' | 'briefing';

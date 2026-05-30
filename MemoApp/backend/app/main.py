@@ -1,8 +1,17 @@
-from fastapi import Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import require_admin_key, require_user_id
 from app.config import settings
+from app.inbox import (
+    InboxSessionAnalyzeRequest,
+    InboxSessionCreateRequest,
+    InboxSummaryIndexRequest,
+    analyze_inbox_session,
+    create_inbox_session,
+    index_inbox_summary_embeddings,
+    list_inbox_sessions,
+)
 from app.maintenance import (
     DailyMaintenanceAllRequest,
     DailyMaintenanceRequest,
@@ -16,7 +25,7 @@ from app.schedule_batch import ScheduleInboxRunRequest, run_schedule_inbox_batch
 from app.topic_discovery import TopicDiscoveryRequest, run_topic_discovery
 
 app = FastAPI(
-    title="MemoApp Backend",
+    title="Subnota Backend",
     version="0.1.0",
     debug=settings.backend_env == "development",
 )
@@ -60,6 +69,40 @@ def search_network_chunks_endpoint(
     user_id: str = Depends(require_user_id),
 ) -> dict:
     return search_network_chunks(request.model_copy(update={"user_id": user_id})).model_dump()
+
+
+@app.get("/inbox/sessions")
+def list_inbox_sessions_endpoint(
+    limit: int = 50,
+    user_id: str = Depends(require_user_id),
+) -> dict:
+    return list_inbox_sessions(user_id, limit).model_dump()
+
+
+@app.post("/inbox/sessions")
+def create_inbox_session_endpoint(
+    request: InboxSessionCreateRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user_id),
+) -> dict:
+    row = create_inbox_session(user_id, request)
+    session_id = str(row["id"])
+    background_tasks.add_task(analyze_inbox_session, user_id, session_id)
+    return {"item": row}
+
+
+@app.post("/inbox/sessions/analyze")
+def analyze_inbox_session_endpoint(
+    request: InboxSessionAnalyzeRequest,
+    user_id: str = Depends(require_user_id),
+) -> dict:
+    row = analyze_inbox_session(user_id, request.session_id)
+    return {"item": row}
+
+
+@app.post("/inbox/index-summaries", dependencies=[Depends(require_admin_key)])
+def index_inbox_summary_embeddings_endpoint(request: InboxSummaryIndexRequest) -> dict:
+    return index_inbox_summary_embeddings(request).model_dump()
 
 
 @app.post("/schedule-inbox/run", dependencies=[Depends(require_admin_key)])

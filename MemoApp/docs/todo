@@ -1,20 +1,24 @@
 ##수정희망사항 및 아이디어 
 ### 미래 변경사항 - 아이디어 
-- 메모 어플로 유튜브 주소 공유 시 자동으로 요약본 제공..? ( url 읽기 기능 ) ==> 가능한가? 
 - 흩어져 있는 것들을 모으는 것을 핵심기술로 하고 싶음 
 - 아 그리고 날찌 및 시간 인식  parser 로직을 충분히 강화해야함 
 - 스크린샷을 이용할 수 잇는 방법이 없을까 사용자가 정보를 얻으려고 했지만 까먹는 행위를 막아주고 싶음.. 
 - 무의식의 정보를 메모어플로 끌어모을 수 있는 다른 방법이 더 없을까 
 ### 현재 급한 수정사항 - 전체 수정진행
 
-- 웹에서도 쓸 수 있게 해야될까? 
 
-- 구글 카카오 로그인 및 프로필 페이지, 로그인을 즉시 하게 할지 연동 원할 대만 하게 할지
+- 서비스 이용약관 및 개인정보 처리방침 
+
+- 모바일 웹페이지 별로임 - 
+
+- share.md 확인 후 share인박스랑 메모랑 연동할 방법ㅂ 생각 모으기만 하지말고 모은 걸 쓸 수 있게 !
+
+ 카카오 로그인 넣자 
 
 - 브리핑만 알람으로 하자 그리고 블럭만 알람 
 - 위젯으로 확장 가능성 생각하기 이거 무조건 
 
-- 저녁 batch는 /maintenance/daily-all을 cron에서 호출 -> 구조 어떻게 할 지 물어보자
+- !!!!! 저녁 batch는 /maintenance/daily-all을 cron에서 호출 -> 구조 어떻게 할 지 물어보자
 
    호출할 때는 이렇게 헤더에 넣습니다.
    curl -X POST http://localhost:8000/maintenance/daily-all \
@@ -35,6 +39,9 @@ corepack pnpm start --reset-cache
 #2. iOS 앱 실행 터미널 2 
 cd /Users/sunghoon/Projects/memo/MemoApp
 open ios/*.xcworkspace || open ios/*.xcodeproj
+
+cd /Users/sunghoon/Projects/memo/MemoApp
+xed macos/MemoApp.xcworkspace
 
 #3. 백엔드 실행 터미널 3 
 cd /Users/sunghoon/Projects/memo/MemoApp/backend

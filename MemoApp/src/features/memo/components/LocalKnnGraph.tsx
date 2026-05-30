@@ -7,7 +7,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 import { MemoChunk } from '../../../lib/memoChunker';
 import { NetworkSearchResult } from '../../../services/backend/networkService';
@@ -39,6 +39,7 @@ interface LocalKnnGraphProps {
 interface KnnNode {
   id: string;
   label: string;
+  memoId: string | null;
   x: number;
   y: number;
   radius: number;
@@ -67,6 +68,7 @@ const LocalKnnGraph = ({
       result.push({
         id: queryChunk.id,
         label: truncateLabel(queryChunk.text, 10),
+        memoId: null,
         x: centerX,
         y: centerY,
         radius: 23,
@@ -87,8 +89,11 @@ const LocalKnnGraph = ({
       const distance = maxOrbit - similarity * (maxOrbit - minOrbit);
 
       result.push({
-        id: resultItem.memoId,
-        label: truncateLabel(resultItem.chunkText),
+        id: resultItem.chunkId,
+        label: resultItem.sourceKind === 'inbox'
+          ? resultItem.sourceLabel ?? '수집함'
+          : truncateLabel(resultItem.chunkText),
+        memoId: resultItem.memoId,
         x: centerX + Math.cos(angle) * distance,
         y: centerY + Math.sin(angle) * distance,
         radius: nodeRadius,
@@ -212,9 +217,13 @@ const LocalKnnGraph = ({
         {peripheralNodes.map(node => (
           <Pressable
             key={`touch-${node.id}`}
-            accessibilityLabel={`${node.label} 메모로 이동`}
+            accessibilityLabel={`${node.label} 연결 열기`}
             accessibilityRole="button"
-            onPress={() => onNavigateToMemo(node.id)}
+            onPress={() => {
+              if (node.memoId) {
+                onNavigateToMemo(node.memoId);
+              }
+            }}
             style={({ pressed }) => [
               styles.touchNode,
               {

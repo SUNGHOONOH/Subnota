@@ -1,3 +1,5 @@
+/* global caches, self */
+
 const CACHE_NAME = 'subnota-pwa-app-v1';
 const APP_SHELL = [
   '/app/',

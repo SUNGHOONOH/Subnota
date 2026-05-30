@@ -5,14 +5,22 @@ import { isSupabaseConfigured, supabase } from '../supabase/client';
 
 export interface NetworkSearchResult {
   endIndex: number;
-  memoId: string;
+  sourceKind: 'memo' | 'inbox';
+  sourceLabel: string | null;
+  memoId: string | null;
+  inboxSessionId: string | null;
   chunkId: string;
   chunkText: string;
   memoCreatedAt: number | null;
-  memoContent: string;
+  memoContent: string | null;
   memoUpdatedAt: number | null;
   startIndex: number;
   similarity: number;
+  sourceType: string | null;
+  title: string | null;
+  sourceUrl: string | null;
+  thumbnailUrl: string | null;
+  createdAt: number | null;
 }
 
 export interface NetworkSearchResponse {
@@ -24,15 +32,23 @@ export interface NetworkSearchResponse {
 interface BackendNetworkSearchResponse {
   query_chunk: MemoChunk | null;
   results: Array<{
-    memo_id: string;
+    source_kind?: 'memo' | 'inbox';
+    source_label?: string | null;
+    memo_id: string | null;
+    inbox_session_id?: string | null;
     chunk_id: string;
     chunk_text: string;
-    memo_content: string;
+    memo_content: string | null;
     start_index: number;
     end_index: number;
     memo_created_at: string | null;
     memo_updated_at: string | null;
     similarity: number;
+    source_type?: string | null;
+    title?: string | null;
+    source_url?: string | null;
+    thumbnail_url?: string | null;
+    created_at?: string | null;
   }>;
   message?: string | null;
 }
@@ -102,16 +118,24 @@ export const searchCursorNetwork = async ({
     results: payload.results.map(result => ({
       chunkId: result.chunk_id,
       chunkText: result.chunk_text,
+      createdAt: result.created_at ? new Date(result.created_at).getTime() : null,
       endIndex: result.end_index,
+      inboxSessionId: result.inbox_session_id ?? null,
       memoCreatedAt: result.memo_created_at
         ? new Date(result.memo_created_at).getTime()
         : null,
       memoContent: result.memo_content,
-      memoId: result.memo_id,
+      memoId: result.memo_id ?? null,
       memoUpdatedAt: result.memo_updated_at
         ? new Date(result.memo_updated_at).getTime()
         : null,
+      sourceKind: result.source_kind ?? 'memo',
+      sourceLabel: result.source_label ?? null,
+      sourceType: result.source_type ?? null,
+      sourceUrl: result.source_url ?? null,
       startIndex: result.start_index,
+      thumbnailUrl: result.thumbnail_url ?? null,
+      title: result.title ?? null,
       similarity: result.similarity,
     })),
   };

@@ -1,26 +1,19 @@
-import { ArrowRight, Laptop, MonitorDown, Smartphone } from 'lucide-react';
+import { ArrowRight, Laptop, MonitorDown } from 'lucide-react';
 
 const downloadTargets = [
   {
-    href: '/app',
+    href: '/app?install=true',
     icon: Laptop,
     label: 'Mac용 다운로드',
     meta: 'macOS PWA',
     platform: 'macOS',
   },
   {
-    href: '/app',
+    href: '/app?install=true',
     icon: MonitorDown,
     label: 'Windows용 다운로드',
     meta: 'Windows PWA',
     platform: 'Windows',
-  },
-  {
-    href: '/app',
-    icon: Smartphone,
-    label: 'iOS 앱 받기',
-    meta: 'iPhone PWA',
-    platform: 'iOS',
   },
 ];
 

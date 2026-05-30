@@ -4,13 +4,21 @@ import { isSupabaseConfigured, supabase } from '../supabase/client';
 export interface NetworkSearchResult {
   chunkId: string;
   chunkText: string;
+  createdAt: number | null;
   endIndex: number;
-  memoContent: string;
+  inboxSessionId: string | null;
+  memoContent: string | null;
   memoCreatedAt: number | null;
-  memoId: string;
+  memoId: string | null;
   memoUpdatedAt: number | null;
   similarity: number;
+  sourceKind: 'memo' | 'inbox';
+  sourceLabel: string | null;
+  sourceType: string | null;
+  sourceUrl: string | null;
   startIndex: number;
+  thumbnailUrl: string | null;
+  title: string | null;
 }
 
 export interface NetworkSearchResponse {
@@ -25,13 +33,21 @@ interface BackendNetworkSearchResponse {
   results: Array<{
     chunk_id: string;
     chunk_text: string;
+    created_at?: string | null;
     end_index: number;
-    memo_content: string;
+    inbox_session_id?: string | null;
+    memo_content: string | null;
     memo_created_at: string | null;
-    memo_id: string;
+    memo_id: string | null;
     memo_updated_at: string | null;
     similarity: number;
+    source_kind?: 'memo' | 'inbox';
+    source_label?: string | null;
+    source_type?: string | null;
+    source_url?: string | null;
     start_index: number;
+    thumbnail_url?: string | null;
+    title?: string | null;
   }>;
 }
 
@@ -97,17 +113,25 @@ export const searchCursorNetwork = async ({
     results: payload.results.map(result => ({
       chunkId: result.chunk_id,
       chunkText: result.chunk_text,
+      createdAt: result.created_at ? new Date(result.created_at).getTime() : null,
       endIndex: result.end_index,
+      inboxSessionId: result.inbox_session_id ?? null,
       memoContent: result.memo_content,
       memoCreatedAt: result.memo_created_at
         ? new Date(result.memo_created_at).getTime()
         : null,
-      memoId: result.memo_id,
+      memoId: result.memo_id ?? null,
       memoUpdatedAt: result.memo_updated_at
         ? new Date(result.memo_updated_at).getTime()
         : null,
       similarity: result.similarity,
+      sourceKind: result.source_kind ?? 'memo',
+      sourceLabel: result.source_label ?? null,
+      sourceType: result.source_type ?? null,
+      sourceUrl: result.source_url ?? null,
       startIndex: result.start_index,
+      thumbnailUrl: result.thumbnail_url ?? null,
+      title: result.title ?? null,
     })),
   };
 };

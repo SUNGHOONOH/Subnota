@@ -3,6 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import {
   CalendarDays,
   Download,
+  Inbox,
   LogOut,
   NotebookText,
   RefreshCw,
@@ -12,6 +13,7 @@ import {
 import AuthScreen from '../features/auth/AuthScreen';
 import BriefingWorkspace from '../features/briefing/BriefingWorkspace';
 import CalendarWorkspace from '../features/calendar/CalendarWorkspace';
+import InboxWorkspace from '../features/inbox/InboxWorkspace';
 import MemoWorkspace from '../features/memo/MemoWorkspace';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import {
@@ -23,6 +25,11 @@ import {
 import { createUuid, hashText } from '../lib/contentHash';
 import { parseDates } from '../lib/dateParser';
 import { getCursorChunkWindow, MemoChunk } from '../lib/memoChunker';
+import {
+  InboxSession,
+  createInboxSession,
+  fetchInboxSessions,
+} from '../services/backend/inboxService';
 import {
   NetworkSearchResult,
   searchCursorNetwork,
@@ -85,6 +92,8 @@ const App = () => {
   const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlockRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isBooting, setBooting] = useState(true);
+  const [inboxItems, setInboxItems] = useState<InboxSession[]>([]);
+  const [isInboxLoading, setInboxLoading] = useState(false);
   const [isRefreshing, setRefreshing] = useState(false);
   const [memos, setMemos] = useState<MemoRow[]>([]);
   const [memoDraft, setMemoDraft] = useState('');
@@ -108,6 +117,14 @@ const App = () => {
     [],
   );
   const { canInstall, install, isInstalled } = useInstallPrompt();
+  const [showInstallModal, setShowInstallModal] = useState(false);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('install') === 'true') {
+      setShowInstallModal(true);
+    }
+  }, []);
   const activeMemoIdRef = useRef<string | null>(null);
   const lastAmbientHashRef = useRef<string | null>(null);
   const lastAmbientRequestAtRef = useRef(0);
@@ -119,6 +136,51 @@ const App = () => {
 
   useEffect(() => {
     sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const captureUrl = params.get('captureUrl');
+    if (!captureUrl) {
+      return;
+    }
+
+    const captureKey = `subnota-capture:${captureUrl}:${params.get('captureTitle') ?? ''}`;
+    if (window.sessionStorage.getItem(captureKey)) {
+      return;
+    }
+    window.sessionStorage.setItem(captureKey, '1');
+
+    createInboxSession({
+      rawSharedText: params.get('captureTitle'),
+      selectedText: params.get('selectedText'),
+      url: captureUrl,
+    })
+      .then(item => {
+        setInboxItems(previous => [item, ...previous]);
+        setActiveTab('inbox');
+        window.setTimeout(() => {
+          void refreshInbox();
+        }, 2500);
+      })
+      .catch(caught => {
+        setError(caught instanceof Error ? caught.message : '공유 링크 저장에 실패했습니다.');
+      })
+      .finally(() => {
+        params.delete('captureUrl');
+        params.delete('captureTitle');
+        params.delete('selectedText');
+        const nextSearch = params.toString();
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`,
+        );
+      });
   }, [session]);
 
   const activeMemo = useMemo(
@@ -157,12 +219,13 @@ const App = () => {
 
       try {
         await ensureProfile(currentSession.user.id);
-        const [nextMemos, nextBlocks, nextInbox, nextBriefings] =
+        const [nextMemos, nextBlocks, nextInbox, nextBriefings, nextLinkInbox] =
           await Promise.all([
             fetchMemos(currentSession),
             fetchCalendarBlocks(currentSession),
             fetchScheduleInbox(currentSession),
             fetchBriefings(currentSession),
+            fetchInboxSessions().catch(() => []),
           ]);
         const nextTopicMap = await fetchTopicMap(currentSession).catch(() => ({
           clusters: [],
@@ -174,6 +237,7 @@ const App = () => {
         setCalendarBlocks(nextBlocks);
         setScheduleInbox(nextInbox);
         setBriefings(nextBriefings);
+        setInboxItems(nextLinkInbox);
         setTopicClusters(nextTopicMap.clusters);
         setTopicEdges(nextTopicMap.edges);
         setTopicMemberships(nextTopicMap.memberships);
@@ -225,6 +289,7 @@ const App = () => {
         setCalendarBlocks([]);
         setScheduleInbox([]);
         setBriefings([]);
+        setInboxItems([]);
         setTopicClusters([]);
         setTopicEdges([]);
         setTopicMemberships([]);
@@ -550,6 +615,27 @@ const App = () => {
     );
   };
 
+  const refreshInbox = async () => {
+    setInboxLoading(true);
+    setError(null);
+    try {
+      setInboxItems(await fetchInboxSessions());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '수집함을 불러오지 못했습니다.');
+    } finally {
+      setInboxLoading(false);
+    }
+  };
+
+  const saveInboxUrl = async (url: string) => {
+    setError(null);
+    const item = await createInboxSession({ url });
+    setInboxItems(previous => [item, ...previous]);
+    window.setTimeout(() => {
+      void refreshInbox();
+    }, 2500);
+  };
+
   if (!isSupabaseConfigured()) {
     return (
       <main className="auth-screen">
@@ -579,8 +665,37 @@ const App = () => {
     return <AuthScreen onSignedIn={() => void loadWorkspace(undefined, { quiet: true })} />;
   }
 
+  const handleInstallClick = async () => {
+    const success = await install();
+    if (success) {
+      setShowInstallModal(false);
+    }
+  };
+
   return (
-    <div className="app-shell">
+    <>
+      {showInstallModal && canInstall && !isInstalled && (
+        <div className="install-modal-overlay">
+          <div className="install-modal-card">
+            <div className="install-modal-icon-wrapper">
+              <Sparkles size={28} />
+            </div>
+            <h2>Subnota 앱 다운로드 및 설치</h2>
+            <p>
+              기기에 전용 어플리케이션으로 다운로드하여 주소창 없는 전체 화면과 더 빠른 응답 속도로 메모 비서를 만나보세요.
+            </p>
+            <div className="install-modal-actions">
+              <button className="install-modal-btn install" onClick={handleInstallClick}>
+                지금 설치하기
+              </button>
+              <button className="install-modal-btn close" onClick={() => setShowInstallModal(false)}>
+                웹으로 계속하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="app-shell">
       <aside className="nav-rail">
         <div className="nav-brand">S</div>
         <button
@@ -600,6 +715,14 @@ const App = () => {
           <span>캘린더</span>
         </button>
         <button
+          aria-label="수집함"
+          className={activeTab === 'inbox' ? 'nav-item active' : 'nav-item'}
+          onClick={() => setActiveTab('inbox')}
+        >
+          <Inbox size={22} />
+          <span>수집함</span>
+        </button>
+        <button
           aria-label="브리핑"
           className={activeTab === 'briefing' ? 'nav-item active' : 'nav-item'}
           onClick={() => setActiveTab('briefing')}
@@ -613,7 +736,15 @@ const App = () => {
         <header className="topbar">
           <div>
             <p className="eyebrow">Desktop PWA</p>
-            <h1>{activeTab === 'memo' ? '메모' : activeTab === 'calendar' ? '캘린더' : '브리핑'}</h1>
+            <h1>
+              {activeTab === 'memo'
+                ? '메모'
+                : activeTab === 'calendar'
+                  ? '캘린더'
+                  : activeTab === 'inbox'
+                    ? '수집함'
+                    : '브리핑'}
+            </h1>
           </div>
           <div className="topbar-actions">
             {error && <span className="topbar-error">{error}</span>}
@@ -680,6 +811,15 @@ const App = () => {
           />
         )}
 
+        {activeTab === 'inbox' && (
+          <InboxWorkspace
+            inboxItems={inboxItems}
+            isLoading={isInboxLoading}
+            onRefresh={() => void refreshInbox()}
+            onSaveUrl={saveInboxUrl}
+          />
+        )}
+
         {activeTab === 'briefing' && (
           <BriefingWorkspace
             briefings={briefings}
@@ -690,6 +830,7 @@ const App = () => {
         )}
       </section>
     </div>
+    </>
   );
 };
 
