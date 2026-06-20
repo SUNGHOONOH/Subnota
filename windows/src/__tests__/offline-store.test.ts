@@ -7,6 +7,7 @@ import {
 import {
   loadLocalMemos,
   replaceSyncedMemos,
+  setLocalWorkspaceOwner,
   upsertLocalMemo,
 } from '../services/local/offlineStore';
 import { MemoRow } from '../types';
@@ -87,5 +88,42 @@ describe('offline memo store', () => {
     expect(merged.find(memo => memo.id === 'remote-normal')?.category).toBe(
       DEFAULT_MEMO_CATEGORY,
     );
+  });
+
+  it('isolates local data by authenticated user', () => {
+    setLocalWorkspaceOwner('user-a');
+    upsertLocalMemo({
+      content: 'User A memo',
+      created_at: '2026-06-13T00:00:00.000Z',
+      id: 'user-a-memo',
+    });
+
+    setLocalWorkspaceOwner('user-b');
+    expect(loadLocalMemos()).toEqual([]);
+
+    upsertLocalMemo({
+      content: 'User B memo',
+      created_at: '2026-06-13T00:00:00.000Z',
+      id: 'user-b-memo',
+    });
+
+    expect(loadLocalMemos().map(memo => memo.id)).toEqual(['user-b-memo']);
+    expect(loadLocalMemos('user-a').map(memo => memo.id)).toEqual([
+      'user-a-memo',
+    ]);
+  });
+
+  it('migrates legacy data only when explicitly requested', () => {
+    window.localStorage.setItem(
+      'subnota.windows.local.memos.v1',
+      JSON.stringify([makeMemo({ id: 'legacy-memo' })]),
+    );
+
+    setLocalWorkspaceOwner('interactive-user');
+    expect(loadLocalMemos()).toEqual([]);
+
+    setLocalWorkspaceOwner('cached-user', { migrateLegacy: true });
+    expect(loadLocalMemos().map(memo => memo.id)).toEqual(['legacy-memo']);
+    expect(loadLocalMemos('interactive-user')).toEqual([]);
   });
 });

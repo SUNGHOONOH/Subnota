@@ -30,6 +30,7 @@ import {
 // --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
 import { DateHighlight } from "@/components/tiptap-extension/date-highlight-extension"
+import { FormattingShortcuts } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
 import { CodeBlock } from "@/components/tiptap-node/code-block-node/code-block-node-extension"
 import { Frontmatter } from "@/components/tiptap-node/frontmatter-node/frontmatter-node-extension"
@@ -309,6 +310,7 @@ export function SimpleEditor({
         },
       }),
       CodeBlock,
+      FormattingShortcuts,
       Frontmatter,
       HorizontalRule,
       TextAlign.configure({ types: ["heading", "paragraph"] }),

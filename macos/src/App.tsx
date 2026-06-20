@@ -1765,8 +1765,12 @@ const App = () => {
 
   const saveInboxUrl = async (url: string) => {
     const currentSession = session;
-    const ownerId = currentSession?.user.id;
     setError(null);
+    if (!currentSession) {
+      setError('링크를 저장하려면 먼저 로그인해 주세요.');
+      return;
+    }
+    const ownerId = currentSession.user.id;
     const localItem = createLocalInboxSession(url, ownerId);
     setInboxItems(previous => [localItem, ...previous]);
     window.electronAPI?.recordInboxSave?.({
@@ -1775,10 +1779,6 @@ const App = () => {
       title: localItem.title ?? url,
       url,
     });
-
-    if (!currentSession) {
-      return;
-    }
 
     try {
       const item = await createInboxSession({

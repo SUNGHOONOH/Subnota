@@ -67,7 +67,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAuthWindowMode: (isAuthMode: boolean): Promise<boolean> => {
     return ipcRenderer.invoke('set-auth-window-mode', isAuthMode);
   },
-  startOAuth: (provider: string): Promise<any> => {
-    return ipcRenderer.invoke('start-oauth', provider);
+  startOAuth: (authUrl: string): Promise<string> => {
+    return ipcRenderer.invoke('start-oauth', authUrl);
+  },
+  cancelOAuth: (): Promise<void> => {
+    return ipcRenderer.invoke('cancel-oauth');
   },
 });

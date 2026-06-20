@@ -19,7 +19,7 @@ import {
   SimpleEditorToolbar,
 } from '../../../components/tiptap-templates/simple/simple-editor';
 import TooltipIconButton from '../../../components/TooltipIconButton';
-import CalendarWorkspace from '../../calendar/TuiCalendarWorkspace';
+import CalendarWorkspace from '../../calendar/CalendarWorkspace';
 import BriefingWorkspace from '../../briefing/BriefingWorkspace';
 import InboxWorkspace from '../../inbox/InboxWorkspace';
 import { formatRelativeDisplayDate, parseDates } from '../../../lib/dateParser';

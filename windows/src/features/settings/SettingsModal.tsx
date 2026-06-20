@@ -9,11 +9,9 @@ import {
 
 interface SettingsModalProps {
   email?: string | null;
-  isOfflineMode: boolean;
   isOpen: boolean;
   isSignedIn: boolean;
   onClose: () => void;
-  onLogin: () => void;
   onResetShortcuts: () => Promise<void>;
   onSaveShortcuts: (settings: ShortcutSettings) => Promise<void>;
   onSignOut: () => void;
@@ -22,11 +20,9 @@ interface SettingsModalProps {
 
 const SettingsModal = ({
   email,
-  isOfflineMode,
   isOpen,
   isSignedIn,
   onClose,
-  onLogin,
   onResetShortcuts,
   onSaveShortcuts,
   onSignOut,
@@ -119,9 +115,7 @@ const SettingsModal = ({
             <p>
               {isSignedIn
                 ? email ?? '로그인됨'
-                : isOfflineMode
-                  ? '오프라인 모드'
-                  : '로그인 필요'}
+                : '로그인 필요'}
             </p>
           </div>
           {isSignedIn ? (
@@ -129,11 +123,7 @@ const SettingsModal = ({
               <LogOut size={16} />
               로그아웃
             </button>
-          ) : (
-            <button className="primary-button" onClick={onLogin} type="button">
-              로그인
-            </button>
-          )}
+          ) : null}
         </div>
 
         <form className="settings-section shortcut-form" onSubmit={handleSubmit}>

@@ -15,6 +15,9 @@ const VALID_VIEWS = new Set([
 
 export const WORKSPACE_SESSION_STORAGE_KEY = 'subnota.workspaceSession.v1';
 
+const workspaceSessionKey = (ownerId: string | null) =>
+  `${WORKSPACE_SESSION_STORAGE_KEY}.${ownerId ? `user.${ownerId}` : 'guest'}`;
+
 export interface WorkspaceSession {
   activeMemoId: string | null;
   activeTab: TabKey;
@@ -114,13 +117,13 @@ export const normalizeWorkspaceSession = (
   };
 };
 
-export const loadWorkspaceSession = () => {
+export const loadWorkspaceSession = (ownerId: string | null = null) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(WORKSPACE_SESSION_STORAGE_KEY);
+    const raw = window.localStorage.getItem(workspaceSessionKey(ownerId));
     return raw ? normalizeWorkspaceSession(JSON.parse(raw)) : null;
   } catch {
     return null;
@@ -129,6 +132,7 @@ export const loadWorkspaceSession = () => {
 
 export const saveWorkspaceSession = (
   value: Omit<WorkspaceSession, 'version'>,
+  ownerId: string | null = null,
 ) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
@@ -136,7 +140,7 @@ export const saveWorkspaceSession = (
 
   try {
     window.localStorage.setItem(
-      WORKSPACE_SESSION_STORAGE_KEY,
+      workspaceSessionKey(ownerId),
       JSON.stringify({ ...value, version: WORKSPACE_SESSION_VERSION }),
     );
   } catch {

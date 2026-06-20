@@ -63,13 +63,46 @@ export const signUpWithPassword = async (email: string, password: string) => {
   return data.session;
 };
 
-export const signInWithProvider = async (provider: 'google' | 'kakao') => {
-  const { error } = await supabase.auth.signInWithOAuth({
+// Password recovery via 6-digit OTP. The recovery email must use the
+// {{ .Token }} template (not a link) for a code to be delivered.
+export const sendPasswordResetOtp = async (email: string) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const verifyRecoveryOtp = async (email: string, token: string) => {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'recovery',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.session;
+};
+
+// updateUser requires an active session, which verifyRecoveryOtp establishes.
+export const updateUserPassword = async (password: string) => {
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const OAUTH_REDIRECT_URL = 'http://localhost:8923/auth/callback';
+
+export const createProviderAuthUrl = async (provider: 'google' | 'kakao') => {
+  const { data, error } = await supabase.auth.signInWithOAuth({
     options: {
-      redirectTo: new URL(
-        `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}auth/callback`,
-        window.location.origin,
-      ).toString(),
+      redirectTo: OAUTH_REDIRECT_URL,
+      skipBrowserRedirect: true,
     },
     provider,
   });
@@ -77,6 +110,22 @@ export const signInWithProvider = async (provider: 'google' | 'kakao') => {
   if (error) {
     throw error;
   }
+
+  if (!data.url) {
+    throw new Error('OAuth 로그인 URL을 만들지 못했습니다.');
+  }
+
+  return data.url;
+};
+
+export const exchangeOAuthCode = async (code: string) => {
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error) {
+    throw error;
+  }
+
+  return data.session;
 };
 
 export const signOut = async () => {

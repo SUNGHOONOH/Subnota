@@ -8,6 +8,7 @@ import {
   shell,
 } from 'electron';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { checkForNativeUpdate, configureAutoUpdater, installNativeUpdate } from './auto-updater';
@@ -91,62 +92,113 @@ app.on('open-url', (event, url) => {
   }
 });
 
-ipcMain.handle('start-oauth', async (_, provider: string) => {
-  return new Promise((resolve, reject) => {
-    const supabaseUrl = 'https://kwrbbxctutngcoqtccjv.supabase.co';
-    const redirectUrl = 'https://subnota-pwa.vercel.app/';
-    const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectUrl)}`;
+const OAUTH_LOOPBACK_PORT = 8923;
+const oauthResultHtml = (succeeded: boolean) =>
+  '<!doctype html><meta charset="utf-8">' +
+  '<body style="font-family:Segoe UI,sans-serif;background:#faf9f5;' +
+  'color:#141413;text-align:center;padding-top:96px">' +
+  `<h2>${succeeded ? '로그인이 완료되었습니다' : '로그인을 완료하지 못했습니다'}</h2>` +
+  '<p style="color:#6c6a64">이 창을 닫고 Subnota로 돌아가세요.</p></body>';
 
-    const authWindow = new BrowserWindow({
-      width: 480,
-      height: 640,
-      show: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        allowRunningInsecureContent: false,
-      },
-    });
+let cancelActiveOAuth: (() => void) | null = null;
 
-    let resolved = false;
+ipcMain.handle('cancel-oauth', () => {
+  cancelActiveOAuth?.();
+});
 
-    const handleUrlChange = (url: string) => {
-      if (url.startsWith(redirectUrl) && url.includes('#')) {
-        const hash = url.split('#')[1];
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        const expiresIn = params.get('expires_in');
+ipcMain.handle('start-oauth', async (_, authUrl: string) => {
+  let parsedAuthUrl: URL;
+  try {
+    parsedAuthUrl = new URL(authUrl);
+  } catch {
+    throw new Error('올바르지 않은 OAuth 로그인 URL입니다.');
+  }
+  const isLocalDevelopmentUrl =
+    parsedAuthUrl.protocol === 'http:' &&
+    ['localhost', '127.0.0.1'].includes(parsedAuthUrl.hostname);
+  if (parsedAuthUrl.protocol !== 'https:' && !isLocalDevelopmentUrl) {
+    throw new Error('안전하지 않은 OAuth 로그인 URL은 열 수 없습니다.');
+  }
 
-        if (accessToken && refreshToken) {
-          resolved = true;
-          authWindow.destroy();
-          resolve({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: expiresIn,
-          });
-        }
+  cancelActiveOAuth?.();
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+
+    const server = http.createServer((req, res) => {
+      let url: URL;
+      try {
+        url = new URL(req.url ?? '/', `http://localhost:${OAUTH_LOOPBACK_PORT}`);
+      } catch {
+        res.writeHead(400);
+        res.end();
+        return;
       }
-    };
 
-    authWindow.webContents.on('will-navigate', (_event, url) => {
-      handleUrlChange(url);
-    });
+      if (url.pathname !== '/auth/callback') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
 
-    authWindow.webContents.on('did-navigate', (_event, url) => {
-      handleUrlChange(url);
-    });
+      const code = url.searchParams.get('code');
+      const errorDescription =
+        url.searchParams.get('error_description') ?? url.searchParams.get('error');
+      const succeeded = Boolean(code) && !errorDescription;
+      res.writeHead(succeeded ? 200 : 400, {
+        'Content-Type': 'text/html; charset=utf-8',
+      });
+      res.end(oauthResultHtml(succeeded));
 
-    authWindow.on('closed', () => {
-      if (!resolved) {
-        reject(new Error('소셜 로그인이 취소되었습니다.'));
+      if (errorDescription) {
+        finish(() => reject(new Error(errorDescription)));
+      } else if (code) {
+        finish(() => resolve(code));
+      } else {
+        finish(() => reject(new Error('로그인 응답에서 코드를 찾지 못했습니다.')));
+      }
+
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.show();
       }
     });
 
-    authWindow.loadURL(authUrl);
+    server.on('error', error => {
+      const oauthError =
+        (error as NodeJS.ErrnoException).code === 'EADDRINUSE'
+          ? new Error('로그인 콜백 포트가 사용 중입니다. 잠시 후 다시 시도해 주세요.')
+          : error;
+      finish(() => reject(oauthError));
+    });
+    const timer = setTimeout(
+      () => finish(() => reject(new Error('소셜 로그인이 취소되었습니다.'))),
+      5 * 60 * 1000,
+    );
+    cancelActiveOAuth = () =>
+      finish(() => reject(new Error('소셜 로그인이 취소되었습니다.')));
+    server.listen(OAUTH_LOOPBACK_PORT, 'localhost', async () => {
+      try {
+        await shell.openExternal(authUrl);
+      } catch (error) {
+        finish(() =>
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('기본 브라우저를 열지 못했습니다.'),
+          ),
+        );
+      }
+    });
+
+    function finish(fn: () => void) {
+      if (settled) return;
+      settled = true;
+      cancelActiveOAuth = null;
+      clearTimeout(timer);
+      if (server.listening) {
+        server.close();
+      }
+      fn();
+    }
   });
 });
 

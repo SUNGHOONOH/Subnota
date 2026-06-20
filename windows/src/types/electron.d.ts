@@ -20,7 +20,8 @@ interface ElectronAPI {
   notifySaveComplete: () => void;
   setFilePath: (filePath: string) => Promise<void>;
   setAuthWindowMode: (isAuthMode: boolean) => Promise<boolean>;
-  startOAuth: (provider: string) => Promise<any>;
+  startOAuth: (authUrl: string) => Promise<string>;
+  cancelOAuth: () => Promise<void>;
 }
 
 interface Window {

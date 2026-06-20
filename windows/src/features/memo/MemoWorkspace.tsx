@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import {
@@ -28,6 +28,7 @@ import {
 } from '../../lib/constants';
 import { DateMatch, formatRelativeDisplayDate } from '../../lib/dateParser';
 import { formatMemoDate } from '../../lib/date';
+import { buildMemoSearchIndex } from '../../lib/memoSearch';
 import { MemoChunk } from '../../lib/memoChunker';
 import { NetworkSearchResult } from '../../services/backend/networkService';
 import { MemoRow, TopicCluster, TopicMemoEdge, TopicMembership } from '../../types';
@@ -52,7 +53,7 @@ interface MemoWorkspaceProps {
   onDeleteMemo: () => void;
   onNewMemo: () => void;
   onOpenNetwork: () => void;
-  onOpenSearch: () => void;
+  openSearchSignal?: number;
   onToggleSession: () => void;
   onRegisterSelectionSchedule: () => void;
   onRegisterSelectionScheduleAt: (date: Date, allDay: boolean) => void;
@@ -82,7 +83,7 @@ interface NetworkDetail {
   result: NetworkSearchResult;
 }
 
-type SidebarMode = 'time' | 'network';
+type SidebarMode = 'time' | 'network' | 'search';
 type TopicDetailMode = 'quick' | 'relation';
 
 const SESSION_RAIL_WIDTH = 284;
@@ -368,7 +369,7 @@ const MemoWorkspace = ({
   onDeleteMemo,
   onNewMemo,
   onOpenNetwork,
-  onOpenSearch,
+  openSearchSignal,
   onToggleSession,
   onRegisterSelectionSchedule,
   onRegisterSelectionScheduleAt,
@@ -387,6 +388,42 @@ const MemoWorkspace = ({
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('time');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchIndex = useMemo(() => buildMemoSearchIndex(memos), [memos]);
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      return memos.slice(0, 12);
+    }
+    const byId = new Map(memos.map(memo => [memo.id, memo]));
+    return searchIndex
+      .search(query, {
+        boost: { category: 1.4 },
+        fuzzy: query.length > 2 ? 0.2 : false,
+        prefix: true,
+      })
+      .slice(0, 20)
+      .map(result => byId.get(String(result.id)))
+      .filter((memo): memo is MemoRow => Boolean(memo));
+  }, [memos, searchIndex, searchQuery]);
+
+  // App이 검색 단축키로 openSearchSignal을 올리면 검색 모드로 전환한다.
+  useEffect(() => {
+    if (!openSearchSignal) {
+      return;
+    }
+    setSidebarMode('search');
+  }, [openSearchSignal]);
+
+  useEffect(() => {
+    if (sidebarMode !== 'search') {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => searchInputRef.current?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [sidebarMode, openSearchSignal]);
+
   const [insertTextRequest, setInsertTextRequest] = useState<{
     id: string;
     text: string;
@@ -643,7 +680,8 @@ const MemoWorkspace = ({
             <Network size={18} />
           </TooltipIconButton>
           <TooltipIconButton
-            onClick={onOpenSearch}
+            className={sidebarMode === 'search' ? 'active' : ''}
+            onClick={() => setSidebarMode('search')}
             placement="bottom"
             tooltip="검색"
           >
@@ -658,7 +696,49 @@ const MemoWorkspace = ({
           </TooltipIconButton>
         </div>
 
-        {sidebarMode === 'time' ? (
+        {sidebarMode === 'search' ? (
+          <div className="rail-search">
+            <div className="rail-search-row">
+              <Search size={16} />
+              <input
+                ref={searchInputRef}
+                aria-label="메모 검색어"
+                onChange={event => setSearchQuery(event.target.value)}
+                placeholder="입력하여 검색하세요"
+                value={searchQuery}
+              />
+              {searchQuery && (
+                <button
+                  aria-label="검색어 지우기"
+                  className="rail-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="rail-search-results">
+              {searchResults.length === 0 ? (
+                <p className="search-empty">일치하는 결과가 없습니다.</p>
+              ) : (
+                searchResults.map(memo => (
+                  <button
+                    className={memo.id === activeMemoId ? 'memo-row active' : 'memo-row'}
+                    key={memo.id}
+                    onClick={() => onSelectMemo(memo)}
+                    type="button"
+                  >
+                    <strong>{getMemoTitle(memo)}</strong>
+                    <span>
+                      {formatMemoDate(memo.updated_at)} · {getMemoPreview(memo)}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : sidebarMode === 'time' ? (
           <>
             <div className="session-header">
               <div>

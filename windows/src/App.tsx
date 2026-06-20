@@ -13,8 +13,9 @@ import {
 import TooltipIconButton from './components/TooltipIconButton';
 
 import AuthScreen from './features/auth/AuthScreen';
+import { decideAuthEvent } from './features/auth/authEventDecision';
 import BriefingWorkspace from './features/briefing/BriefingWorkspace';
-import CalendarWorkspace from './features/calendar/TuiCalendarWorkspace';
+import CalendarWorkspace from './features/calendar/CalendarWorkspace';
 import InboxWorkspace from './features/inbox/InboxWorkspace';
 import MemoWorkspace from './features/memo/MemoWorkspace';
 import MemoSplitWorkspace, {
@@ -22,7 +23,6 @@ import MemoSplitWorkspace, {
   MemoSplitPaneState,
   MemoSplitPaneView,
 } from './features/memo/components/MemoSplitWorkspace';
-import MemoSearchModal from './features/search/MemoSearchModal';
 import SettingsModal from './features/settings/SettingsModal';
 import {
   AMBIENT_COOLDOWN_MS,
@@ -56,6 +56,7 @@ import {
 } from './services/backend/inboxService';
 import {
   createLocalInboxSession,
+  getLocalWorkspaceOwner,
   loadLocalCalendarBlocks,
   loadLocalInboxQueue,
   loadLocalMemos,
@@ -67,6 +68,7 @@ import {
   removeLocalInboxSession,
   replaceSyncedCalendarBlocks,
   replaceSyncedMemos,
+  setLocalWorkspaceOwner,
   upsertLocalCalendarBlock,
   upsertLocalMemo,
 } from './services/local/offlineStore';
@@ -146,8 +148,27 @@ const mergeInboxItems = (
   );
 };
 
+const waitForBootSync = async (syncPromise: Promise<void>) => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      syncPromise,
+      new Promise<void>(resolve => {
+        timeoutId = setTimeout(resolve, BOOT_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const App = () => {
-  const [restoredWorkspace] = useState(loadWorkspaceSession);
+  const [restoredWorkspace] = useState(() =>
+    loadWorkspaceSession(getLocalWorkspaceOwner()),
+  );
   const [activeMemoCreatedAt, setActiveMemoCreatedAt] = useState(
     new Date().toISOString(),
   );
@@ -176,7 +197,6 @@ const App = () => {
   const [inboxItems, setInboxItems] = useState<InboxSession[]>([]);
   const [isInboxLoading, setInboxLoading] = useState(false);
   const [isRefreshing, setRefreshing] = useState(false);
-  const [isOfflineMode, setOfflineMode] = useState(false);
   const [memos, setMemos] = useState<MemoRow[]>([]);
   const [memoDraft, setMemoDraft] = useState('');
   const [networkError, setNetworkError] = useState<string | null>(null);
@@ -205,7 +225,7 @@ const App = () => {
   const [splitPanes, setSplitPanes] = useState<MemoSplitPaneState[]>(
     restoredWorkspace?.splitPanes ?? [],
   );
-  const [isSearchOpen, setSearchOpen] = useState(false);
+  const [searchSignal, setSearchSignal] = useState(0);
   const [isSessionCollapsed, setSessionCollapsed] = useState(
     restoredWorkspace?.isSessionCollapsed ?? false,
   );
@@ -228,7 +248,6 @@ const App = () => {
     return map;
   }, [splitPanes]);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [shortcuts, setShortcuts] = useState(loadShortcutSettings);
 
   const activeMemoIdRef = useRef<string | null>(null);
@@ -236,6 +255,16 @@ const App = () => {
   const lastAmbientHashRef = useRef<string | null>(null);
   const lastAmbientRequestAtRef = useRef(0);
   const sessionRef = useRef<Session | null>(null);
+  const sessionActivationIdRef = useRef(0);
+  const workspaceLoadIdRef = useRef(0);
+
+  const isCurrentSession = (expectedSession: Session) => {
+    const currentSession = sessionRef.current;
+    return (
+      currentSession?.user.id === expectedSession.user.id &&
+      currentSession.access_token === expectedSession.access_token
+    );
+  };
 
   useEffect(() => {
     activeMemoIdRef.current = activeMemoId;
@@ -246,20 +275,24 @@ const App = () => {
   }, [session]);
 
   const persistWorkspace = useCallback(() => {
-    saveWorkspaceSession({
-      activeMemoId,
-      activeTab,
-      focusedPaneId: null,
-      isSessionCollapsed,
-      isSplitWorkspaceEnabled,
-      paneWidths: {},
-      splitPanes,
-    });
+    saveWorkspaceSession(
+      {
+        activeMemoId,
+        activeTab,
+        focusedPaneId: null,
+        isSessionCollapsed,
+        isSplitWorkspaceEnabled,
+        paneWidths: {},
+        splitPanes,
+      },
+      session?.user.id ?? null,
+    );
   }, [
     activeMemoId,
     activeTab,
     isSessionCollapsed,
     isSplitWorkspaceEnabled,
+    session?.user.id,
     splitPanes,
   ]);
 
@@ -281,7 +314,7 @@ const App = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (matchesKeyboardShortcut(event, shortcuts.openSearch)) {
         event.preventDefault();
-        setSearchOpen(true);
+        setSearchSignal(value => value + 1);
       }
     };
 
@@ -335,13 +368,13 @@ const App = () => {
     setActiveDraftCategory(getMemoCategory(selectedMemo.category));
   }, []);
 
-  const applyLocalWorkspace = useCallback(() => {
-    const localMemos = loadVisibleLocalMemos();
-    const localBlocks = loadVisibleLocalCalendarBlocks();
+  const applyLocalWorkspace = useCallback((ownerId?: string) => {
+    const localMemos = loadVisibleLocalMemos(ownerId);
+    const localBlocks = loadVisibleLocalCalendarBlocks(ownerId);
 
     setMemos(localMemos);
     setCalendarBlocks(localBlocks);
-    setInboxItems(loadLocalInboxQueue());
+    setInboxItems(loadLocalInboxQueue(ownerId));
     setBriefings([]);
     setScheduleInbox([]);
     setTopicClusters([]);
@@ -352,10 +385,12 @@ const App = () => {
   }, [hydrateActiveMemo]);
 
   const syncPendingLocalWorkspace = useCallback(async (currentSession: Session) => {
-    for (const memo of loadLocalMemos()) {
+    const ownerId = currentSession.user.id;
+
+    for (const memo of loadLocalMemos(ownerId)) {
       if (memo.local_sync_status === 'pending_delete') {
         await archiveMemo(currentSession, memo.id);
-        markLocalMemoDeleted(memo.id, 'synced');
+        markLocalMemoDeleted(memo.id, 'synced', ownerId);
         continue;
       }
 
@@ -377,15 +412,16 @@ const App = () => {
               updated_at: savedMemo.updated_at,
             },
             'synced',
+            ownerId,
           );
         }
       }
     }
 
-    for (const block of loadLocalCalendarBlocks()) {
+    for (const block of loadLocalCalendarBlocks(ownerId)) {
       if (block.local_sync_status === 'pending_delete') {
         await deleteCalendarBlock(currentSession, block.id);
-        removeLocalCalendarBlock(block.id);
+        removeLocalCalendarBlock(block.id, ownerId);
         continue;
       }
 
@@ -399,11 +435,11 @@ const App = () => {
           startDate: block.start_date,
           title: block.title,
         });
-        upsertLocalCalendarBlock(savedBlock, 'synced');
+        upsertLocalCalendarBlock(savedBlock, 'synced', ownerId);
       }
     }
 
-    for (const item of loadLocalInboxQueue()) {
+    for (const item of loadLocalInboxQueue(ownerId)) {
       if (!item.originalUrl) {
         continue;
       }
@@ -415,7 +451,7 @@ const App = () => {
           url: item.originalUrl,
           userNote: item.userNote,
         });
-        removeLocalInboxSession(item.clientId);
+        removeLocalInboxSession(item.clientId, ownerId);
       } catch {
         // Keep the item queued. A later manual refresh or app start can retry.
       }
@@ -428,11 +464,17 @@ const App = () => {
       options: { quiet?: boolean } = {},
     ) => {
       const currentSession = targetSession ?? sessionRef.current;
+      const loadId = ++workspaceLoadIdRef.current;
 
       if (!currentSession) {
         applyLocalWorkspace();
         return;
       }
+
+      const ownerId = currentSession.user.id;
+      const isCurrentLoad = () =>
+        loadId === workspaceLoadIdRef.current &&
+        sessionRef.current?.user.id === ownerId;
 
       if (!options.quiet) {
         setRefreshing(true);
@@ -452,6 +494,9 @@ const App = () => {
           );
         }
         await syncPendingLocalWorkspace(currentSession);
+        if (!isCurrentLoad()) {
+          return;
+        }
         const [nextMemos, nextBlocks, nextInbox, nextBriefings, nextLinkInbox] =
           await Promise.all([
             fetchMemos(currentSession),
@@ -466,28 +511,111 @@ const App = () => {
           memberships: [],
         }));
 
-        const mergedMemos = replaceSyncedMemos(nextMemos);
-        const mergedBlocks = replaceSyncedCalendarBlocks(nextBlocks);
+        if (!isCurrentLoad()) {
+          return;
+        }
+
+        const mergedMemos = replaceSyncedMemos(nextMemos, ownerId);
+        const mergedBlocks = replaceSyncedCalendarBlocks(nextBlocks, ownerId);
 
         setMemos(mergedMemos);
         setCalendarBlocks(mergedBlocks);
         setScheduleInbox(nextInbox);
         setBriefings(nextBriefings);
-        setInboxItems(mergeInboxItems(nextLinkInbox, loadLocalInboxQueue()));
+        setInboxItems(
+          mergeInboxItems(nextLinkInbox, loadLocalInboxQueue(ownerId)),
+        );
         setTopicClusters(nextTopicMap.clusters);
         setTopicEdges(nextTopicMap.edges);
         setTopicMemberships(nextTopicMap.memberships);
 
         hydrateActiveMemo(mergedMemos);
       } catch (caught) {
+        if (!isCurrentLoad()) {
+          return;
+        }
         setError(caught instanceof Error ? caught.message : '데이터를 불러오지 못했습니다.');
-        applyLocalWorkspace();
+        applyLocalWorkspace(ownerId);
       } finally {
-        setRefreshing(false);
+        if (loadId === workspaceLoadIdRef.current) {
+          setRefreshing(false);
+        }
       }
     },
     [applyLocalWorkspace, hydrateActiveMemo, syncPendingLocalWorkspace],
   );
+
+  const restoreWorkspaceForAccount = useCallback((ownerId: string | null) => {
+    const restored = loadWorkspaceSession(ownerId);
+    hasHydratedActiveMemoRef.current = false;
+    activeMemoIdRef.current = restored?.activeMemoId ?? null;
+    setActiveMemoId(restored?.activeMemoId ?? null);
+    setActiveTab(restored?.activeTab ?? 'memo');
+    setMemoDraft('');
+    setActiveMemoCreatedAt(new Date().toISOString());
+    setActiveDraftCategory(DEFAULT_MEMO_CATEGORY);
+    setSelectionStart(0);
+    setSelectionEnd(0);
+    setSelectedTextState('');
+    setSplitPanes(restored?.splitPanes ?? []);
+    setSessionCollapsed(restored?.isSessionCollapsed ?? false);
+    setIsSplitWorkspaceEnabled(restored?.isSplitWorkspaceEnabled ?? false);
+  }, []);
+
+  const activateSession = useCallback(
+    async (
+      nextSession: Session,
+      options: {
+        migrateLegacy?: boolean;
+        restoreWorkspace?: boolean;
+        showBoot?: boolean;
+      } = {},
+    ) => {
+      const activationId = ++sessionActivationIdRef.current;
+      const ownerId = nextSession.user.id;
+
+      workspaceLoadIdRef.current += 1;
+      setLocalWorkspaceOwner(ownerId, {
+        migrateLegacy: options.migrateLegacy,
+      });
+      if (options.restoreWorkspace || options.migrateLegacy) {
+        restoreWorkspaceForAccount(ownerId);
+      }
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      setError(null);
+      applyLocalWorkspace(ownerId);
+
+      if (options.showBoot) {
+        setBooting(true);
+      }
+
+      try {
+        await waitForBootSync(loadWorkspace(nextSession, { quiet: true }));
+      } finally {
+        if (
+          options.showBoot &&
+          activationId === sessionActivationIdRef.current &&
+          sessionRef.current?.user.id === ownerId
+        ) {
+          setBooting(false);
+        }
+      }
+    },
+    [applyLocalWorkspace, loadWorkspace, restoreWorkspaceForAccount],
+  );
+
+  const deactivateSession = useCallback(() => {
+    sessionActivationIdRef.current += 1;
+    workspaceLoadIdRef.current += 1;
+    sessionRef.current = null;
+    setSession(null);
+    setLocalWorkspaceOwner(null);
+    restoreWorkspaceForAccount(null);
+    applyLocalWorkspace();
+    setRefreshing(false);
+    setInboxLoading(false);
+  }, [applyLocalWorkspace, restoreWorkspaceForAccount]);
 
   // 부팅 중에는 로딩 멘트를 일정 간격으로 순환시킨다.
   useEffect(() => {
@@ -504,7 +632,7 @@ const App = () => {
     applyLocalWorkspace();
 
     if (!isSupabaseConfigured()) {
-      setError('온라인 동기화 환경변수가 없어 오프라인 모드만 사용할 수 있습니다.');
+      setError('최초 로그인에는 온라인 연결과 Supabase 설정이 필요합니다.');
       setBooting(false);
       return () => {
         mounted = false;
@@ -516,18 +644,12 @@ const App = () => {
         if (!mounted) {
           return;
         }
-        setSession(nextSession);
-        sessionRef.current = nextSession;
         if (nextSession) {
-          setOfflineMode(false);
           // 첫 데이터 로드(로컬 + 서버 동기화)가 끝날 때까지 로딩화면을 유지한다.
           // 단, 느리거나 끊긴 네트워크에 갇히지 않도록 타임아웃을 두고 진입한다.
-          await Promise.race([
-            loadWorkspace(nextSession, { quiet: true }),
-            new Promise<void>(resolve =>
-              setTimeout(resolve, BOOT_SYNC_TIMEOUT_MS),
-            ),
-          ]);
+          await activateSession(nextSession, { migrateLegacy: true });
+        } else {
+          deactivateSession();
         }
       })
       .catch(caught => {
@@ -539,27 +661,46 @@ const App = () => {
         }
       });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      sessionRef.current = nextSession;
-      if (nextSession) {
-        setOfflineMode(false);
-        void loadWorkspace(nextSession, { quiet: true });
-      } else {
-        applyLocalWorkspace();
-        setScheduleInbox([]);
-        setBriefings([]);
-        setTopicClusters([]);
-        setTopicEdges([]);
-        setTopicMemberships([]);
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      const currentSession = sessionRef.current;
+      const decision = decideAuthEvent({
+        event,
+        hasSession: Boolean(nextSession),
+        isSameSession:
+          currentSession?.user.id === nextSession?.user.id &&
+          currentSession?.access_token === nextSession?.access_token,
+      });
+
+      if (decision.action === 'deactivate') {
+        deactivateSession();
+        return;
+      }
+
+      if (decision.action === 'ignore' || !nextSession) {
+        return;
+      }
+
+      if (decision.action === 'update') {
+        sessionRef.current = nextSession;
+        setSession(nextSession);
+        return;
+      }
+
+      if (decision.action === 'activate') {
+        void activateSession(nextSession, {
+          restoreWorkspace: true,
+          showBoot: true,
+        });
       }
     });
 
     return () => {
       mounted = false;
+      sessionActivationIdRef.current += 1;
+      workspaceLoadIdRef.current += 1;
       data.subscription.unsubscribe();
     };
-  }, [applyLocalWorkspace, loadWorkspace]);
+  }, [activateSession, applyLocalWorkspace, deactivateSession]);
 
   useEffect(() => {
     if (!activeMemoId || !memoDraft.trim()) {
@@ -573,6 +714,7 @@ const App = () => {
     }
 
     setSaveState('saving');
+    const ownerId = session?.user.id;
     const timeout = window.setTimeout(() => {
       const localMemo = upsertLocalMemo(
         {
@@ -582,6 +724,7 @@ const App = () => {
           id: activeMemoId,
         },
         session ? 'pending' : 'pending',
+        ownerId,
       );
 
       setMemos(previous => {
@@ -621,7 +764,11 @@ const App = () => {
               updated_at: savedMemo.updated_at,
             },
             'synced',
+            ownerId,
           );
+          if (!isCurrentSession(session)) {
+            return;
+          }
           setMemos(previous => {
             const exists = previous.some(memo => memo.id === savedMemo.id);
             const merged = exists
@@ -731,6 +878,8 @@ const App = () => {
   ) => {
     const createdAt = new Date().toISOString();
     const id = createUuid();
+    const currentSession = sessionRef.current;
+    const ownerId = currentSession?.user.id;
     const localMemo = upsertLocalMemo(
       {
         category,
@@ -739,6 +888,7 @@ const App = () => {
         id,
       },
       'pending',
+      ownerId,
     );
 
     setMemos(previous =>
@@ -748,8 +898,8 @@ const App = () => {
       ),
     );
 
-    if (sessionRef.current) {
-      upsertMemo(sessionRef.current, {
+    if (currentSession) {
+      upsertMemo(currentSession, {
         category,
         content,
         createdAt,
@@ -769,7 +919,11 @@ const App = () => {
               updated_at: savedMemo.updated_at,
             },
             'synced',
+            ownerId,
           );
+          if (!isCurrentSession(currentSession)) {
+            return;
+          }
           setMemos(previous =>
             previous.map(memo => (memo.id === savedMemo.id ? savedMemo : memo)),
           );
@@ -783,6 +937,8 @@ const App = () => {
   };
 
   const updateMemoContentById = async (id: string, content: string) => {
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
     const existingMemo = memos.find(memo => memo.id === id);
     const createdAt = existingMemo?.created_at ?? new Date().toISOString();
     const localMemo = upsertLocalMemo(
@@ -793,6 +949,7 @@ const App = () => {
         id,
       },
       'pending',
+      ownerId,
     );
 
     setMemos(previous => {
@@ -807,11 +964,11 @@ const App = () => {
       );
     });
 
-    if (!session) {
+    if (!currentSession) {
       return;
     }
 
-    const savedMemo = await upsertMemo(session, {
+    const savedMemo = await upsertMemo(currentSession, {
       category: getMemoCategory(existingMemo?.category),
       content,
       createdAt,
@@ -828,7 +985,11 @@ const App = () => {
           updated_at: savedMemo.updated_at,
         },
         'synced',
+        ownerId,
       );
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
       setMemos(previous =>
         previous.map(memo => (memo.id === savedMemo.id ? savedMemo : memo)),
       );
@@ -836,13 +997,18 @@ const App = () => {
   };
 
   const deleteMemoById = async (id: string) => {
-    const syncStatus = session ? 'synced' : 'pending_delete';
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
+    const syncStatus = currentSession ? 'synced' : 'pending_delete';
 
-    if (session) {
-      await archiveMemo(session, id);
+    if (currentSession) {
+      await archiveMemo(currentSession, id);
     }
 
-    markLocalMemoDeleted(id, syncStatus);
+    markLocalMemoDeleted(id, syncStatus, ownerId);
+    if (currentSession && !isCurrentSession(currentSession)) {
+      return;
+    }
     setMemos(previous => previous.filter(memo => memo.id !== id));
 
     if (id === activeMemoId) {
@@ -922,6 +1088,8 @@ const App = () => {
     startDate: string;
     title: string;
   }) => {
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
     const id = draft.id ?? createUuid();
     const now = new Date().toISOString();
     const existingBlock = calendarBlocks.find(block => block.id === id);
@@ -940,7 +1108,7 @@ const App = () => {
       updated_at: now,
     };
 
-    upsertLocalCalendarBlock(localBlock, 'pending');
+    upsertLocalCalendarBlock(localBlock, 'pending', ownerId);
     setCalendarBlocks(previous => {
       const exists = previous.some(item => item.id === localBlock.id);
       return exists
@@ -948,15 +1116,18 @@ const App = () => {
         : [...previous, localBlock];
     });
 
-    if (!session) {
+    if (!currentSession) {
       return;
     }
 
-    const block = await upsertCalendarBlock(session, {
+    const block = await upsertCalendarBlock(currentSession, {
       ...draft,
       id,
     });
-    upsertLocalCalendarBlock(block, 'synced');
+    upsertLocalCalendarBlock(block, 'synced', ownerId);
+    if (!isCurrentSession(currentSession)) {
+      return;
+    }
     setCalendarBlocks(previous =>
       previous.map(item => (item.id === block.id ? block : item)),
     );
@@ -1015,17 +1186,23 @@ const App = () => {
       return;
     }
 
-    if (session) {
-      await deleteCalendarBlock(session, blockId);
-      removeLocalCalendarBlock(blockId);
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
+    if (currentSession) {
+      await deleteCalendarBlock(currentSession, blockId);
+      removeLocalCalendarBlock(blockId, ownerId);
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
     } else {
-      markLocalCalendarBlockDeleted(blockId, 'pending_delete');
+      markLocalCalendarBlockDeleted(blockId, 'pending_delete', ownerId);
     }
     setCalendarBlocks(previous => previous.filter(block => block.id !== blockId));
   };
 
   const acceptInboxItem = async (item: ScheduleInboxRow) => {
-    if (!session) {
+    const currentSession = session;
+    if (!currentSession) {
       return;
     }
 
@@ -1036,16 +1213,23 @@ const App = () => {
       startDate: item.scheduled_at,
       title: item.title,
     });
-    await updateScheduleInboxStatus(session, item.id, 'accepted');
+    await updateScheduleInboxStatus(currentSession, item.id, 'accepted');
+    if (!isCurrentSession(currentSession)) {
+      return;
+    }
     setScheduleInbox(previous => previous.filter(inbox => inbox.id !== item.id));
   };
 
   const dismissInboxItem = async (item: ScheduleInboxRow) => {
-    if (!session) {
+    const currentSession = session;
+    if (!currentSession) {
       return;
     }
 
-    await updateScheduleInboxStatus(session, item.id, 'dismissed');
+    await updateScheduleInboxStatus(currentSession, item.id, 'dismissed');
+    if (!isCurrentSession(currentSession)) {
+      return;
+    }
     setScheduleInbox(previous => previous.filter(inbox => inbox.id !== item.id));
   };
 
@@ -1236,7 +1420,16 @@ const App = () => {
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // The in-memory session is still cleared below.
+      }
+      deactivateSession();
+    }
   };
 
   const applyShortcutSettings = async (nextSettings: ShortcutSettings) => {
@@ -1249,38 +1442,56 @@ const App = () => {
   const resetShortcutSettings = () => applyShortcutSettings(DEFAULT_SHORTCUT_SETTINGS);
 
   const refreshInbox = async () => {
-    if (!session) {
+    const currentSession = session;
+    if (!currentSession) {
       setInboxItems(loadLocalInboxQueue());
       return;
     }
+    const ownerId = currentSession.user.id;
 
     setInboxLoading(true);
     setError(null);
     try {
-      await syncPendingLocalWorkspace(session);
-      setInboxItems(mergeInboxItems(await fetchInboxSessions(), loadLocalInboxQueue()));
+      await syncPendingLocalWorkspace(currentSession);
+      const nextItems = await fetchInboxSessions();
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
+      setInboxItems(
+        mergeInboxItems(nextItems, loadLocalInboxQueue(ownerId)),
+      );
     } catch (caught) {
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
       setError(caught instanceof Error ? caught.message : '수집함을 불러오지 못했습니다.');
     } finally {
-      setInboxLoading(false);
+      if (isCurrentSession(currentSession)) {
+        setInboxLoading(false);
+      }
     }
   };
 
   const saveInboxUrl = async (url: string) => {
+    const currentSession = session;
     setError(null);
-    const localItem = createLocalInboxSession(url);
-    setInboxItems(previous => [localItem, ...previous]);
-
-    if (!session) {
+    if (!currentSession) {
+      setError('링크를 저장하려면 먼저 로그인해 주세요.');
       return;
     }
+    const ownerId = currentSession.user.id;
+    const localItem = createLocalInboxSession(url, ownerId);
+    setInboxItems(previous => [localItem, ...previous]);
 
     try {
       const item = await createInboxSession({
         clientId: localItem.clientId,
         url,
       });
-      removeLocalInboxSession(localItem.clientId);
+      removeLocalInboxSession(localItem.clientId, ownerId);
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
       setInboxItems(previous => [
         item,
         ...previous.filter(previousItem => previousItem.id !== localItem.id),
@@ -1289,6 +1500,9 @@ const App = () => {
         void refreshInbox();
       }, 2500);
     } catch (caught) {
+      if (!isCurrentSession(currentSession)) {
+        return;
+      }
       setError(
         caught instanceof Error
           ? `${caught.message} 오프라인 큐에 저장했습니다.`
@@ -1354,36 +1568,8 @@ const App = () => {
     );
   }
 
-  if (!session && !isOfflineMode) {
-    return (
-      <AuthScreen
-        onContinueOffline={() => {
-          setOfflineMode(true);
-          applyLocalWorkspace();
-        }}
-        onSignedIn={async () => {
-          // 로그인 직후 첫 동기화 동안에도 로딩화면을 유지한다(신규 사용자 경험 일관).
-          // 마운트 경로와 동일하게 타임아웃을 둬 느린/끊긴 네트워크에 갇히지 않는다.
-          setOfflineMode(false);
-          setBooting(true);
-          try {
-            const freshSession = await getSession();
-            setSession(freshSession);
-            sessionRef.current = freshSession;
-            if (freshSession) {
-              await Promise.race([
-                loadWorkspace(freshSession, { quiet: true }),
-                new Promise<void>(resolve =>
-                  setTimeout(resolve, BOOT_SYNC_TIMEOUT_MS),
-                ),
-              ]);
-            }
-          } finally {
-            setBooting(false);
-          }
-        }}
-      />
-    );
+  if (!session) {
+    return <AuthScreen initialError={error} />;
   }
 
   return (
@@ -1469,20 +1655,10 @@ const App = () => {
               <RefreshCw size={16} />
               {!session ? '로그인 필요' : isRefreshing ? '동기화 중' : '동기화'}
             </button>
-            {session ? (
-              <button className="ghost-button" onClick={handleSignOut} type="button">
-                <LogOut size={16} />
-                로그아웃
-              </button>
-            ) : (
-              <button
-                className="ghost-button"
-                onClick={() => setOfflineMode(false)}
-                type="button"
-              >
-                로그인
-              </button>
-            )}
+            <button className="ghost-button" onClick={handleSignOut} type="button">
+              <LogOut size={16} />
+              로그아웃
+            </button>
           </div>
         </header>
 
@@ -1492,7 +1668,7 @@ const App = () => {
               activeMemoId={activeMemoId}
               isSessionCollapsed={isSessionCollapsed}
               openMemoPaneNumbers={openMemoPaneNumbers}
-              onOpenSearch={() => setSearchOpen(true)}
+              openSearchSignal={searchSignal}
               onToggleSession={() => setSessionCollapsed(value => !value)}
               ambientQueryChunk={ambientQueryChunk}
               ambientResult={ambientResult}
@@ -1588,24 +1764,11 @@ const App = () => {
           />
         )}
       </section>
-      <MemoSearchModal
-        isOpen={isSearchOpen}
-        memos={memos}
-        onChangeQuery={setSearchQuery}
-        onClose={() => setSearchOpen(false)}
-        onSelectMemo={selectMemo}
-        query={searchQuery}
-      />
       <SettingsModal
         email={session?.user?.email}
-        isOfflineMode={isOfflineMode}
         isOpen={isSettingsOpen}
         isSignedIn={Boolean(session)}
         onClose={() => setSettingsOpen(false)}
-        onLogin={() => {
-          setSettingsOpen(false);
-          setOfflineMode(false);
-        }}
         onResetShortcuts={resetShortcutSettings}
         onSaveShortcuts={applyShortcutSettings}
         onSignOut={() => {

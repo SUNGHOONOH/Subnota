@@ -33,6 +33,7 @@ import {
 } from "@/components/tiptap-ui-primitive/card"
 import { Input } from "@/components/tiptap-ui-primitive/input"
 import { ButtonGroup } from "@/components/tiptap-ui-primitive/button-group"
+import { OPEN_LINK_EVENT } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 
 import "./link-popover.scss"
 
@@ -274,6 +275,18 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
         setIsOpen(true)
       }
     }, [autoOpenOnLinkActive, isActive])
+
+    // ⌘K (from the editor keymap) opens this popover so links can be added
+    // without reaching for the toolbar.
+    useEffect(() => {
+      const handleOpen = () => {
+        if (canSet || isActive) {
+          setIsOpen(true)
+        }
+      }
+      window.addEventListener(OPEN_LINK_EVENT, handleOpen)
+      return () => window.removeEventListener(OPEN_LINK_EVENT, handleOpen)
+    }, [canSet, isActive])
 
     if (!isVisible) {
       return null

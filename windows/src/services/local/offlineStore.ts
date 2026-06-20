@@ -6,6 +6,14 @@ import { InboxSession, InboxSourceType } from '../backend/inboxService';
 const MEMOS_KEY = 'subnota.windows.local.memos.v1';
 const CALENDAR_BLOCKS_KEY = 'subnota.windows.local.calendarBlocks.v1';
 const INBOX_QUEUE_KEY = 'subnota.windows.local.inboxQueue.v1';
+const ACTIVE_OWNER_KEY = 'subnota.windows.local.activeOwner.v1';
+const WORKSPACE_SESSION_KEY = 'subnota.workspaceSession.v1';
+const WORKSPACE_KEYS = [
+  MEMOS_KEY,
+  CALENDAR_BLOCKS_KEY,
+  INBOX_QUEUE_KEY,
+  WORKSPACE_SESSION_KEY,
+] as const;
 
 type LocalSyncStatus = 'failed' | 'pending' | 'pending_delete' | 'synced';
 
@@ -23,6 +31,58 @@ export type LocalInboxSession = InboxSession & {
 };
 
 const canUseLocalStorage = () => typeof window !== 'undefined' && Boolean(window.localStorage);
+
+const loadActiveOwner = () => {
+  if (!canUseLocalStorage()) {
+    return null;
+  }
+
+  try {
+    return window.localStorage.getItem(ACTIVE_OWNER_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const getLocalWorkspaceOwner = loadActiveOwner;
+
+const scopedKey = (baseKey: string, ownerId?: string) => {
+  const owner = ownerId ?? loadActiveOwner();
+  return `${baseKey}.${owner ? `user.${owner}` : 'guest'}`;
+};
+
+export const setLocalWorkspaceOwner = (
+  ownerId: string | null,
+  options: { migrateLegacy?: boolean } = {},
+) => {
+  if (!canUseLocalStorage()) {
+    return;
+  }
+
+  try {
+    if (!ownerId) {
+      window.localStorage.removeItem(ACTIVE_OWNER_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(ACTIVE_OWNER_KEY, ownerId);
+
+    if (!options.migrateLegacy) {
+      return;
+    }
+
+    for (const baseKey of WORKSPACE_KEYS) {
+      const legacyValue = window.localStorage.getItem(baseKey);
+      const nextKey = scopedKey(baseKey, ownerId);
+      if (legacyValue !== null && window.localStorage.getItem(nextKey) === null) {
+        window.localStorage.setItem(nextKey, legacyValue);
+        window.localStorage.removeItem(baseKey);
+      }
+    }
+  } catch {
+    // Local persistence is best-effort; online storage remains authoritative.
+  }
+};
 
 const readJson = <T,>(key: string, fallback: T): T => {
   if (!canUseLocalStorage()) {
@@ -42,7 +102,11 @@ const writeJson = <T,>(key: string, value: T) => {
     return;
   }
 
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Quota and privacy-mode failures must not interrupt editing.
+  }
 };
 
 const byUpdatedDesc = (a: { updated_at: string }, b: { updated_at: string }) =>
@@ -59,15 +123,16 @@ const inferSourceType = (url: string): InboxSourceType => {
   return 'url';
 };
 
-export const loadLocalMemos = () => readJson<LocalMemoRow[]>(MEMOS_KEY, []);
+export const loadLocalMemos = (ownerId?: string) =>
+  readJson<LocalMemoRow[]>(scopedKey(MEMOS_KEY, ownerId), []);
 
-export const loadVisibleLocalMemos = () =>
-  loadLocalMemos()
+export const loadVisibleLocalMemos = (ownerId?: string) =>
+  loadLocalMemos(ownerId)
     .filter(memo => !memo.is_archived)
     .sort(byUpdatedDesc);
 
-export const saveLocalMemos = (memos: LocalMemoRow[]) => {
-  writeJson(MEMOS_KEY, memos.sort(byUpdatedDesc));
+export const saveLocalMemos = (memos: LocalMemoRow[], ownerId?: string) => {
+  writeJson(scopedKey(MEMOS_KEY, ownerId), memos.sort(byUpdatedDesc));
 };
 
 export const upsertLocalMemo = (
@@ -76,6 +141,7 @@ export const upsertLocalMemo = (
     updated_at?: string;
   },
   syncStatus: LocalSyncStatus = 'pending',
+  ownerId?: string,
 ) => {
   const now = new Date().toISOString();
   const contentHash = hashText(memo.content);
@@ -89,20 +155,24 @@ export const upsertLocalMemo = (
     local_sync_status: syncStatus,
     updated_at: memo.updated_at ?? now,
   };
-  const previous = loadLocalMemos();
+  const previous = loadLocalMemos(ownerId);
   const exists = previous.some(item => item.id === memo.id);
   const next = exists
     ? previous.map(item => (item.id === memo.id ? { ...item, ...nextMemo } : item))
     : [nextMemo, ...previous];
 
-  saveLocalMemos(next);
+  saveLocalMemos(next, ownerId);
   return nextMemo;
 };
 
-export const markLocalMemoDeleted = (memoId: string, syncStatus: LocalSyncStatus) => {
+export const markLocalMemoDeleted = (
+  memoId: string,
+  syncStatus: LocalSyncStatus,
+  ownerId?: string,
+) => {
   const now = new Date().toISOString();
   saveLocalMemos(
-    loadLocalMemos().map(memo =>
+    loadLocalMemos(ownerId).map(memo =>
       memo.id === memoId
         ? {
             ...memo,
@@ -112,101 +182,115 @@ export const markLocalMemoDeleted = (memoId: string, syncStatus: LocalSyncStatus
           }
         : memo,
     ),
+    ownerId,
   );
 };
 
-export const replaceSyncedMemos = (remoteMemos: MemoRow[]) => {
+export const replaceSyncedMemos = (remoteMemos: MemoRow[], ownerId?: string) => {
   const merged = new Map<string, LocalMemoRow>();
 
   remoteMemos.forEach(memo => {
     merged.set(memo.id, { ...memo, local_sync_status: 'synced' });
   });
 
-  loadLocalMemos()
+  loadLocalMemos(ownerId)
     .filter(memo => memo.local_sync_status && memo.local_sync_status !== 'synced')
     .forEach(memo => merged.set(memo.id, memo));
 
   const next = Array.from(merged.values());
-  saveLocalMemos(next);
+  saveLocalMemos(next, ownerId);
   return next.filter(memo => !memo.is_archived).sort(byUpdatedDesc);
 };
 
-export const loadLocalCalendarBlocks = () =>
-  readJson<LocalCalendarBlockRow[]>(CALENDAR_BLOCKS_KEY, []);
+export const loadLocalCalendarBlocks = (ownerId?: string) =>
+  readJson<LocalCalendarBlockRow[]>(scopedKey(CALENDAR_BLOCKS_KEY, ownerId), []);
 
-export const loadVisibleLocalCalendarBlocks = () =>
-  loadLocalCalendarBlocks()
+export const loadVisibleLocalCalendarBlocks = (ownerId?: string) =>
+  loadLocalCalendarBlocks(ownerId)
     .filter(block => block.local_sync_status !== 'pending_delete')
     .sort(
       (a, b) =>
         new Date(a.start_date).getTime() - new Date(b.start_date).getTime(),
     );
 
-export const saveLocalCalendarBlocks = (blocks: LocalCalendarBlockRow[]) => {
-  writeJson(CALENDAR_BLOCKS_KEY, blocks);
+export const saveLocalCalendarBlocks = (
+  blocks: LocalCalendarBlockRow[],
+  ownerId?: string,
+) => {
+  writeJson(scopedKey(CALENDAR_BLOCKS_KEY, ownerId), blocks);
 };
 
 export const upsertLocalCalendarBlock = (
   block: CalendarBlockRow,
   syncStatus: LocalSyncStatus = 'pending',
+  ownerId?: string,
 ) => {
   const nextBlock: LocalCalendarBlockRow = {
     ...block,
     local_sync_status: syncStatus,
   };
-  const previous = loadLocalCalendarBlocks();
+  const previous = loadLocalCalendarBlocks(ownerId);
   const exists = previous.some(item => item.id === block.id);
   const next = exists
     ? previous.map(item => (item.id === block.id ? { ...item, ...nextBlock } : item))
     : [...previous, nextBlock];
 
-  saveLocalCalendarBlocks(next);
+  saveLocalCalendarBlocks(next, ownerId);
   return nextBlock;
 };
 
 export const markLocalCalendarBlockDeleted = (
   blockId: string,
   syncStatus: LocalSyncStatus,
+  ownerId?: string,
 ) => {
   saveLocalCalendarBlocks(
-    loadLocalCalendarBlocks().map(block =>
+    loadLocalCalendarBlocks(ownerId).map(block =>
       block.id === blockId
         ? { ...block, local_sync_status: syncStatus }
         : block,
     ),
+    ownerId,
   );
 };
 
-export const removeLocalCalendarBlock = (blockId: string) => {
+export const removeLocalCalendarBlock = (blockId: string, ownerId?: string) => {
   saveLocalCalendarBlocks(
-    loadLocalCalendarBlocks().filter(block => block.id !== blockId),
+    loadLocalCalendarBlocks(ownerId).filter(block => block.id !== blockId),
+    ownerId,
   );
 };
 
-export const replaceSyncedCalendarBlocks = (remoteBlocks: CalendarBlockRow[]) => {
+export const replaceSyncedCalendarBlocks = (
+  remoteBlocks: CalendarBlockRow[],
+  ownerId?: string,
+) => {
   const merged = new Map<string, LocalCalendarBlockRow>();
 
   remoteBlocks.forEach(block => {
     merged.set(block.id, { ...block, local_sync_status: 'synced' });
   });
 
-  loadLocalCalendarBlocks()
+  loadLocalCalendarBlocks(ownerId)
     .filter(block => block.local_sync_status && block.local_sync_status !== 'synced')
     .forEach(block => merged.set(block.id, block));
 
   const next = Array.from(merged.values());
-  saveLocalCalendarBlocks(next);
+  saveLocalCalendarBlocks(next, ownerId);
   return next.filter(block => block.local_sync_status !== 'pending_delete');
 };
 
-export const loadLocalInboxQueue = () =>
-  readJson<LocalInboxSession[]>(INBOX_QUEUE_KEY, []);
+export const loadLocalInboxQueue = (ownerId?: string) =>
+  readJson<LocalInboxSession[]>(scopedKey(INBOX_QUEUE_KEY, ownerId), []);
 
-export const saveLocalInboxQueue = (items: LocalInboxSession[]) => {
-  writeJson(INBOX_QUEUE_KEY, items);
+export const saveLocalInboxQueue = (items: LocalInboxSession[], ownerId?: string) => {
+  writeJson(scopedKey(INBOX_QUEUE_KEY, ownerId), items);
 };
 
-export const createLocalInboxSession = (url: string): LocalInboxSession => {
+export const createLocalInboxSession = (
+  url: string,
+  ownerId?: string,
+): LocalInboxSession => {
   const now = new Date().toISOString();
   const clientId =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -238,10 +322,13 @@ export const createLocalInboxSession = (url: string): LocalInboxSession => {
     userNote: null,
   };
 
-  saveLocalInboxQueue([item, ...loadLocalInboxQueue()]);
+  saveLocalInboxQueue([item, ...loadLocalInboxQueue(ownerId)], ownerId);
   return item;
 };
 
-export const removeLocalInboxSession = (clientId: string) => {
-  saveLocalInboxQueue(loadLocalInboxQueue().filter(item => item.clientId !== clientId));
+export const removeLocalInboxSession = (clientId: string, ownerId?: string) => {
+  saveLocalInboxQueue(
+    loadLocalInboxQueue(ownerId).filter(item => item.clientId !== clientId),
+    ownerId,
+  );
 };
