@@ -1,0 +1,529 @@
+/* ===== Macro Mockup (Desktop + Mobile overlap) ===== */
+.macro-mockup-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  transform: rotateX(2deg);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.macro-mockup-wrap:hover {
+  transform: rotateX(0deg);
+}
+
+.macro-desktop {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.18)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.12));
+}
+
+.macro-mobile {
+  position: absolute;
+  bottom: 16px;
+  right: -50px;
+  width: 200px;
+  z-index: 2;
+}
+
+/* ===== MacBook Frame ===== */
+.macbook {
+  position: relative;
+  width: 100%;
+}
+
+.macbook-screen {
+  background: #08080a;
+  border: 1.5px solid #5a5a5c;
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 8px 8px 12px 8px;
+  position: relative;
+  width: 94%;
+}
+
+.macbook-notch {
+  align-items: center;
+  background: #08080a;
+  border-radius: 0 0 6px 6px;
+  display: flex;
+  height: 13px;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 80px;
+  z-index: 10;
+}
+
+.macbook-cam {
+  background: #0f0f12;
+  border: 1px solid #1a1a20;
+  border-radius: 50%;
+  box-shadow: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.2);
+  height: 4px;
+  width: 4px;
+}
+
+.macbook-content {
+  aspect-ratio: 16 / 10;
+  background: var(--paper-strong);
+  border-radius: 6px 6px 0 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 170px 1fr;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+/* ===== macOS Menu Bar ===== */
+.macos-menu-bar {
+  grid-column: 1 / -1;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  user-select: none;
+  z-index: 5;
+}
+
+.macos-menu-bar-left,
+.macos-menu-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.macos-menu-bar-right {
+  gap: 10px;
+}
+
+.macos-menu-bar-item {
+  cursor: default;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+
+.macos-menu-bar-item:hover {
+  opacity: 0.7;
+}
+
+.macos-menu-bar-item.apple-logo {
+  padding-right: 4px;
+  color: var(--ink);
+}
+
+.macos-menu-bar-item.app-name {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.macos-menu-bar-item.github-badge {
+  background: rgba(31, 29, 26, 0.08);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  gap: 2px;
+}
+
+.macos-menu-bar-item.github-badge svg {
+  margin-right: 0 !important;
+}
+
+.macos-menu-bar-item.lunch-status {
+  background: rgba(31, 29, 26, 0.06);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  gap: 5px;
+}
+
+.lunch-dot {
+  background: #34c759;
+  border-radius: 50%;
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+}
+
+.macos-time {
+  font-feature-settings: "tnum";
+}
+
+@media (max-width: 1024px) {
+  .macos-menu-bar-left .hide-tablet {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .macos-menu-bar-left .hide-mobile,
+  .macos-menu-bar-left .hide-tablet,
+  .macos-menu-bar-right .hide-mobile {
+    display: none;
+  }
+
+  .macos-menu-bar {
+    height: 18px;
+    font-size: 8px;
+    padding: 0 6px;
+  }
+
+  .macos-menu-bar-left,
+  .macos-menu-bar-right {
+    gap: 6px;
+  }
+
+  .macos-menu-bar-item.apple-logo svg {
+    width: 9px;
+    height: 9px;
+  }
+
+  .macos-menu-bar-item.github-badge,
+  .macos-menu-bar-item.lunch-status {
+    padding: 1px 3px;
+    font-size: 7px;
+    border-radius: 3px;
+  }
+
+  .lunch-dot {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+.macbook-hinge {
+  display: none;
+  /* Hide fake hinge */
+}
+
+.macbook-base {
+  background: linear-gradient(180deg, #515256 0%, #3a3b3d 25%, #252627 80%, #151617 100%);
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  height: 12px;
+  position: relative;
+  width: 100%;
+}
+
+.macbook-trackpad {
+  background: #0f0f11;
+  border-radius: 0 0 4px 4px;
+  height: 3px;
+  left: 50%;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 70px;
+}
+
+/* App content inside MacBook */
+.app-sidebar {
+  background: var(--paper-warm);
+  border-right: 1px solid var(--line);
+  padding: 12px 10px;
+}
+
+.app-seg {
+  background: var(--line);
+  border-radius: 6px;
+  display: grid;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 2px;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 10px;
+  padding: 2px;
+}
+
+.app-seg span {
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.app-seg .active {
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+
+.app-memo-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 8px 4px;
+}
+
+.app-memo-item strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.app-memo-item span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.app-memo-item.current {
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 6px;
+}
+
+.app-editor {
+  background: var(--paper-strong);
+  padding: 20px 24px;
+  color: var(--ink);
+  /* Ensure text is dark and visible */
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* Hide default scrollbar on Firefox */
+}
+
+.app-editor::-webkit-scrollbar {
+  display: none;
+  /* Hide default scrollbar on Safari/Chrome */
+}
+
+.app-editor h4 {
+  color: var(--ink);
+}
+
+.app-editor-label {
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.app-editor h4 {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 8px;
+}
+
+.hl-date {
+  color: #6b8f5b;
+}
+
+.app-editor-body {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.app-chip-row {
+  margin-bottom: 6px;
+}
+
+.app-chip {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 4px;
+  padding: 5px 10px;
+}
+
+.app-chip.date {
+  background: var(--amber-light);
+  border: 1px solid rgba(224, 142, 0, 0.15);
+  color: #9c6500;
+}
+
+.app-chip.memory {
+  background: var(--amber-bg);
+  border: 1px solid rgba(224, 142, 0, 0.1);
+  color: var(--amber);
+}
+
+/* ===== iPhone Frame ===== */
+.iphone {
+  background: #1d1d1f;
+  border-radius: 3.2em;
+  box-shadow: 0 2.0em 6.0em rgba(0, 0, 0, 0.2), inset 0 0 0 0.15em #3a3a3c;
+  padding: 0.6em;
+  position: relative;
+}
+
+.iphone-button {
+  position: absolute;
+  background: #1d1d1f;
+  border: 0.1em solid #3a3a3c;
+  z-index: -1;
+}
+
+.iphone-button.volume-up {
+  left: -0.3em;
+  top: 8.0em;
+  width: 0.4em;
+  height: 3.6em;
+  border-radius: 0.3em 0 0 0.3em;
+}
+
+.iphone-button.volume-down {
+  left: -0.3em;
+  top: 12.4em;
+  width: 0.4em;
+  height: 3.6em;
+  border-radius: 0.3em 0 0 0.3em;
+}
+
+.iphone-button.action {
+  left: -0.3em;
+  top: 4.8em;
+  width: 0.4em;
+  height: 2.0em;
+  border-radius: 0.3em 0 0 0.3em;
+}
+
+.iphone-button.power {
+  right: -0.3em;
+  top: 10.2em;
+  width: 0.4em;
+  height: 5.2em;
+  border-radius: 0 0.3em 0.3em 0;
+}
+
+.iphone-screen {
+  aspect-ratio: 9 / 19.5;
+  background: var(--paper-strong);
+  border-radius: 2.7em;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  color: var(--ink);
+}
+
+.iphone-status {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6em 1.8em 0.2em;
+}
+
+.iphone-status>span {
+  font-size: 1.15em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.iphone-island {
+  background: #1d1d1f;
+  border-radius: 1.4em;
+  height: 1.8em;
+  width: 6.0em;
+  position: absolute;
+  left: 50%;
+  top: 0.45em;
+  transform: translateX(-50%);
+}
+
+.iphone-status-right {
+  align-items: center;
+  display: flex;
+  gap: 0.3em;
+}
+
+.iphone-status-right svg {
+  height: 0.9em;
+  width: auto;
+}
+
+/* App content inside iPhone */
+.iphone-app {
+  flex: 1;
+  padding: 4px 0;
+}
+
+.iphone-nav {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.iphone-nav strong {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.iphone-nav small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.iphone-briefing {
+  display: grid;
+  gap: 8px;
+  padding: 4px 12px 12px;
+}
+
+.ib-card {
+  background: var(--paper-warm);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.ib-card.subtle {
+  opacity: 0.7;
+}
+
+.ib-label {
+  color: var(--muted);
+  display: block;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.ib-card strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+
+.ib-card p {
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.iphone-home-ind {
+  background: var(--ink);
+  border-radius: 3px;
+  height: 4px;
+  margin: 8px auto 6px;
+  width: 100px;
+}

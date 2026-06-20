@@ -1,0 +1,243 @@
+/* ===== Node Graph (shared) ===== */
+.node-graph {
+  aspect-ratio: 4 / 3;
+  background: radial-gradient(circle at center, #ffffff 0%, var(--paper-warm) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: visible;
+  position: relative;
+  box-shadow: inset 0 0 24px rgba(31, 29, 26, 0.04), var(--shadow-sm);
+}
+
+.node-lines {
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.node-lines line {
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.graph-node {
+  align-items: center;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+/* Floating Animations */
+@keyframes float-slow {
+
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) translateY(-6px);
+  }
+}
+
+@keyframes float-medium {
+
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) translateY(-4px);
+  }
+}
+
+@keyframes float-fast {
+
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) translateY(-8px);
+  }
+}
+
+.float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+.float-medium {
+  animation: float-medium 5.5s ease-in-out infinite;
+}
+
+.float-fast {
+  animation: float-fast 4.2s ease-in-out infinite;
+}
+
+/* Upgraded Gradient Dots with White Borders & Shadows */
+.graph-dot {
+  background: linear-gradient(135deg, var(--paper-strong) 0%, var(--line) 100%);
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  display: block;
+  height: 18px;
+  box-shadow: 0 2px 6px rgba(31, 29, 26, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: transform 0.2s, box-shadow 0.2s;
+  width: 18px;
+}
+
+.graph-dot.active {
+  background: linear-gradient(135deg, var(--amber-soft) 0%, var(--amber) 100%);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(196, 142, 36, 0.15), 0 4px 12px rgba(196, 142, 36, 0.25);
+  height: 22px;
+  width: 22px;
+}
+
+.graph-dot.clay {
+  background: linear-gradient(135deg, #fbece6 0%, var(--clay) 100%);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(194, 89, 63, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.graph-dot.steel {
+  background: linear-gradient(135deg, #e6eef2 0%, var(--steel) 100%);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(80, 97, 107, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.graph-dot.amber {
+  background: linear-gradient(135deg, var(--amber-light) 0%, var(--amber) 100%);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(196, 142, 36, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.graph-node-lg .graph-dot {
+  height: 28px;
+  width: 28px;
+}
+
+.graph-node-md .graph-dot {
+  height: 22px;
+  width: 22px;
+}
+
+.graph-label {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.graph-node small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Glassmorphism static popup (State B) */
+.graph-popup {
+  background: rgba(255, 252, 247, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 32px rgba(31, 29, 26, 0.08), 0 1px 2px rgba(31, 29, 26, 0.04);
+  left: 50%;
+  opacity: 0;
+  padding: 16px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 12px);
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity 0.2s, transform 0.2s;
+  width: 240px;
+  z-index: 10;
+}
+
+.graph-popup::before {
+  background: rgba(255, 252, 247, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(255, 255, 255, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  content: '';
+  height: 10px;
+  left: 50%;
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+}
+
+.graph-popup strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.graph-popup p {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+
+.graph-popup small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Static popup variant to prevent left-side clipping on left-aligned nodes */
+.graph-popup.static {
+  left: -20px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  width: 230px;
+}
+
+.graph-popup.static::before {
+  left: 20px;
+  transform: rotate(45deg);
+}
+
+.graph-popup.arrow-down::before {
+  top: auto;
+  bottom: -6px;
+  border-left: none;
+  border-top: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.centered-arrow::before {
+  left: 50% !important;
+  transform: translateX(-50%) rotate(45deg) !important;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(196, 142, 36, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(196, 142, 36, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 142, 36, 0);
+  }
+}

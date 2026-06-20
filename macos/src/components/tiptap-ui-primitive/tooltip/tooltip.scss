@@ -1,0 +1,85 @@
+.tiptap-tooltip {
+  --tt-tooltip-bg: var(--legacy-ink-design, var(--tt-gray-light-900));
+  --tt-tooltip-text: var(--legacy-bg-design-canvas, var(--white));
+  --tt-kbd: var(--tt-gray-dark-a-400);
+
+  .dark & {
+    --tt-tooltip-bg: var(--white);
+    --tt-tooltip-text: var(--tt-gray-light-600);
+    --tt-kbd: var(--tt-gray-light-a-400);
+  }
+}
+
+.tiptap-tooltip {
+  z-index: 50;
+  overflow: visible;
+  position: relative;
+  border-radius: 6px;
+  background-color: var(--tt-tooltip-bg);
+  padding: 0.3125rem 0.5rem;
+  font-family:
+    var(--legacy-font-ui, "Apple SD Gothic Neo"),
+    "Apple SD Gothic Neo",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 0.75rem;
+  font-weight: var(--legacy-weight-bold, 800);
+  color: var(--tt-tooltip-text);
+  box-shadow: var(--legacy-shadow-float, 0 2px 4px rgba(20, 20, 19, 0.18));
+  text-align: center;
+
+  &::after {
+    background: var(--tt-tooltip-bg);
+    content: "";
+    height: 8px;
+    position: absolute;
+    width: 8px;
+  }
+
+  &[data-side="top"]::after {
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  &[data-side="bottom"]::after {
+    left: 50%;
+    top: -4px;
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  &[data-side="left"]::after {
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  &[data-side="right"]::after {
+    left: -4px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  kbd {
+    display: inline-block;
+    text-align: center;
+    vertical-align: baseline;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      "Noto Sans",
+      sans-serif;
+    text-transform: capitalize;
+    color: var(--tt-kbd);
+  }
+}

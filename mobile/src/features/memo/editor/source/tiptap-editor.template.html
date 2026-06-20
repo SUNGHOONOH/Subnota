@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data: https:; script-src 'unsafe-inline'; connect-src 'none'" />
+<title>Subnota Editor</title>
+<style>
+  /* @FONT_FACES@ */
+
+  /* ── design.md 기반 Design Tokens (Anthropic warm-cream system) ── */
+  :root {
+    /* Colors */
+    --primary: #cc785c;
+    --primary-active: #a9583e;
+    --ink: #141413;
+    --body: #3d3d3a;
+    --body-strong: #252523;
+    --muted: #6c6a64;
+    --muted-soft: #8e8b82;
+    --hairline: #e6dfd8;
+    --hairline-soft: #ebe6df;
+    --canvas: #faf9f5;
+    --surface-soft: #f5f0e8;
+    --surface-card: #efe9de;
+    --surface-cream-strong: #e8e0d2;
+    --on-dark: #faf9f5;
+    --success: #5db872;
+    --date-hl: #5db872;
+
+    /* Typography */
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+    /* Sizing */
+    --content-max-width: 85%;
+    --editor-padding-bottom: 30vh;
+
+    /* Selection */
+    --selection-bg: rgba(204, 120, 92, 0.15);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #181715;
+      --ink: #faf9f5;
+      --body: #c8c5bc;
+      --body-strong: #e8e5de;
+      --muted: #a09d96;
+      --muted-soft: #7a7870;
+      --hairline: #2e2d2a;
+      --hairline-soft: #353330;
+      --surface-soft: #1f1e1b;
+      --surface-card: #252320;
+      --surface-cream-strong: #2e2c28;
+      --primary: #e09070;
+      --primary-active: #cc785c;
+      --selection-bg: rgba(224, 144, 112, 0.18);
+    }
+  }
+
+  /* ── Reset ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--canvas);
+    color: var(--body);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ── Subtle scrollbar ── */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--hairline);
+    border: 3px solid var(--canvas);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted-soft); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── Editor container ── */
+  .editor-toolbar {
+    align-items: center;
+    background: color-mix(in srgb, var(--canvas) 92%, transparent);
+    border-bottom: 1px solid var(--hairline);
+    display: flex;
+    gap: 8px;
+    min-height: 44px;
+    overflow-x: auto;
+    padding: 6px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+
+  .toolbar-group {
+    align-items: center;
+    display: flex;
+    gap: 2px;
+  }
+
+  .toolbar-separator {
+    background: var(--hairline);
+    flex: 0 0 1px;
+    height: 22px;
+  }
+
+  .toolbar-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--body-strong);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 650;
+    height: 30px;
+    justify-content: center;
+    min-width: 30px;
+    padding: 0 8px;
+  }
+
+  .toolbar-button svg {
+    display: block;
+    height: 17px;
+    stroke: currentColor;
+    stroke-width: 2;
+    width: 17px;
+  }
+
+  .toolbar-button:hover { background: var(--surface-soft); }
+  .toolbar-button:active { background: var(--surface-card); }
+
+  .toolbar-button.is-active {
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+    color: var(--primary-active);
+  }
+
+  .toolbar-button-text {
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .url-popover {
+    align-items: center;
+    background: var(--canvas);
+    border-bottom: 1px solid var(--hairline);
+    display: none;
+    gap: 8px;
+    padding: 8px 12px;
+    position: sticky;
+    top: 44px;
+    z-index: 9;
+  }
+
+  .url-popover.is-open { display: flex; }
+
+  .url-input {
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: 7px;
+    color: var(--body-strong);
+    flex: 1;
+    font: 13px/1.2 var(--font-body);
+    height: 30px;
+    outline: none;
+    padding: 0 10px;
+  }
+
+  .url-input:focus {
+    border-color: color-mix(in srgb, var(--primary) 54%, var(--hairline));
+  }
+
+  .url-action {
+    background: var(--primary);
+    border: 0;
+    border-radius: 7px;
+    color: white;
+    cursor: pointer;
+    flex-shrink: 0;
+    font: 650 13px/1 var(--font-body);
+    height: 30px;
+    padding: 0 12px;
+  }
+
+  .url-secondary {
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    color: var(--muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    font: 500 13px/1 var(--font-body);
+    height: 30px;
+    padding: 0 8px;
+  }
+
+  .url-input { min-width: 0; }
+
+  .url-secondary:hover { background: var(--surface-soft); }
+
+  .tiptap-wrap {
+    max-width: var(--content-max-width);
+    margin: 0 auto;
+    padding: 24px 24px var(--editor-padding-bottom);
+    min-height: 100%;
+  }
+
+  /* ── Tiptap core ── */
+  .tiptap {
+    outline: none;
+    caret-color: var(--primary);
+    color: var(--body);
+  }
+
+  .tiptap:focus { outline: none; }
+
+  .tiptap ::selection { background: var(--selection-bg); }
+
+  /* ── Typography — design.md 기반 ── */
+  .tiptap p {
+    margin-bottom: 0.2em;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--body);
+    text-wrap: pretty;
+  }
+
+  .tiptap h1, .tiptap h2, .tiptap h3 { text-wrap: balance; }
+
+  .tiptap h1 {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.3px;
+    margin-top: 1.4em;
+    margin-bottom: 0.5em;
+    color: var(--ink);
+  }
+
+  .tiptap h2 {
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: -0.2px;
+    margin-top: 1.2em;
+    margin-bottom: 0.4em;
+    color: var(--ink);
+  }
+
+  .tiptap h3 {
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-top: 1em;
+    margin-bottom: 0.35em;
+    color: var(--ink);
+  }
+
+  .tiptap h1:first-child,
+  .tiptap h2:first-child,
+  .tiptap h3:first-child { margin-top: 0; }
+
+  /* ── Inline marks ── */
+  .tiptap strong { font-weight: 600; color: var(--body-strong); }
+  .tiptap em { font-style: italic; color: var(--muted); }
+  .tiptap s { text-decoration: line-through; color: var(--muted-soft); }
+
+  .tiptap code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.6;
+    background: var(--surface-soft);
+    color: var(--primary);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+
+  .tiptap a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-decoration-color: rgba(204, 120, 92, 0.35);
+    text-underline-offset: 2px;
+    cursor: pointer;
+    transition: text-decoration-color 0.15s ease;
+  }
+
+  .tiptap a:hover { text-decoration-color: var(--primary); }
+
+  /* ── Blockquote ── */
+  .tiptap blockquote {
+    border-left: 3px solid var(--primary);
+    padding: 0.4em 0 0.4em 1em;
+    margin: 0.6em 0;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .tiptap blockquote p { color: var(--muted); }
+
+  /* ── Code block (concentric: 8px outer, 6px inner selection) ── */
+  .tiptap pre {
+    background: var(--surface-soft);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 8px;
+    padding: 1em 1.2em;
+    margin: 0.6em 0;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--body);
+  }
+
+  .tiptap pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+
+  /* ── highlight.js token theme (warm palette, design.md 톤) ── */
+  .hljs-comment, .hljs-quote { color: var(--muted-soft); font-style: italic; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #a9583e; }
+  .hljs-string, .hljs-attr, .hljs-template-tag, .hljs-addition { color: #5b8a5e; }
+  .hljs-number, .hljs-literal, .hljs-type, .hljs-params { color: #b07845; }
+  .hljs-title, .hljs-section { color: #7a6cc4; }
+  .hljs-attribute, .hljs-variable, .hljs-template-variable { color: #c0863f; }
+  .hljs-regexp, .hljs-link, .hljs-symbol, .hljs-bullet { color: #2f8c9e; }
+  .hljs-meta { color: var(--muted); }
+  .hljs-deletion { color: #c64545; }
+  .hljs-emphasis { font-style: italic; }
+  .hljs-strong { font-weight: 600; }
+
+  /* ── Images ── */
+  .tiptap img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0.6em 0;
+    border-radius: 8px;
+    /* Subtle outline for consistent depth (pure black/white, never tinted). */
+    outline: 1px solid rgba(0, 0, 0, 0.1);
+    outline-offset: -1px;
+  }
+
+  .tiptap img.ProseMirror-selectednode {
+    outline: 2px solid var(--primary);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tiptap img { outline-color: rgba(255, 255, 255, 0.1); }
+  }
+
+  /* ── Lists ── */
+  .tiptap ul, .tiptap ol { padding-left: 1.5em; margin: 0.3em 0; }
+  .tiptap li { margin-bottom: 0.1em; }
+  .tiptap li p { margin-bottom: 0; }
+  .tiptap ul li::marker { color: var(--muted-soft); }
+  .tiptap ol li::marker { color: var(--muted-soft); font-variant-numeric: tabular-nums; }
+
+  /* ── Task list (checklist) ── */
+  .tiptap ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+
+  .tiptap ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin-bottom: 0.2em;
+  }
+
+  .tiptap ul[data-type="taskList"] li > label {
+    flex-shrink: 0;
+    margin-top: 0.25em;
+  }
+
+  .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--hairline);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    background: transparent;
+  }
+
+  .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:hover { border-color: var(--primary); }
+
+  .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .tiptap ul[data-type="taskList"] li[data-checked="true"] > div > p {
+    text-decoration: line-through;
+    color: var(--muted-soft);
+  }
+
+  /* ── Horizontal rule ── */
+  .tiptap hr {
+    border: none;
+    border-top: 1px solid var(--hairline);
+    margin: 1.5em 0;
+  }
+
+  /* ── Placeholder ── */
+  .tiptap p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--muted-soft);
+    pointer-events: none;
+    float: left;
+    height: 0;
+    font-style: italic;
+  }
+
+  /* ── Date highlight decoration ── */
+  .date-highlight {
+    color: var(--date-hl);
+    font-weight: 600;
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+</style>
+</head>
+<body>
+<div class="editor-toolbar" id="editor-toolbar" aria-label="Markdown toolbar">
+  <div class="toolbar-group">
+    <button class="toolbar-button" type="button" data-command="h1" title="제목 1"><span class="toolbar-button-text">H1</span></button>
+    <button class="toolbar-button" type="button" data-command="h2" title="제목 2"><span class="toolbar-button-text">H2</span></button>
+    <button class="toolbar-button" type="button" data-command="h3" title="제목 3"><span class="toolbar-button-text">H3</span></button>
+  </div>
+  <div class="toolbar-separator"></div>
+  <div class="toolbar-group">
+    <button class="toolbar-button" type="button" data-command="bold" title="굵게"><span class="toolbar-button-text">B</span></button>
+    <button class="toolbar-button" type="button" data-command="italic" title="기울임"><span class="toolbar-button-text"><em>I</em></span></button>
+    <button class="toolbar-button" type="button" data-command="strike" title="취소선"><span class="toolbar-button-text"><s>S</s></span></button>
+    <button class="toolbar-button" type="button" data-command="inlineCode" title="인라인 코드"><span class="toolbar-button-text">&lt;/&gt;</span></button>
+    <button class="toolbar-button" type="button" data-command="link" data-url-kind="link" title="링크">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"/></svg>
+    </button>
+  </div>
+  <div class="toolbar-separator"></div>
+  <div class="toolbar-group">
+    <button class="toolbar-button" type="button" data-command="bullet" title="글머리 목록">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3.5 6h.01"/><path d="M3.5 12h.01"/><path d="M3.5 18h.01"/></svg>
+    </button>
+    <button class="toolbar-button" type="button" data-command="number" title="번호 목록">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M4 14h1.2a1.3 1.3 0 0 1 .8 2.3L4 18h2.2"/></svg>
+    </button>
+    <button class="toolbar-button" type="button" data-command="taskList" title="할 일 목록">
+      <svg viewBox="0 0 24 24" fill="none"><path d="m3 7 2 2 4-4"/><path d="M11 7h10"/><path d="m3 17 2 2 4-4"/><path d="M11 17h10"/></svg>
+    </button>
+  </div>
+  <div class="toolbar-separator"></div>
+  <div class="toolbar-group">
+    <button class="toolbar-button" type="button" data-command="quote" title="인용">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M8 7H5a2 2 0 0 0-2 2v3h5v5H3"/><path d="M21 7h-3a2 2 0 0 0-2 2v3h5v5h-5"/></svg>
+    </button>
+    <button class="toolbar-button" type="button" data-command="codeBlock" title="코드 블록">
+      <svg viewBox="0 0 24 24" fill="none"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 4-4 16"/></svg>
+    </button>
+    <button class="toolbar-button" type="button" data-command="horizontalRule" title="구분선">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 12h16"/></svg>
+    </button>
+    <button class="toolbar-button" type="button" data-command="image" data-url-kind="image" title="이미지">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m8 13 2.5-2.5L15 15"/><path d="m14 14 1.5-1.5L21 18"/><path d="M8.5 9h.01"/></svg>
+    </button>
+  </div>
+</div>
+<div class="url-popover" id="url-popover">
+  <input class="url-input" id="url-input" type="url" placeholder="URL" />
+  <button class="url-action" id="url-apply" type="button">적용</button>
+  <button class="url-secondary" id="url-remove" type="button">링크 해제</button>
+  <button class="url-secondary" id="url-cancel" type="button">취소</button>
+</div>
+<div class="tiptap-wrap">
+  <div id="editor"></div>
+</div>
+<!-- @EDITOR_BUNDLE@ -->
+</body>
+</html>

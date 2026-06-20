@@ -2,6 +2,10 @@
 #
 .DS_Store
 
+# Generated offline Tiptap editor bundle (built by mobile/scripts/build-editor.mjs).
+# Source (template, entry, fonts) lives in src/features/memo/editor/source/.
+mobile/src/features/memo/editor/tiptap-editor.html
+
 # Xcode
 #
 build/
@@ -41,6 +45,13 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Python
+#
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
 # fastlane
 #
 # It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
@@ -59,6 +70,8 @@ yarn-error.log
 # Ruby / CocoaPods
 **/Pods/
 /vendor/bundle/
+mobile/vendor/bundle/
+mobile/.bundle/
 
 # Temporary files created by Metro to check the health of the file watcher
 .metro-health-check*
@@ -68,10 +81,19 @@ yarn-error.log
 
 # Release artifacts
 /dist/
+mobile/dist/
 pwa/dist/
+mobile/pwa/dist/
 pwa/.vercel/
 *.tsbuildinfo
 
+# Local docs / working notes
+docs/
+/.agents/
+/.vscode/
+.claude/
+CLAUDE.md
+/ELECTRON_MIGRATION_STATUS.md
 # Yarn
 .yarn/*
 !.yarn/patches
@@ -98,11 +120,13 @@ supabase/.env.local
 supabase/.env.*.local
 supabase/.branches/
 supabase/.temp/
+mobile/supabase/.temp/
 
 # Local backend/runtime secrets
 backend/.env
 backend/.env.*
 !backend/.env.example
+backend/*.egg-info/
 
 # Private keys / service account files
 *.pem

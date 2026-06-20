@@ -1,54 +1,125 @@
 # Subnota
 
-Local-first React Native memo app for quick capture, manual calendar blocks, online schedule inbox, and cursor-based memo networking.
+Local-first memo app for quick capture, manual calendar blocks, URL inbox, daily briefing, and cursor-based memo networking. iOS runs on React Native; the macOS and Windows desktop apps are Electron + Tiptap.
 
 ## Current Architecture
 
-Subnota is split into three user-facing tabs:
+Subnota is split by platform:
 
-- `메모`: local-first text editor, memo list, date hints, manual schedule registration, manual network graph, ambient memory peek
-- `캘린더`: local calendar blocks with month/week views and draggable weekly layout
-- `무의식`: local priority view, Supabase `schedule_inbox` bottom sheet, and daily briefing archive
+- **iOS** is the React Native app in `mobile/`, with bottom tabs for `노트`, `캘린더`, `수집함`, and `브리핑`. Notes are edited through an offline Tiptap WebView bundle.
+- **macOS and Windows** are Electron + Tiptap desktop apps (`macos/`, `windows/`) sharing ~95% of their code. They render a nav-rail workspace with a native Tiptap editor (no WebView bridge).
+- All clients are local-first: calendar blocks, inbox fallback entries, and memo edits are saved locally first, then synced when Supabase auth is available.
+
+The desktop apps are mid-migration from the legacy React Native macOS target (which has been removed from `mobile/macos/`) — see [`ELECTRON_MIGRATION_STATUS.md`](./ELECTRON_MIGRATION_STATUS.md).
 
 Online enrichment is handled by a separate Python FastAPI backend:
 
 - nightly schedule candidate extraction into `schedule_inbox`
 - memo chunk indexing with Kiwi + Hugging Face embeddings
-- cursor-based State B network search through pgvector, with manual graph and 3-second idle Ambient Mirror
-- State A topic discovery only when synced memos are marked dirty, with topic-level memo relationship edges
-- Gemini daily briefing that connects tomorrow's schedule, recent memos, and a resurfaced memory from around one month ago
+- cursor-based State B network search through pgvector
+- State A topic discovery only when synced memos are marked dirty
+- inbox URL analysis for YouTube, Instagram, and general web pages
+- Gemini/Gemma structured summaries for saved external content
+- daily maintenance that combines schedule inbox, memo indexing, and topic discovery
 
-The app remains usable without login or network for memo writing and manual calendar registration.
+The app remains usable without login or network for memo writing, manual calendar registration, and local inbox fallback.
 
 ## Important Docs
 
-- [Code map](./docs/CODEMAP.md): current file responsibilities
-- [Flow](./docs/flow.md): current runtime/data flow
+- [Code map](./mobile/docs/CODEMAP.md): current file responsibilities and refactored paths (iOS/RN app)
+- [Flow](./mobile/docs/flow.md): current runtime/data flow (iOS/RN app)
 - [Backend README](./backend/README.md): backend setup and endpoint notes
-- [Desktop PWA](./pwa/pwa.md): Mac/Windows PWA local run and deployment steps
+- [macOS Electron release](./macos/docs/macos-release.md): DMG/native update distribution notes for the Electron macOS target
 
-Older network/state planning docs were removed. `CODEMAP.md` and `flow.md` are the current source of truth.
+`mobile/docs/CODEMAP.md` is the source of truth for RN/backend file ownership; `macos/CLAUDE.md` and `windows/CLAUDE.md` cover the Electron desktop apps.
 
 ## Stack
 
-- React Native CLI 0.85
+**iOS (React Native, `mobile/`)**
+
+- React Native CLI 0.81
 - TypeScript
-- Zustand persist + AsyncStorage
-- Supabase client for optional sync and online inbox
+- Zustand persist with platform storage adapter
+- Tiptap + React Native WebView for the memo editor
+- Supabase client for optional sync, auth, inbox, briefing, and online graph data
+
+**macOS & Windows desktop (Electron, `macos/` + `windows/`)**
+
+- Electron 42.4.0 + Electron Forge 7.11.2 (Vite plugin)
+- React 19.2 + Tiptap 3.26.1 (native browser editor, no WebView bridge)
+- Vite 5.4.x, Vitest 3.2.6, TypeScript ~5.5
+- Same Supabase + offline-store data contracts as iOS
+
+**Legacy (removed)**
+
+- React Native macOS 0.81 (previously `mobile/macos/`)
+
+**Backend & data (shared)**
+
 - Python FastAPI backend
 - Kiwi / kiwipiepy for Korean sentence chunking
 - Hugging Face Inference API for embeddings
 - Supabase pgvector for chunk similarity search
-- Gemini Edge Function exists for daily briefing generation
+- Gemini API for YouTube URL content summary and fallback summary generation
+- Optional YouTube Data API for video metadata
+
+## Repository Layout
+
+```text
+mobile/
+  App.tsx
+  src/
+    app/                      # navigation and sync coordinator
+    components/               # shared RN components
+    features/
+      auth/                   # login/signup UI and OAuth helpers
+      memo/                   # memo screens, editor, graph UI, memo sync
+      calendar/               # month/week calendar UI and calendar sync
+      inbox/                  # saved link inbox UI and inbox API client
+      briefing/               # briefing UI and briefing service
+      network/                # State A/B online graph clients
+    shared/
+      native/                 # macOS menu bar bridge
+      storage/                # platform storage adapter
+      supabase/               # Supabase client and auth gate
+    lib/                      # date, calendar, hash, chunk utility code
+    store/                    # local-first Zustand store
+  backend/
+    app/
+      api/                    # FastAPI routes and auth dependencies
+      core/                   # config and constants
+      db/                     # Supabase service-role data access
+      features/               # inbox, memo, network, schedule, topics, maintenance
+      shared/                 # backend shared helpers
+      main.py                 # FastAPI app entry
+  supabase/
+    migrations/               # database schema and patches
+    functions/                # daily briefing Edge Function
+
+macos/                        # macOS desktop app — Electron Forge + Vite + Tiptap
+windows/                      # Windows desktop app — ~95% shared with macos/
+web/                          # marketing site (Next.js)
+  app/
+    components/               # modular, interactive landing page previews
+      HeroMockup.tsx / .css
+      CoreSchedulePreview.tsx / .css
+      CoreMemoryPreview.tsx / .css
+      NetworkGraphPreviews.tsx / .css
+      DesktopFeaturePreviews.tsx / .css
+    globals.css               # global styles (imports modular component CSS)
+    page.tsx                  # simplified marketing page layout
+```
 
 ## Local-First Rules
 
 - Memo writing does not require login.
 - Manual calendar registration does not require login.
+- macOS menu bar capture can fall back to the local inbox queue.
 - Supabase sync runs only when a user is signed in.
 - Automatic schedule suggestions are online batch results, not realtime editor UI.
-- State B network search requires login, backend URL, and indexed chunks. Manual search keeps the graph UI; automatic Ambient Mirror fails silently when unavailable.
-- Service role keys, HF tokens, Gemini keys, and backend admin keys must never be placed in the app bundle.
+- State B network search requires login, backend URL, and indexed chunks.
+- Inbox URL analysis requires login and backend access.
+- Service role keys, HF tokens, Gemini keys, YouTube keys, and backend admin keys must never be placed in the app bundle.
 
 ## Environment
 
@@ -66,21 +137,15 @@ Backend `backend/.env`:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 HF_TOKEN=
+GEMINI_API_KEY=
+YOUTUBE_API_KEY=
 BACKEND_ADMIN_KEY=
 BACKEND_ENV=development
 CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://subnota.com
 LOG_LEVEL=INFO
 ```
 
-Desktop PWA `pwa/.env.local`:
-
-```text
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-VITE_MEMO_BACKEND_URL=http://localhost:8000
-```
-
-Supabase Edge Function `supabase/.env.local`:
+Supabase Edge Function `mobile/supabase/.env.local`:
 
 ```text
 SUPABASE_URL=
@@ -96,26 +161,50 @@ DAILY_BRIEFING_CRON_KEY=
 Install JS dependencies:
 
 ```sh
+cd mobile
 corepack pnpm install
 ```
 
 Start Metro:
 
 ```sh
+cd mobile
 corepack pnpm start --reset-cache
 ```
 
 Run iOS:
 
 ```sh
+cd mobile
 corepack pnpm ios
 ```
 
-For real iPhone testing, set `MEMO_BACKEND_URL` to the Mac's LAN address, for example:
+For real iPhone testing, set `MEMO_BACKEND_URL` to the Mac's LAN address:
 
 ```text
 MEMO_BACKEND_URL=http://192.168.x.x:8000
 ```
+
+## Desktop (Electron) Development
+
+The macOS and Windows apps are separate Electron projects at the repo root. Both use **pnpm** and the same scripts:
+
+```sh
+cd macos          # or: cd windows
+pnpm install
+pnpm start                 # Electron Forge + Vite dev server (HMR)
+pnpm test                  # Vitest
+pnpm run lint              # ESLint
+```
+
+Packaging is platform-specific:
+
+```sh
+cd macos && pnpm run build:dmg       # macOS DMG
+cd windows && pnpm run build:exe     # Windows Squirrel Setup EXE
+```
+
+Apply feature changes to both apps together — they share ~95% of their `src/`. See [`ELECTRON_MIGRATION_STATUS.md`](./ELECTRON_MIGRATION_STATUS.md) for migration status and remaining work.
 
 ## Backend Development
 
@@ -133,10 +222,20 @@ Health check:
 curl http://localhost:8000/health
 ```
 
-Run daily maintenance for all profiles:
+Run split maintenance jobs:
 
 ```sh
-curl -X POST http://localhost:8000/maintenance/daily-all \
+curl -X POST http://localhost:8000/maintenance/memo-chunks/index-dirty-users \
+  -H "Content-Type: application/json" \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
+  -d '{}'
+
+curl -X POST http://localhost:8000/maintenance/schedule-inbox/scan-dirty-users \
+  -H "Content-Type: application/json" \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
+  -d '{}'
+
+curl -X POST http://localhost:8000/maintenance/topic-discovery/run-dirty-users \
   -H "Content-Type: application/json" \
   -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
   -d '{}'
@@ -144,10 +243,18 @@ curl -X POST http://localhost:8000/maintenance/daily-all \
 
 ## Supabase
 
-Current schema:
+Current schema migrations:
 
 ```text
-supabase/migrations/20260519_final_schema.sql
+mobile/supabase/migrations/20260519_final_schema.sql
+mobile/supabase/migrations/20260525_topic_memo_edges_patch.sql
+mobile/supabase/migrations/20260528_inbox_sessions.sql
+mobile/supabase/migrations/20260530_inbox_session_embeddings.sql
+mobile/supabase/migrations/20260531_inbox_structured_summaries.sql
+mobile/supabase/migrations/20260602_hnsw_vector_indexes.sql
+mobile/supabase/migrations/20260611_inbox_client_id.sql
+mobile/supabase/migrations/20260611_memo_category.sql
+mobile/supabase/migrations/20260613_inbox_sessions_updated_order.sql
 ```
 
 The schema defines:
@@ -161,29 +268,57 @@ The schema defines:
 - `briefings`
 - `topic_clusters`
 - `topic_cluster_memos`
+- `topic_memo_edges`
+- `inbox_sessions`
+- inbox summary embeddings
 - `match_memo_chunks` pgvector RPC with memo timestamp metadata
+- HNSW vector indexes for memo and inbox embedding search
+- inbox `client_id` idempotency and latest-first ordering indexes
 
-Apply this migration before using online sync, schedule inbox, network search, or topic discovery.
+Apply these migrations before using online sync, schedule inbox, inbox summaries, network search, or topic discovery.
 
 ## Verification
 
 TypeScript:
 
 ```sh
-corepack pnpm exec tsc --noEmit
+cd mobile
+corepack pnpm -s tsc --noEmit
+```
+
+Jest:
+
+```sh
+cd mobile
+corepack pnpm -s jest --runInBand
 ```
 
 Python syntax:
 
 ```sh
-backend/.venv/bin/python -m compileall backend/app
-find backend/app -type d -name __pycache__ -prune -exec rm -rf {} +
+cd backend
+.venv/bin/python -m compileall app
+```
+
+Backend route smoke check:
+
+```sh
+cd backend
+.venv/bin/python - <<'PY'
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+print(client.get("/health").json())
+PY
 ```
 
 ## Current Limitations
 
 - Supabase sync is service-backed but not a full conflict-resolution system.
 - Automatic schedule suggestions appear only after backend batch has run.
-- Daily briefings are generated by the Supabase Edge Function and shown in a separate briefing archive inbox.
+- Daily briefings are generated by the Supabase Edge Function and shown in the briefing archive.
 - State B quality depends on indexed `memo_chunks`.
-- State A topic clusters are produced by backend batch, while the app displays them with `최근 1달 / 최근 6개월 / 최근 1년 / 전체` filters, topic detail quick view, and relation view.
+- State A topic clusters are produced by backend batch, while the app displays them through the memo network UI.
+- PWA has been removed from the active app tree and is not part of the current RN/backend flow.
+- macOS/Windows are mid-migration to Electron; the legacy RN macOS target has been removed from `mobile/macos/` (see [`ELECTRON_MIGRATION_STATUS.md`](./ELECTRON_MIGRATION_STATUS.md)).
