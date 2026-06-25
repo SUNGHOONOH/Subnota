@@ -12,15 +12,18 @@ import {
   Check,
   ChevronDown,
   Columns2,
+  ExternalLink,
   Network,
   PanelLeft,
   Plus,
   X,
 } from '@/components/icons';
 import TooltipIconButton from '../../../components/TooltipIconButton';
+import { ThemeToggle } from '../../../components/tiptap-templates/simple/theme-toggle';
 import { MemoRow, CalendarBlockRow, BriefingRow, ScheduleInboxRow, TopicCluster, TopicMembership } from '../../../types';
-import { getCursorChunkWindow, MemoChunk } from '../../../lib/memoChunker';
-import { NetworkSearchResult, searchCursorNetwork } from '../../../services/backend/networkService';
+import { MemoChunk } from '../../../lib/memoChunker';
+import { NetworkRequestError, NetworkSearchResult, searchCursorNetwork } from '../../../services/backend/networkService';
+import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
 import {
   SimpleEditor,
   SimpleEditorToolbar,
@@ -45,6 +48,7 @@ export type MemoSplitPaneView =
   | 'source';
 
 export interface MemoSplitEditorState {
+  ambientQueryText?: string;
   draftCategory?: string;
   draftText?: string;
   highlight?: {
@@ -73,9 +77,9 @@ export interface MemoSplitPaneState extends MemoSplitEditorState {
 }
 
 const VIEW_LABELS: Record<MemoSplitPaneView, string> = {
-  briefing: '브리핑',
+  briefing: '일정 inbox',
   calendar: '캘린더',
-  inbox: '수집함',
+  inbox: '웹 inbox',
   memo: '노트',
   network: '무의식',
   source: '링크',
@@ -158,13 +162,19 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, value));
 };
 
-const buildSplitKnnGraph = (results: NetworkSearchResult[]) => {
+const buildSplitKnnGraph = (
+  results: NetworkSearchResult[],
+  getLabel: (result: NetworkSearchResult) => string,
+) => {
+  // Center "지금 문장" node is the cursor sentence; neighbour nodes orbit it,
+  // pulled closer the higher their similarity. Labels are memo titles so the
+  // graph reads like the network mock.
   const nodes: KnowledgeGraphNode[] = [
     {
-      color: '#5c4d3c',
+      color: '#1d1d1f',
       id: 'network:query',
       label: '지금 문장',
-      size: 13,
+      size: 15,
       x: 0,
       y: 0,
     },
@@ -179,10 +189,10 @@ const buildSplitKnnGraph = (results: NetworkSearchResult[]) => {
     const nodeId = `network:${result.chunkId}`;
 
     nodes.push({
-      color: result.sourceKind === 'inbox' ? '#6d7185' : '#7f8a6f',
+      color: result.sourceKind === 'inbox' ? '#6d7185' : '#cc785c',
       id: nodeId,
-      label: `${Math.round(similarity * 100)}%`,
-      size: clamp(5 + similarity * 9, 6, 14),
+      label: getLabel(result),
+      size: clamp(7 + similarity * 9, 8, 17),
       x: Math.cos(angle) * distance,
       y: Math.sin(angle) * distance,
     });
@@ -196,6 +206,25 @@ const buildSplitKnnGraph = (results: NetworkSearchResult[]) => {
 
   return { edges, nodes };
 };
+
+const getResultTitle = (result: NetworkSearchResult, memos: MemoRow[]) => {
+  if (result.sourceKind === 'inbox') {
+    return result.title || result.sourceLabel || '링크';
+  }
+  const memo = result.memoId ? memos.find(item => item.id === result.memoId) : null;
+  const source = memo?.content ?? result.memoContent ?? result.chunkText ?? '';
+  const firstLine = source
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return '제목 없는 노트';
+  }
+  return firstLine.length > 22 ? `${firstLine.slice(0, 22).trimEnd()}…` : firstLine;
+};
+
+const formatResultDate = (timestamp: number | null) =>
+  timestamp ? format(new Date(timestamp), 'M월 d일') : '';
 
 const buildSplitTopicGraph = (
   clusters: TopicCluster[],
@@ -254,6 +283,9 @@ const getSourceLabel = (result: NetworkSearchResult) => {
 };
 
 interface MemoSplitWorkspaceProps {
+  ambientEditorId?: string | null;
+  ambientError?: string | null;
+  ambientResult?: NetworkSearchResult | null;
   canAddPane?: boolean;
   focusedPaneId?: string | null;
   initialPaneWidths?: Record<string, number>;
@@ -265,6 +297,8 @@ interface MemoSplitWorkspaceProps {
   onClosePane?: (id: string) => void;
   onFocusPane?: (id: string) => void;
   onPaneWidthsChange?: (widths: Record<string, number>) => void;
+  onAmbientQuery?: (editorId: string, memoId: string | null, queryText: string) => void;
+  onRetryAmbient?: () => void;
   panes: MemoSplitPaneState[];
   memos: MemoRow[];
   onCreateMemo: (content: string, category?: string) => MemoRow;
@@ -294,6 +328,9 @@ interface MemoSplitWorkspaceProps {
 }
 
 const MemoSplitWorkspace = ({
+  ambientEditorId = null,
+  ambientError = null,
+  ambientResult = null,
   canAddPane = true,
   focusedPaneId,
   initialPaneWidths = {},
@@ -305,6 +342,8 @@ const MemoSplitWorkspace = ({
   onClosePane,
   onFocusPane,
   onPaneWidthsChange,
+  onAmbientQuery,
+  onRetryAmbient,
   panes,
   memos,
   onCreateMemo,
@@ -341,7 +380,32 @@ const MemoSplitWorkspace = ({
     () => initialPaneWidths,
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const networkControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const panesRef = useRef(panes);
   const paneIdsRef = useRef(panes.map(pane => pane.id).join('|'));
+
+  useEffect(() => {
+    panesRef.current = panes;
+  }, [panes]);
+
+  useEffect(() => {
+    const liveEditorIds = new Set(panes.flatMap(pane => getPaneEditors(pane).map(editor => editor.id)));
+    for (const [editorId, controller] of networkControllersRef.current) {
+      if (!liveEditorIds.has(editorId)) {
+        controller.abort();
+        networkControllersRef.current.delete(editorId);
+      }
+    }
+  }, [panes]);
+
+  useEffect(() => {
+    return () => {
+      for (const controller of networkControllersRef.current.values()) {
+        controller.abort();
+      }
+      networkControllersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const paneIds = panes.map(pane => pane.id).join('|');
@@ -442,10 +506,14 @@ const MemoSplitWorkspace = ({
 
   const patchEditorById = useCallback(
     (
-      pane: MemoSplitPaneState,
+      paneId: string,
       editorId: string,
       patch: Partial<MemoSplitEditorState>,
     ) => {
+      const pane = panesRef.current.find(candidate => candidate.id === paneId);
+      if (!pane) {
+        return;
+      }
       const editors = getPaneEditors(pane);
       const nextEditors = editors.map(editor =>
         editor.id === editorId ? { ...editor, ...patch } : editor,
@@ -455,7 +523,7 @@ const MemoSplitWorkspace = ({
         nextEditors.find(editor => editor.id === editorId) ??
         nextEditors[0];
 
-      onChangePane(pane.id, {
+      onChangePane(paneId, {
         ...mirrorEditorPatch(nextActiveEditor),
         activeEditorId: nextActiveEditor.id,
         editors: nextEditors,
@@ -464,33 +532,41 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
-  const getEditorText = useCallback(
-    (editor: MemoSplitEditorState) => {
-      if (editor.view !== 'memo') {
-        return '';
-      }
-      const memo = editor.memoId ? memoById.get(editor.memoId) ?? null : null;
-      return editor.mode === 'existing'
-        ? editor.draftText ?? memo?.content ?? ''
-        : editor.draftText ?? '';
-    },
-    [memoById],
-  );
-
   const runEditorNetworkSearch = useCallback(
     async (pane: MemoSplitPaneState, editor: MemoSplitEditorState) => {
-      const text = getEditorText(editor);
-      if (!text.trim()) {
+      const candidate = editorInstances[pane.id];
+      const liveEditor = candidate && !candidate.isDestroyed ? candidate : null;
+      const selection = liveEditor?.state.selection.$from;
+      const paragraph = selection?.parent.textContent ?? editor.ambientQueryText ?? '';
+      const start = selection
+        ? Math.max(0, Math.min(selection.parentOffset, paragraph.length) - 2000)
+        : 0;
+      const queryText = paragraph.slice(start, start + 4000).trim();
+      if (!queryText) {
+        patchEditorById(pane.id, editor.id, {
+          networkErrorMessage: '검색할 문단을 먼저 선택하거나 작성해 주세요.',
+          networkIsLoading: false,
+          networkResults: [],
+          view: 'network',
+        });
         return;
       }
 
-      const cursorIndex = editor.selectionStart ?? 0;
-      const queryChunk = getCursorChunkWindow(text, cursorIndex, 0).center;
       const networkRequestId = `network-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 8)}`;
+      const queryChunk: MemoChunk = {
+        end: queryText.length,
+        id: `query-${networkRequestId}`,
+        index: 0,
+        start: 0,
+        text: queryText,
+      };
+      networkControllersRef.current.get(editor.id)?.abort();
+      const controller = new AbortController();
+      networkControllersRef.current.set(editor.id, controller);
 
-      patchEditorById(pane, editor.id, {
+      patchEditorById(pane.id, editor.id, {
         networkErrorMessage: null,
         networkIsLoading: true,
         networkQueryChunk: queryChunk,
@@ -501,13 +577,17 @@ const MemoSplitWorkspace = ({
 
       try {
         const response = await searchCursorNetwork({
-          cursorIndex,
           limit: 8,
+          minimumSimilarity: NETWORK_MIN_SIMILARITY,
           memoId: editor.memoId ?? null,
-          text,
+          queryText,
+          signal: controller.signal,
         });
 
-        patchEditorById(pane, editor.id, {
+        if (networkControllersRef.current.get(editor.id) !== controller) {
+          return;
+        }
+        patchEditorById(pane.id, editor.id, {
           networkErrorMessage: response.message ?? null,
           networkIsLoading: false,
           networkQueryChunk: response.queryChunk,
@@ -516,17 +596,31 @@ const MemoSplitWorkspace = ({
           view: 'network',
         });
       } catch (error) {
-        patchEditorById(pane, editor.id, {
+        if (
+          controller.signal.aborted ||
+          networkControllersRef.current.get(editor.id) !== controller
+        ) {
+          return;
+        }
+        patchEditorById(pane.id, editor.id, {
           networkErrorMessage:
-            error instanceof Error ? error.message : '네트워크 검색에 실패했습니다.',
+            error instanceof NetworkRequestError && error.retryAfterSeconds
+              ? `${error.message} ${error.retryAfterSeconds}초 후 다시 시도할 수 있습니다.`
+              : error instanceof Error
+                ? error.message
+                : '네트워크 검색에 실패했습니다.',
           networkIsLoading: false,
           networkRequestId,
           networkResults: [],
           view: 'network',
         });
+      } finally {
+        if (networkControllersRef.current.get(editor.id) === controller) {
+          networkControllersRef.current.delete(editor.id);
+        }
       }
     },
-    [getEditorText, patchEditorById],
+    [editorInstances, patchEditorById],
   );
 
   const handleAddEditor = useCallback(
@@ -890,57 +984,103 @@ const MemoSplitWorkspace = ({
         editor.networkQueryChunk ||
         editor.networkResults
       ) {
-        // KNN local search view
-        const graph = buildSplitKnnGraph(editor.networkResults ?? []);
+        // KNN local search view — radial ego-graph of the cursor sentence.
+        const graph = buildSplitKnnGraph(editor.networkResults ?? [], result =>
+          getResultTitle(result, memos),
+        );
+        const openResult = (result: NetworkSearchResult) => {
+          const target = result.memoId
+            ? memos.find(item => item.id === result.memoId)
+            : null;
+          if (target) {
+            onSelectMemoById(target.id);
+            openMemoInPane(pane.id, target);
+          } else if (result.sourceKind === 'inbox') {
+            patchEditorById(pane.id, editor.id, {
+              sourceResult: result,
+              view: 'source',
+            });
+          }
+        };
 
         return (
-          <div className="split-network-search">
-            <div className="network-search-header">
-              <h4>네트워크</h4>
-              <p>커서 문장 기준으로 탐색한 결과</p>
+          <div className="split-network-search net-graph-view">
+            <div className="net-query-card">
+              <span className="net-query-eyebrow">지금 문장</span>
+              <p className="net-query-text">
+                {editor.networkQueryChunk?.text?.trim() ||
+                  '문장을 선택하거나 작성해 주세요.'}
+              </p>
             </div>
-            {editor.networkIsLoading && <p className="loading-text">연결성 찾는 중...</p>}
-            {editor.networkErrorMessage && <p className="form-error">{editor.networkErrorMessage}</p>}
+            {editor.networkIsLoading && (
+              <p className="loading-text net-loading">연결성 찾는 중...</p>
+            )}
+            {editor.networkErrorMessage && (
+              <div className="network-inline-error net-inline-error">
+                <p className="form-error">{editor.networkErrorMessage}</p>
+                <button
+                  className="quick-date-chip"
+                  onClick={() => void runEditorNetworkSearch(pane, editor)}
+                  type="button"
+                >
+                  다시 시도
+                </button>
+              </div>
+            )}
             {editor.networkResults && editor.networkResults.length > 0 && (
               <>
                 <KnowledgeGraphView
-                  activeNodeId="network:query"
                   ariaLabel="커서 문장 기준 유사 메모 그래프"
-                  className="split-knowledge-graph"
+                  className="net-graph-canvas"
                   edges={graph.edges}
                   nodes={graph.nodes}
                   onSelectNode={nodeId => {
                     if (!nodeId.startsWith('network:') || nodeId === 'network:query') {
                       return;
                     }
-
                     const chunkId = nodeId.slice('network:'.length);
-                    const result = editor.networkResults?.find(item => item.chunkId === chunkId);
-                    const target = result?.memoId ? memos.find(m => m.id === result.memoId) : null;
-
-                    if (target) {
-                      onSelectMemoById(target.id);
-                      openMemoInPane(pane.id, target);
+                    const result = editor.networkResults?.find(
+                      item => item.chunkId === chunkId,
+                    );
+                    if (result) {
+                      openResult(result);
                     }
                   }}
                 />
-                <div className="split-network-results">
-                  {editor.networkResults.map(res => (
-                    <button
-                      key={res.chunkId}
-                      className="network-result-card"
-                      onClick={() => {
-                        const target = memos.find(m => m.id === res.memoId);
-                        if (target) {
-                          onSelectMemoById(target.id);
-                          openMemoInPane(pane.id, target);
-                        }
-                      }}
-                    >
-                      <span>유사도 {Math.round(res.similarity * 100)}%</span>
-                      <strong>{res.chunkText}</strong>
-                    </button>
-                  ))}
+                <div className="net-result-dock">
+                  <div className="net-result-dock-head">
+                    <strong>연결된 메모</strong>
+                    <span>유사도 순 · {editor.networkResults.length}</span>
+                  </div>
+                  <div className="net-result-cards">
+                    {editor.networkResults.map(res => (
+                      <button
+                        className="net-result-card"
+                        key={res.chunkId}
+                        onClick={() => openResult(res)}
+                        type="button"
+                      >
+                        <span className="net-card-top">
+                          <span className="net-card-dot" />
+                          <strong className="net-card-title">
+                            {getResultTitle(res, memos)}
+                          </strong>
+                          <span className="net-card-sim">
+                            {Math.round(res.similarity * 100)}%
+                          </span>
+                        </span>
+                        <span className="net-card-bottom">
+                          <span className="net-card-date">
+                            {formatResultDate(res.memoCreatedAt)}
+                          </span>
+                          <span className="net-card-open">
+                            <ExternalLink size={12} />
+                            새 탭으로 노트 열기
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
@@ -1061,6 +1201,15 @@ const MemoSplitWorkspace = ({
       <div className="split-memo-pane-body">
         {renderHighlight(pane, editor, value)}
         <div className="split-editor-assist-row">
+          {memo && (
+            <span className="selected-text-chip save-status-chip">
+              {memo.local_sync_status === 'synced'
+                ? '☁︎ 클라우드 동기화됨'
+                : memo.local_sync_status === 'failed'
+                  ? '! 로컬 저장됨 · 동기화 실패'
+                  : '✓ 로컬 저장됨'}
+            </span>
+          )}
           <button
             className="quick-date-chip"
             onClick={() =>
@@ -1072,15 +1221,14 @@ const MemoSplitWorkspace = ({
           >
             날짜 선택
           </button>
-          <button
+          <TooltipIconButton
             className="ghost-button"
             disabled={!selectedText}
             onClick={() => registerEditorSchedule(editor)}
-            type="button"
+            tooltip="일정 등록"
           >
             <CalendarPlus size={16} />
-            일정 등록
-          </button>
+          </TooltipIconButton>
           {firstDateMatch && (
             <span className="date-detect-chip">
               {firstDateMatch.text} : {format(firstDateMatch.date, 'yyyy.MM.dd')}
@@ -1089,6 +1237,34 @@ const MemoSplitWorkspace = ({
           {selectedText && (
             <span className="selected-text-chip">
               선택됨: {selectedText.length > 30 ? `${selectedText.slice(0, 30)}...` : selectedText}
+            </span>
+          )}
+          {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
+            <button
+              className="ambient-card ambient-card-compact"
+              onClick={() => {
+                const target = ambientResult.memoId
+                  ? memos.find(candidate => candidate.id === ambientResult.memoId)
+                  : null;
+                if (target) {
+                  openMemoInPane(pane.id, target);
+                } else if (ambientResult.sourceKind === 'inbox') {
+                  patchEditorById(pane.id, editor.id, {
+                    sourceResult: ambientResult,
+                    view: 'source',
+                  });
+                }
+              }}
+              type="button"
+            >
+              <span>연결 추천</span>
+              <strong>{ambientResult.chunkText}</strong>
+            </button>
+          )}
+          {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientError && (
+            <span className="ambient-inline-error">
+              {ambientError}
+              <button onClick={onRetryAmbient} type="button">다시 시도</button>
             </span>
           )}
         </div>
@@ -1101,6 +1277,10 @@ const MemoSplitWorkspace = ({
         <SimpleEditor
           hideToolbar
           insertTextRequest={insertTextRequests[editor.id] ?? null}
+          onAmbientIdle={queryText => {
+            patchActiveEditor(pane, { ambientQueryText: queryText });
+            onAmbientQuery?.(editor.id, editor.memoId ?? null, queryText);
+          }}
           onEditorFocus={() => {
             onFocusPane?.(pane.id);
             setActiveEditorInstanceId(pane.id);
@@ -1137,9 +1317,6 @@ const MemoSplitWorkspace = ({
   };
 
   const canUseMemoActions = Boolean(focusedPane && focusedEditor?.view === 'memo');
-  const canRegisterFocusedSchedule = Boolean(
-    canUseMemoActions && focusedEditor?.selectedText?.trim(),
-  );
 
   return (
     <div className="split-workspace-shell">
@@ -1166,18 +1343,7 @@ const MemoSplitWorkspace = ({
           <div className="simple-editor-toolbar-host is-disabled" />
         )}
         <div className="split-workspace-actions" aria-label="레거시 상단 기능">
-          <TooltipIconButton
-            className="split-command-button"
-            disabled={!canRegisterFocusedSchedule}
-            onClick={() => {
-              if (focusedEditor) {
-                registerEditorSchedule(focusedEditor);
-              }
-            }}
-            tooltip="일정 등록"
-          >
-            <CalendarPlus size={16} />
-          </TooltipIconButton>
+          <ThemeToggle className="split-command-button" />
           <TooltipIconButton
             className="split-command-button"
             disabled={!canUseMemoActions || !focusedPane || !focusedEditor}

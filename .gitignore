@@ -138,3 +138,6 @@ backend/*.egg-info/
 *service-account*.json
 google-services.json
 GoogleService-Info.plist
+
+subnota-backend-before-egress.yaml
+subnota-backend-egress.yaml

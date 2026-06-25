@@ -212,6 +212,9 @@ const withParsedTime = (
   }
 
   const scheduledDate = new Date(date);
+  if (hour === 24) {
+    scheduledDate.setDate(scheduledDate.getDate() + 1);
+  }
   scheduledDate.setHours(hour === 24 ? 0 : hour, minute, 0, 0);
 
   return {

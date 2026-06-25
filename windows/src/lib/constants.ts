@@ -2,6 +2,8 @@ export const AMBIENT_IDLE_DELAY_MS = 3000;
 export const AMBIENT_COOLDOWN_MS = 60000;
 export const AMBIENT_MAX_RESULT_COUNT = 1;
 export const AMBIENT_MIN_CHARS = 12;
+export const AMBIENT_MIN_SIMILARITY = 0.48;
+export const NETWORK_MIN_SIMILARITY = 0.35;
 
 export type TopicTimeFilterKey = '1m' | '6m' | '1y' | 'all';
 

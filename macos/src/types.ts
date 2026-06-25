@@ -2,15 +2,29 @@ export interface MemoRow {
   category?: string | null;
   content: string;
   content_hash: string | null;
+  content_updated_at?: string | null;
   created_at: string;
   id: string;
   is_archived: boolean | null;
   local_sync_status?: 'failed' | 'pending' | 'pending_delete' | 'synced';
+  // Server content_hash as of the last successful sync/pull. Used as the
+  // optimistic-concurrency base when pushing edits (see upsert_memo_if_base_hash).
+  synced_content_hash?: string | null;
   updated_at: string;
 }
 
+export type MemoSaveState =
+  | 'failed'
+  | 'idle'
+  | 'local'
+  | 'local-failed'
+  | 'saving-local'
+  | 'synced'
+  | 'syncing';
+
 export interface CalendarBlockRow {
   all_day: boolean | null;
+  all_day_date?: string | null;
   color: string | null;
   created_at: string;
   end_date: string | null;
@@ -21,6 +35,7 @@ export interface CalendarBlockRow {
   order: number | null;
   start_date: string;
   title: string;
+  time_zone?: string | null;
   updated_at: string;
 }
 

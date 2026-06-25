@@ -18,6 +18,8 @@ import {
   EnvelopeIcon,
   EyeIcon,
   EyeSlashIcon,
+  FolderIcon,
+  FolderOpenIcon,
   InboxIcon,
   MagnifyingGlassIcon,
   MinusIcon,
@@ -62,6 +64,8 @@ export const ChevronRight = adapt(ChevronRightIcon);
 export const ExternalLink = adapt(ArrowTopRightOnSquareIcon);
 export const Eye = adapt(EyeIcon);
 export const EyeOff = adapt(EyeSlashIcon);
+export const Folder = adapt(FolderIcon);
+export const FolderOpen = adapt(FolderOpenIcon);
 export const Inbox = adapt(InboxIcon);
 export const LogOut = adapt(ArrowRightStartOnRectangleIcon);
 export const Mail = adapt(EnvelopeIcon);

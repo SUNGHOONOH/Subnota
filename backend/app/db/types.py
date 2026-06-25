@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
+@dataclass
 class MemoRecord:
     id: str
     content: str
@@ -11,5 +12,6 @@ class MemoRecord:
     topic_dirty: bool
     created_at: str | None
     updated_at: str | None
+    content_updated_at: str | None
 
 DatabaseRow = dict[str, Any]

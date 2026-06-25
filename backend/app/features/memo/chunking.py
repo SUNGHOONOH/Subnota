@@ -10,7 +10,7 @@ from app.features.topics.discovery import encode_texts
 
 
 class MemoChunkRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=constants.MEMO_CHUNK_SPLIT_MAX_CHARS)
     cursor_index: int | None = None
     include_embeddings: bool = False
 

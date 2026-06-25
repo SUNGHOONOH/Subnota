@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-settings', listener);
     return () => ipcRenderer.removeListener('open-settings', listener);
   },
+  onNewMemo: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('new-memo', listener);
+    return () => ipcRenderer.removeListener('new-memo', listener);
+  },
   readFile: (filePath: string): Promise<{ path: string; content: string }> => {
     return ipcRenderer.invoke('read-file', filePath);
   },
@@ -73,4 +78,116 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelOAuth: (): Promise<void> => {
     return ipcRenderer.invoke('cancel-oauth');
   },
+  consumeOAuthCallback: (): Promise<{
+    code: string | null;
+    error: string | null;
+  } | null> => {
+    return ipcRenderer.invoke('consume-oauth-callback');
+  },
+  localDbSetOwner: (ownerId: string | null): Promise<void> =>
+    ipcRenderer.invoke('local-db:set-owner', ownerId),
+  localDbList: (ownerId: string | null, recordType: string): Promise<unknown[]> =>
+    ipcRenderer.invoke('local-db:list', ownerId, recordType),
+  localDbUpsert: (
+    ownerId: string | null,
+    recordType: string,
+    recordId: string,
+    value: unknown,
+  ): Promise<void> => ipcRenderer.invoke('local-db:upsert', ownerId, recordType, recordId, value),
+  localDbDelete: (
+    ownerId: string | null,
+    recordType: string,
+    recordId: string,
+  ): Promise<void> => ipcRenderer.invoke('local-db:delete', ownerId, recordType, recordId),
+  localDbReplaceSynced: (
+    ownerId: string | null,
+    recordType: string,
+    values: unknown[],
+  ): Promise<unknown[]> =>
+    ipcRenderer.invoke('local-db:replace-synced', ownerId, recordType, values),
+  localDbMigrate: (ownerId: string | null, datasets: unknown): Promise<void> =>
+    ipcRenderer.invoke('local-db:migrate', ownerId, datasets),
+  onMiniPrefill: (callback: (text: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+    ipcRenderer.on('mini-prefill', listener);
+    return () => ipcRenderer.removeListener('mini-prefill', listener);
+  },
+  onMiniRecentInbox: (
+    callback: (items: Array<{ title: string; url: string; sourceLabel: string }>) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      items: Array<{ title: string; url: string; sourceLabel: string }>,
+    ) => callback(items);
+    ipcRenderer.on('mini-recent-inbox', listener);
+    return () => ipcRenderer.removeListener('mini-recent-inbox', listener);
+  },
+  onMiniStatus: (callback: (message: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, message: string) =>
+      callback(message);
+    ipcRenderer.on('mini-status', listener);
+    return () => ipcRenderer.removeListener('mini-status', listener);
+  },
+  closeMini: () => {
+    ipcRenderer.send('mini-close');
+  },
+  notifyMiniSaved: () => {
+    ipcRenderer.send('mini-saved');
+  },
+  showMainWindow: () => {
+    ipcRenderer.send('open-main-window');
+  },
+  setGlobalShortcuts: (settings: {
+    capturePage: string;
+    openSearch: string;
+    toggleMini: string;
+  }) => {
+    return ipcRenderer.invoke('set-global-shortcuts', settings);
+  },
+  onShortcutSettingsChanged: (
+    callback: (settings: {
+      capturePage: string;
+      openSearch: string;
+      toggleMini: string;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      settings: { capturePage: string; openSearch: string; toggleMini: string },
+    ) => callback(settings);
+    ipcRenderer.on('shortcut-settings-changed', listener);
+    return () => ipcRenderer.removeListener('shortcut-settings-changed', listener);
+  },
+  onMemosUpdated: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('memos-updated', listener);
+    return () => ipcRenderer.removeListener('memos-updated', listener);
+  },
+  getDesktopPreferences: (): Promise<{
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }> => ipcRenderer.invoke('desktop-preferences:get'),
+  setDesktopPreferences: (preferences: {
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }): Promise<{
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }> => ipcRenderer.invoke('desktop-preferences:set', preferences),
+  getLocalStorageInfo: (): Promise<{
+    databasePath: string;
+    size: number;
+  }> => ipcRenderer.invoke('local-db:storage-info'),
+  chooseLocalStorage: (): Promise<{
+    databasePath: string;
+    size: number;
+  } | null> => ipcRenderer.invoke('local-db:choose-storage'),
+  openLocalStorage: (): Promise<void> =>
+    ipcRenderer.invoke('local-db:open-storage'),
+  backupLocalData: (): Promise<string | null> =>
+    ipcRenderer.invoke('local-db:backup'),
+  restoreLocalData: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke('local-db:restore', filePath),
+  exportJson: (name: string, value: unknown): Promise<string | null> =>
+    ipcRenderer.invoke('local-db:export-json', name, value),
 });

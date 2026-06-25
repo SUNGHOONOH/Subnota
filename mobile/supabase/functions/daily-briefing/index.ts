@@ -313,7 +313,7 @@ const generateBriefing = async ({
 serve(async (req) => {
   try {
     if (
-      dailyBriefingCronKey &&
+      !dailyBriefingCronKey ||
       req.headers.get('x-daily-briefing-key') !== dailyBriefingCronKey
     ) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -325,7 +325,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const { data: users, error: userError } = await supabase
       .from('profiles')
-      .select('id, push_token, briefing_time')
+      .select('id, briefing_time')
 
     if (userError) throw userError
 
@@ -363,10 +363,6 @@ serve(async (req) => {
       )
 
       if (briefingError) throw briefingError
-
-      if (user.push_token) {
-        console.log(`Push is not implemented yet. Token: ${user.push_token}`)
-      }
 
       results.push({
         past_chunk_source: past.source,

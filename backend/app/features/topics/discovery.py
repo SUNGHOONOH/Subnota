@@ -16,10 +16,13 @@ from app.core.config import settings
 from app.db import (
     DatabaseRow,
     MemoRecord,
+    content_hash_for_memo,
+    fetch_topic_memo_embeddings,
     fetch_user_memos,
     has_topic_dirty_memos,
     mark_topic_memos_clean,
     replace_topic_clusters,
+    upsert_topic_memo_embeddings,
 )
 
 DATE_TOKEN_RE = re.compile(
@@ -69,6 +72,9 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
     memos = fetch_user_memos(request.user_id)
 
     if len(memos) < constants.TOPIC_MIN_MEMOS and not request.force:
+        if request.persist:
+            replace_topic_clusters(request.user_id, [], [], [])
+            mark_topic_memos_clean(request.user_id, memos)
         return TopicDiscoveryResponse(
             status="skipped",
             user_id=request.user_id,
@@ -81,6 +87,9 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
         )
 
     if not memos:
+        if request.persist:
+            replace_topic_clusters(request.user_id, [], [], [])
+            mark_topic_memos_clean(request.user_id, memos)
         return TopicDiscoveryResponse(
             status="skipped",
             user_id=request.user_id,
@@ -93,7 +102,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
         )
 
     normalized_texts = [normalize_for_embedding(memo.content) for memo in memos]
-    embeddings = encode_texts(normalized_texts)
+    embeddings = load_or_create_topic_embeddings(request.user_id, memos, normalized_texts)
     labels, clustering_method = cluster_embeddings(embeddings)
     grouped = group_memos_by_cluster(memos, labels)
     results, storage_clusters, memberships, edges = build_topic_results(
@@ -107,7 +116,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
 
     if request.persist:
         replace_topic_clusters(request.user_id, storage_clusters, memberships, edges)
-        mark_topic_memos_clean(request.user_id)
+        mark_topic_memos_clean(request.user_id, memos)
 
     return TopicDiscoveryResponse(
         status="ok",
@@ -124,11 +133,48 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
 FloatArray = Any
 
 
+def load_or_create_topic_embeddings(
+    user_id: str,
+    memos: list[MemoRecord],
+    normalized_texts: list[str],
+) -> FloatArray:
+    cached = fetch_topic_memo_embeddings(user_id, [memo.id for memo in memos])
+    content_hashes = [content_hash_for_memo(memo) for memo in memos]
+    missing_indices = [
+        index
+        for index, memo in enumerate(memos)
+        if (memo.id, content_hashes[index]) not in cached
+    ]
+
+    if missing_indices:
+        generated = encode_texts([normalized_texts[index] for index in missing_indices])
+        rows: list[DatabaseRow] = []
+        for generated_index, memo_index in enumerate(missing_indices):
+            memo = memos[memo_index]
+            vector = generated[generated_index]
+            cached[(memo.id, content_hashes[memo_index])] = vector
+            rows.append(
+                {
+                    "user_id": user_id,
+                    "memo_id": memo.id,
+                    "content_hash": content_hashes[memo_index],
+                    "embedding": vector,
+                }
+            )
+        upsert_topic_memo_embeddings(rows)
+
+    ordered = [cached[(memo.id, content_hashes[index])] for index, memo in enumerate(memos)]
+    return normalize_rows(np.asarray(ordered, dtype=np.float64))
+
+
 def encode_texts(texts: list[str]) -> FloatArray:
     if not settings.hf_token:
         raise RuntimeError("HF_TOKEN is required for Hugging Face Inference API embeddings")
 
-    client = InferenceClient(token=settings.hf_token)
+    client = InferenceClient(
+        token=settings.hf_token,
+        timeout=settings.hf_timeout_seconds,
+    )
     batches: list[Any] = []
 
     for start in range(0, len(texts), constants.EMBEDDING_BATCH_SIZE):

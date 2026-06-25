@@ -24,6 +24,13 @@ def format_vector(vector: Any) -> str:
     return "[" + ",".join(str(float(value)) for value in values) + "]"
 
 
+def parse_vector(vector: Any) -> list[float]:
+    if isinstance(vector, str):
+        value = vector.strip().removeprefix("[").removesuffix("]")
+        return [float(item) for item in value.split(",") if item.strip()]
+    return [float(item) for item in vector]
+
+
 def optional_str(value: Any) -> str | None:
     if value is None:
         return None

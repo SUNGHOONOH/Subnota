@@ -1,11 +1,15 @@
 export interface ShortcutSettings {
+  capturePage: string;
   openSearch: string;
+  toggleMini: string;
 }
 
 export const SHORTCUT_STORAGE_KEY = 'subnota.shortcuts.v1';
 
 export const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
+  capturePage: 'Shift+CommandOrControl+S',
   openSearch: 'CommandOrControl+K',
+  toggleMini: 'Alt+S',
 };
 
 const readShortcutValue = (
@@ -16,9 +20,17 @@ const readShortcutValue = (
 export const normalizeShortcutSettings = (
   value?: Partial<ShortcutSettings> | null,
 ): ShortcutSettings => ({
+  capturePage: readShortcutValue(
+    value?.capturePage,
+    DEFAULT_SHORTCUT_SETTINGS.capturePage,
+  ),
   openSearch: readShortcutValue(
     value?.openSearch,
     DEFAULT_SHORTCUT_SETTINGS.openSearch,
+  ),
+  toggleMini: readShortcutValue(
+    value?.toggleMini,
+    DEFAULT_SHORTCUT_SETTINGS.toggleMini,
   ),
 });
 

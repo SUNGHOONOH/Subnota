@@ -1,28 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import Graph from 'graphology';
 import SigmaRenderer from 'sigma';
 
 import { FocusNode, Minus, Plus, RefreshCw } from '../../../components/icons';
 import TooltipIconButton from '../../../components/TooltipIconButton';
+import {
+  buildKnowledgeGraph,
+  createEdgeReducer,
+  createNodeReducer,
+  GRAPH_COLORS,
+  KnowledgeGraphEdge,
+  KnowledgeGraphNode,
+} from './knowledgeGraph';
 
-export interface KnowledgeGraphNode {
-  color?: string;
-  id: string;
-  label: string;
-  muted?: boolean;
-  size?: number;
-  x: number;
-  y: number;
-}
-
-export interface KnowledgeGraphEdge {
-  color?: string;
-  id?: string;
-  size?: number;
-  source: string;
-  target: string;
-  weight?: number;
-}
+export type { KnowledgeGraphEdge, KnowledgeGraphNode } from './knowledgeGraph';
 
 interface KnowledgeGraphViewProps {
   activeNodeId?: string | null;
@@ -34,21 +24,8 @@ interface KnowledgeGraphViewProps {
   onSelectNode?: (nodeId: string) => void;
 }
 
-const ACTIVE_COLOR = '#236b45';
-const DEFAULT_NODE_COLOR = '#5c4d3c';
-const MUTED_NODE_COLOR = '#c8bda9';
-const DEFAULT_EDGE_COLOR = '#d8cebc';
-const ACTIVE_EDGE_COLOR = '#7f8a6f';
 const CAMERA_ANIMATION_DURATION = 220;
 const CONTROL_ZOOM_FACTOR = 1.25;
-
-const normalizeWeight = (weight?: number) => {
-  if (!Number.isFinite(weight)) {
-    return 0.5;
-  }
-
-  return Math.max(0, Math.min(weight ?? 0.5, 1));
-};
 
 const KnowledgeGraphView = ({
   activeNodeId,
@@ -61,39 +38,21 @@ const KnowledgeGraphView = ({
 }: KnowledgeGraphViewProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<SigmaRenderer | null>(null);
-  const graph = useMemo(() => {
-    const nextGraph = new Graph({ multi: true, type: 'undirected' });
 
-    nodes.forEach(node => {
-      const isActive = node.id === activeNodeId;
+  // Selection and the click callback are read through refs so a selection
+  // change (or a new callback identity from the parent) does not rebuild the
+  // renderer — only a structural nodes/edges change does.
+  const activeNodeIdRef = useRef<string | null | undefined>(activeNodeId);
+  const onSelectRef = useRef<typeof onSelectNode>(onSelectNode);
 
-      nextGraph.addNode(node.id, {
-        color: isActive ? ACTIVE_COLOR : node.color ?? (node.muted ? MUTED_NODE_COLOR : DEFAULT_NODE_COLOR),
-        label: node.label,
-        size: (node.size ?? 8) + (isActive ? 3 : 0),
-        x: node.x,
-        y: node.y,
-      });
-    });
-
-    edges.forEach((edge, index) => {
-      if (!nextGraph.hasNode(edge.source) || !nextGraph.hasNode(edge.target)) {
-        return;
-      }
-
-      const isActiveEdge = edge.source === activeNodeId || edge.target === activeNodeId;
-      const weight = normalizeWeight(edge.weight);
-
-      nextGraph.addEdgeWithKey(edge.id ?? `${edge.source}-${edge.target}-${index}`, edge.source, edge.target, {
-        color: edge.color ?? (isActiveEdge ? ACTIVE_EDGE_COLOR : DEFAULT_EDGE_COLOR),
-        size: edge.size ?? 0.6 + weight * 2.4,
-      });
-    });
-
-    return nextGraph;
-  }, [activeNodeId, edges, nodes]);
+  // Structure only — independent of activeNodeId.
+  const graph = useMemo(() => buildKnowledgeGraph(nodes, edges), [nodes, edges]);
 
   const activeNodeExists = Boolean(activeNodeId && graph.hasNode(activeNodeId));
+
+  useEffect(() => {
+    onSelectRef.current = onSelectNode;
+  }, [onSelectNode]);
 
   const handleZoomIn = useCallback(() => {
     void rendererRef.current?.getCamera().animatedZoom({
@@ -144,8 +103,9 @@ const KnowledgeGraphView = ({
 
     const renderer = new SigmaRenderer(graph, container, {
       allowInvalidContainer: true,
-      defaultEdgeColor: DEFAULT_EDGE_COLOR,
-      defaultNodeColor: DEFAULT_NODE_COLOR,
+      defaultEdgeColor: GRAPH_COLORS.defaultEdge,
+      defaultNodeColor: GRAPH_COLORS.defaultNode,
+      edgeReducer: createEdgeReducer(graph, () => activeNodeIdRef.current),
       enableCameraPanning: true,
       enableCameraZooming: true,
       labelColor: { color: '#2c2520' },
@@ -153,6 +113,7 @@ const KnowledgeGraphView = ({
       labelFont: 'inherit',
       labelRenderedSizeThreshold: 8,
       labelSize: 10,
+      nodeReducer: createNodeReducer(() => activeNodeIdRef.current),
       renderEdgeLabels: false,
       zIndex: true,
     });
@@ -161,7 +122,7 @@ const KnowledgeGraphView = ({
     renderer.getCamera().animatedReset({ duration: 250 });
 
     const handleClickNode = ({ node }: { node: string }) => {
-      onSelectNode?.(node);
+      onSelectRef.current?.(node);
     };
 
     renderer.on('clickNode', handleClickNode);
@@ -173,7 +134,14 @@ const KnowledgeGraphView = ({
         rendererRef.current = null;
       }
     };
-  }, [graph, onSelectNode]);
+  }, [graph]);
+
+  // Apply selection changes as a cheap refresh (reducers re-run) instead of
+  // tearing down and rebuilding the WebGL renderer.
+  useEffect(() => {
+    activeNodeIdRef.current = activeNodeId;
+    rendererRef.current?.refresh();
+  }, [activeNodeId]);
 
   const rootClassName = ['knowledge-graph-frame', className].filter(Boolean).join(' ');
 

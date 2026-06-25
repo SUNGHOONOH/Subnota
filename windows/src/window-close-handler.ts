@@ -1,8 +1,20 @@
 import type { BrowserWindow } from 'electron';
 import { dialog, ipcMain } from 'electron';
 
-export function attachCloseHandler(mainWindow: BrowserWindow) {
+export function attachCloseHandler(
+  mainWindow: BrowserWindow,
+  options: { shouldHideOnClose?: () => boolean } = {},
+) {
   let forceClose = false;
+  const finish = () => {
+    if (options.shouldHideOnClose?.()) {
+      mainWindow.hide();
+      return;
+    }
+    forceClose = true;
+    mainWindow.close();
+  };
+
   mainWindow.on('close', (e) => {
     if (forceClose) return;
     e.preventDefault();
@@ -10,8 +22,7 @@ export function attachCloseHandler(mainWindow: BrowserWindow) {
       .executeJavaScript('window.__hasUnsavedChanges?.()')
       .then((dirty: boolean) => {
         if (!dirty) {
-          forceClose = true;
-          mainWindow.close();
+          finish();
           return;
         }
         const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -25,12 +36,10 @@ export function attachCloseHandler(mainWindow: BrowserWindow) {
         if (choice === 0) {
           mainWindow.webContents.send('save-before-close');
           ipcMain.once('save-complete', () => {
-            forceClose = true;
-            mainWindow.close();
+            finish();
           });
         } else if (choice === 1) {
-          forceClose = true;
-          mainWindow.close();
+          finish();
         }
       });
   });

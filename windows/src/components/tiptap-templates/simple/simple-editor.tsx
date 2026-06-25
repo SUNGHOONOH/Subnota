@@ -78,7 +78,6 @@ import { useWindowSize } from "@/hooks/use-window-size"
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 // --- Components ---
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle"
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
@@ -142,22 +141,6 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <MarkButton type="superscript" />
-        <MarkButton type="subscript" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <TextAlignButton align="left" />
-        <TextAlignButton align="center" />
-        <TextAlignButton align="right" />
-        <TextAlignButton align="justify" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
         <ImageUploadButton text="Add" />
       </ToolbarGroup>
 
@@ -171,10 +154,11 @@ const MainToolbarContent = ({
 
       <Spacer />
 
-      {isMobile && <ToolbarSeparator />}
-
       <ToolbarGroup>
-        <ThemeToggle />
+        <TextAlignButton align="left" />
+        <TextAlignButton align="center" />
+        <TextAlignButton align="right" />
+        <TextAlignButton align="justify" />
       </ToolbarGroup>
     </>
   )
@@ -214,6 +198,7 @@ const MobileToolbarContent = ({
 export interface SimpleEditorProps {
   hideToolbar?: boolean;
   insertTextRequest?: { id: string; text: string } | null;
+  onAmbientIdle?: (chunkText: string) => void;
   onEditorFocus?: () => void;
   onEditorReady?: (editor: Editor | null) => void;
   onInsertTextRequestHandled?: (id: string) => void;
@@ -259,6 +244,7 @@ export function SimpleEditorToolbar({ editor }: { editor: Editor | null }) {
 export function SimpleEditor({
   hideToolbar = false,
   insertTextRequest = null,
+  onAmbientIdle,
   onEditorFocus,
   onEditorReady,
   onInsertTextRequestHandled,
@@ -277,6 +263,7 @@ export function SimpleEditor({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const lastInsertTextRequestIdRef = useRef<string | null>(null)
   const lastInjectedTextRef = useRef<string>("")
+  const ambientIdleTimerRef = useRef<number | null>(null)
   const onEditorReadyRef = useRef(onEditorReady)
 
   useEffect(() => {
@@ -407,6 +394,33 @@ export function SimpleEditor({
     editor.on('selectionUpdate', onSelection)
     return () => { editor.off('selectionUpdate', onSelection) }
   }, [editor, onSelectionChange])
+
+  useEffect(() => {
+    if (!editor || !onAmbientIdle) return undefined
+
+    const scheduleAmbientIdle = () => {
+      if (ambientIdleTimerRef.current) {
+        window.clearTimeout(ambientIdleTimerRef.current)
+      }
+      ambientIdleTimerRef.current = window.setTimeout(() => {
+        const { $from } = editor.state.selection
+        const paragraph = $from.parent.textContent
+        const start = Math.max(0, Math.min($from.parentOffset, paragraph.length) - 2000)
+        const chunkText = paragraph.slice(start, start + 4000).trim()
+        onAmbientIdle(chunkText)
+      }, 900)
+    }
+
+    editor.on('update', scheduleAmbientIdle)
+    editor.on('selectionUpdate', scheduleAmbientIdle)
+    return () => {
+      if (ambientIdleTimerRef.current) {
+        window.clearTimeout(ambientIdleTimerRef.current)
+      }
+      editor.off('update', scheduleAmbientIdle)
+      editor.off('selectionUpdate', scheduleAmbientIdle)
+    }
+  }, [editor, onAmbientIdle])
 
   const handleSave = useCallback(async () => {
     // PWA 환경에서는 자동 저장이 동작하므로 수동 저장 단축키는 무시

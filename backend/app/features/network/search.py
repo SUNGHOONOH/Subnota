@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -6,24 +7,34 @@ from pydantic import BaseModel, Field
 from app.core import constants
 from app.db import (
     fetch_cached_embedding,
+    fetch_memo_chunk_neighbors,
+    fetch_memo_chunk_refs,
     search_similar_chunks,
     search_similar_inbox_embeddings,
     upsert_cached_embedding,
 )
 from app.shared.hashing import short_hash
-from app.features.memo.chunking import MemoChunk, MemoChunkRequest, split_memo_chunks
+from app.features.memo.chunking import MemoChunk
 from app.features.topics.discovery import encode_texts
 
 logger = logging.getLogger(__name__)
+NETWORK_SEARCH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=8,
+    thread_name_prefix="network-search",
+)
 
 
 class NetworkSearchRequest(BaseModel):
-    text: str
-    cursor_index: int
+    query_text: str = Field(min_length=1, max_length=constants.NETWORK_QUERY_MAX_CHARS)
     user_id: str = ""
     memo_id: str | None = None
+    cursor_index: int | None = Field(default=None, ge=0)
     limit: int = Field(5, ge=1, le=10)
-
+    minimum_similarity: float = Field(
+        constants.NETWORK_DEFAULT_MIN_SIMILARITY,
+        ge=0,
+        le=1,
+    )
 
 class NetworkSearchResult(BaseModel):
     source_kind: str = "memo"
@@ -54,43 +65,160 @@ class NetworkSearchResponse(BaseModel):
 
 
 def search_network_chunks(request: NetworkSearchRequest) -> NetworkSearchResponse:
-    chunk_response = split_memo_chunks(
-        MemoChunkRequest(text=request.text, cursor_index=request.cursor_index)
-    )
-    query_chunk = chunk_response.cursor_network_chunk
-
-    if query_chunk is None:
+    query_text = request.query_text.strip()
+    if not query_text:
         return NetworkSearchResponse(
             status="skipped",
             model=constants.EMBEDDING_MODEL,
             query_chunk=None,
             results=[],
-            message="No chunk found at cursor.",
+            message="검색할 문단이 비어 있습니다.",
         )
 
-    chunk_hash = short_hash(query_chunk.text)
+    # Hybrid: when the cursor sits on an already-indexed chunk of the active
+    # memo, serve its precomputed neighbours (no live embedding). Falls back to
+    # the live KNN path when the chunk isn't indexed yet or has no edges.
+    if request.memo_id:
+        indexed_chunk = resolve_indexed_chunk(
+            request.user_id,
+            request.memo_id,
+            request.cursor_index,
+            query_text,
+        )
+        if indexed_chunk is not None:
+            precomputed = build_precomputed_response(request, indexed_chunk)
+            if precomputed is not None:
+                return precomputed
+
+    return search_live_network_chunks(request, query_text)
+
+
+def resolve_indexed_chunk(
+    user_id: str,
+    memo_id: str,
+    cursor_index: int | None,
+    query_text: str,
+) -> dict[str, Any] | None:
+    """Map the cursor onto one of the memo's stored chunks, by character offset
+    when available, otherwise by verbatim containment in the cursor paragraph."""
+    refs = fetch_memo_chunk_refs(user_id, memo_id)
+    if not refs:
+        return None
+
+    if cursor_index is not None:
+        for ref in refs:
+            if ref["start_index"] <= cursor_index < ref["end_index"]:
+                return ref
+
+    best: dict[str, Any] | None = None
+    for ref in refs:
+        text = str(ref["chunk_text"]).strip()
+        if text and text in query_text:
+            if best is None or len(text) > len(str(best["chunk_text"])):
+                best = ref
+    return best
+
+
+def build_precomputed_response(
+    request: NetworkSearchRequest,
+    chunk: dict[str, Any],
+) -> NetworkSearchResponse | None:
+    chunk_id = str(chunk["id"])
+    chunk_text = str(chunk["chunk_text"])
+
+    memo_rows = fetch_memo_chunk_neighbors(request.user_id, chunk_id, request.limit)
+    if not memo_rows:
+        # No edges yet (e.g. before the batch rebuild) — signal the caller to
+        # fall back to the live path so results don't regress.
+        return None
+
+    # Inbox connections still come from vector search, but reuse the chunk's
+    # cached embedding (written at index time) so this remains a cache hit.
+    inbox_rows: list[dict[str, Any]] = []
+    cache_hash = short_hash(f"{constants.EMBEDDING_MODEL}:{chunk_text}")
+    embedding = fetch_cached_embedding(request.user_id, cache_hash)
+    if embedding is not None:
+        try:
+            inbox_rows = search_similar_inbox_embeddings(
+                request.user_id, embedding, request.limit
+            )
+        except Exception:
+            logger.warning("inbox embedding search failed", exc_info=True)
+            inbox_rows = []
+
+    results = [memo_row_to_result(row) for row in memo_rows] + [
+        inbox_row_to_result(row) for row in inbox_rows
+    ]
+    results = [
+        result
+        for result in results
+        if result.similarity >= request.minimum_similarity
+    ]
+    results.sort(key=lambda result: result.similarity, reverse=True)
+
+    query_chunk = MemoChunk(
+        id=f"chunk-{chunk_id}",
+        index=0,
+        text=chunk_text,
+        start=0,
+        end=len(chunk_text),
+        sentence_indices=[],
+    )
+    return NetworkSearchResponse(
+        status="ok",
+        model=constants.EMBEDDING_MODEL,
+        query_chunk=query_chunk,
+        results=results[: request.limit],
+        message=None if results else "관련성이 충분한 연결을 찾지 못했습니다.",
+    )
+
+
+def search_live_network_chunks(
+    request: NetworkSearchRequest,
+    query_text: str,
+) -> NetworkSearchResponse:
+    query_hash = short_hash(query_text)
+    query_chunk = MemoChunk(
+        id=f"query-{query_hash}",
+        index=0,
+        text=query_text,
+        start=0,
+        end=len(query_text),
+        sentence_indices=[],
+    )
+
+    chunk_hash = short_hash(f"{constants.EMBEDDING_MODEL}:{query_text}")
     embedding = fetch_cached_embedding(request.user_id, chunk_hash)
     if embedding is None:
-        embedding = encode_texts([query_chunk.text])[0]
-        upsert_cached_embedding(request.user_id, chunk_hash, query_chunk.text, embedding)
+        embedding = encode_texts([query_text])[0]
+        upsert_cached_embedding(request.user_id, chunk_hash, query_text, embedding)
 
-    memo_rows = search_similar_chunks(
+    memo_future = NETWORK_SEARCH_EXECUTOR.submit(
+        search_similar_chunks,
         request.user_id,
         embedding,
         request.memo_id,
         request.limit,
     )
+    inbox_future = NETWORK_SEARCH_EXECUTOR.submit(
+        search_similar_inbox_embeddings,
+        request.user_id,
+        embedding,
+        request.limit,
+    )
+    memo_rows = memo_future.result()
     try:
-        inbox_rows = search_similar_inbox_embeddings(
-            request.user_id,
-            embedding,
-            request.limit,
-        )
+        inbox_rows = inbox_future.result()
     except Exception:
         logger.warning("inbox embedding search failed", exc_info=True)
         inbox_rows = []
     results = [memo_row_to_result(row) for row in memo_rows] + [
         inbox_row_to_result(row) for row in inbox_rows
+    ]
+    results = [
+        result
+        for result in results
+        if result.similarity >= request.minimum_similarity
     ]
     results.sort(key=lambda result: result.similarity, reverse=True)
 
@@ -99,6 +227,7 @@ def search_network_chunks(request: NetworkSearchRequest) -> NetworkSearchRespons
         model=constants.EMBEDDING_MODEL,
         query_chunk=query_chunk,
         results=results[: request.limit],
+        message=None if results else "관련성이 충분한 연결을 찾지 못했습니다.",
     )
 
 

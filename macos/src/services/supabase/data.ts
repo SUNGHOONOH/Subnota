@@ -63,10 +63,32 @@ export const signUpWithPassword = async (email: string, password: string) => {
   return data.session;
 };
 
-// Loopback redirect captured by the main process's local OAuth server. Using
-// the system browser (not an embedded window) avoids Google's
-// "disallowed_useragent" block; the loopback host works in dev and packaged.
-export const OAUTH_REDIRECT_URL = 'http://localhost:8923/auth/callback';
+export const resendSignupOtp = async (email: string) => {
+  const { error } = await supabase.auth.resend({
+    email,
+    type: 'signup',
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const verifySignupOtp = async (email: string, token: string) => {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.session;
+};
+
+export const OAUTH_REDIRECT_URL = 'subnota://auth/callback';
 
 // Build the provider authorize URL (PKCE) without navigating the renderer.
 // signInWithOAuth stores the PKCE code_verifier in this client's storage, so
@@ -147,7 +169,7 @@ export const fetchMemos = async (session: Session) => {
 
   const { data, error } = await supabase
     .from('memos')
-    .select('id, content, content_hash, category, is_archived, created_at, updated_at')
+    .select('id, content, content_hash, synced_content_hash, content_updated_at, category, is_archived, created_at, updated_at')
     .eq('user_id', session.user.id)
     .eq('is_archived', false)
     .order('updated_at', { ascending: false });
@@ -159,45 +181,71 @@ export const fetchMemos = async (session: Session) => {
   return (data ?? []) as MemoRow[];
 };
 
+export type UpsertMemoResult =
+  | { memo: MemoRow; status: 'conflict' | 'inserted' | 'updated' }
+  | { memo: null; status: 'deleted' };
+
 export const upsertMemo = async (
   session: Session,
-  memo: { category?: string | null; content: string; createdAt?: string; id: string },
-) => {
-  const trimmed = memo.content.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
+  memo: {
+    baseHash?: string | null;
+    category?: string | null;
+    content: string;
+    contentUpdatedAt?: string;
+    createdAt?: string;
+    id: string;
+  },
+): Promise<UpsertMemoResult> => {
   const contentHash = hashText(memo.content);
-  const row = {
-    id: memo.id,
-    user_id: session.user.id,
-    content: memo.content,
-    content_hash: contentHash,
-    category: getMemoCategory(memo.category),
-    synced_content_hash: contentHash,
-    sync_status: 'synced',
-    indexed_content_hash: null as string | null,
-    schedule_scanned_hash: null as string | null,
-    schedule_scan_status: 'pending',
-    topic_dirty: true,
-    is_archived: false,
-    created_at: memo.createdAt ?? new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+  const contentUpdatedAt = memo.contentUpdatedAt ?? new Date().toISOString();
+  const createdAt = memo.createdAt ?? new Date().toISOString();
 
-  const { data, error } = await supabase
-    .from('memos')
-    .upsert(row, { onConflict: 'id' })
-    .select('id, content, content_hash, category, is_archived, created_at, updated_at')
-    .single();
+  // Optimistic-concurrency upsert: on a concurrent edit the server keeps its
+  // version and preserves ours as a conflict copy (returned via next fetchMemos)
+  // instead of letting this push blindly overwrite it.
+  const { data, error } = await supabase.rpc('upsert_memo_if_base_hash', {
+    p_id: memo.id,
+    p_base_hash: memo.baseHash ?? null,
+    p_content: memo.content,
+    p_content_hash: contentHash,
+    p_category: getMemoCategory(memo.category),
+    p_content_updated_at: contentUpdatedAt,
+    p_created_at: createdAt,
+  });
 
   if (error) {
     throw error;
   }
 
-  return data as MemoRow;
+  const result = (Array.isArray(data) ? data[0] : data) as
+    | { content: string | null; content_hash: string | null; status: string }
+    | undefined;
+
+  if (!result) {
+    throw new Error('upsert_memo_if_base_hash returned no row');
+  }
+
+  if (result.status === 'deleted') {
+    return { memo: null, status: 'deleted' };
+  }
+
+  // For 'conflict' the canonical content is the server's; for insert/update it
+  // is ours. Exact timestamps are reconciled on the next fetchMemos.
+  const canonicalContent = result.content ?? memo.content;
+  const canonicalHash = result.content_hash ?? contentHash;
+  const row: MemoRow = {
+    category: getMemoCategory(memo.category),
+    content: canonicalContent,
+    content_hash: canonicalHash,
+    content_updated_at: contentUpdatedAt,
+    created_at: createdAt,
+    id: memo.id,
+    is_archived: false,
+    synced_content_hash: canonicalHash,
+    updated_at: contentUpdatedAt,
+  };
+
+  return { memo: row, status: result.status as 'conflict' | 'inserted' | 'updated' };
 };
 
 export const archiveMemo = async (session: Session, memoId: string) => {
@@ -216,7 +264,7 @@ export const fetchCalendarBlocks = async (session: Session) => {
   const { data, error } = await supabase
     .from('calendar_blocks')
     .select(
-      'id, title, note, start_date, end_date, all_day, order, color, is_completed, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, created_at, updated_at',
     )
     .eq('user_id', session.user.id)
     .order('start_date', { ascending: true });
@@ -226,6 +274,15 @@ export const fetchCalendarBlocks = async (session: Session) => {
   }
 
   return (data ?? []) as CalendarBlockRow[];
+};
+
+const toLocalCalendarDate = (value: string) => {
+  const date = new Date(value);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 };
 
 export const upsertCalendarBlock = async (
@@ -251,6 +308,8 @@ export const upsertCalendarBlock = async (
         start_date: block.startDate,
         end_date: null,
         all_day: block.allDay,
+        all_day_date: block.allDay ? toLocalCalendarDate(block.startDate) : null,
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         order: block.order ?? 0,
         color: block.color,
         is_completed: false,
@@ -258,7 +317,7 @@ export const upsertCalendarBlock = async (
       { onConflict: 'id' },
     )
     .select(
-      'id, title, note, start_date, end_date, all_day, order, color, is_completed, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, created_at, updated_at',
     )
     .single();
 

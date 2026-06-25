@@ -255,6 +255,7 @@ mobile/supabase/migrations/20260602_hnsw_vector_indexes.sql
 mobile/supabase/migrations/20260611_inbox_client_id.sql
 mobile/supabase/migrations/20260611_memo_category.sql
 mobile/supabase/migrations/20260613_inbox_sessions_updated_order.sql
+mobile/supabase/migrations/20260620_topic_memo_embedding_cache.sql
 ```
 
 The schema defines:
@@ -265,6 +266,7 @@ The schema defines:
 - `schedule_inbox`
 - `memo_chunks`
 - `chunk_embedding_cache`
+- `topic_memo_embedding_cache`
 - `briefings`
 - `topic_clusters`
 - `topic_cluster_memos`

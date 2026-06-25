@@ -24,3 +24,33 @@ export const buildMemoSearchIndex = (memos: MemoRow[]) => {
 
   return index;
 };
+
+export const syncMemoSearchIndex = (
+  index: ReturnType<typeof buildMemoSearchIndex>,
+  indexedVersions: Map<string, string>,
+  memos: MemoRow[],
+) => {
+  const nextVersions = new Map(
+    memos.map(memo => [
+      memo.id,
+      `${getMemoCategory(memo.category)}\u0000${memo.content_hash ?? memo.content}`,
+    ]),
+  );
+
+  for (const id of indexedVersions.keys()) {
+    if (!nextVersions.has(id)) index.discard(id);
+  }
+  for (const memo of memos) {
+    const document = {
+      category: getMemoCategory(memo.category),
+      content: memo.content,
+      id: memo.id,
+    };
+    if (!indexedVersions.has(memo.id)) index.add(document);
+    else if (indexedVersions.get(memo.id) !== nextVersions.get(memo.id)) index.replace(document);
+  }
+
+  indexedVersions.clear();
+  nextVersions.forEach((version, id) => indexedVersions.set(id, version));
+  return index;
+};

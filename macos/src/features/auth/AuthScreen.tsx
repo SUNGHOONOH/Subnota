@@ -4,16 +4,19 @@ import { Eye, EyeOff, Mail } from '@/components/icons';
 import {
   createProviderAuthUrl,
   exchangeOAuthCode,
+  resendSignupOtp,
   sendPasswordResetOtp,
   signInWithPassword,
   signUpWithPassword,
   updateUserPassword,
   verifyRecoveryOtp,
+  verifySignupOtp,
 } from '../../services/supabase/data';
 import { isSupabaseConfigured, supabase } from '../../services/supabase/client';
 import AuthCharacters from './AuthCharacters';
 import PasswordConfirmInput from './PasswordConfirmInput';
 import ResetPasswordForm from './ResetPasswordForm';
+import SignupOtpForm from './SignupOtpForm';
 import { isStrongPassword, PASSWORD_REQUIREMENTS } from './authValidation';
 
 interface AuthScreenProps {
@@ -67,7 +70,7 @@ const fadeUp = {
 };
 
 const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
-  const [view, setView] = useState<'auth' | 'reset'>('auth');
+  const [view, setView] = useState<'auth' | 'reset' | 'signupOtp'>('auth');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(initialError);
   const [notice, setNotice] = useState<string | null>(null);
@@ -101,6 +104,40 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
       setError(initialError);
     }
   }, [initialError]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.electronAPI?.consumeOAuthCallback?.().then(async callback => {
+      if (!callback || cancelled) return;
+      if (callback.error) {
+        throw new Error(callback.error);
+      }
+      if (!callback.code) {
+        throw new Error('로그인 응답에서 코드를 찾지 못했습니다.');
+      }
+
+      setOauthPending(true);
+      const session = await exchangeOAuthCode(callback.code);
+      if (!session) {
+        throw new Error('소셜 로그인 세션을 만들지 못했습니다.');
+      }
+    }).catch(caught => {
+      if (!cancelled) {
+        setError(
+          caught instanceof Error
+            ? friendlyAuthError(stripIpcPrefix(caught.message))
+            : '소셜 로그인에 실패했습니다.',
+        );
+      }
+    }).finally(() => {
+      if (!cancelled) setOauthPending(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleMode = () => {
     setSignUp(value => !value);
@@ -139,7 +176,7 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
         : await signInWithPassword(trimmedEmail, password);
 
       if (!session && isSignUp) {
-        setNotice('확인 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.');
+        setView('signupOtp');
       } else if (!session) {
         setError('메일 인증이 완료되지 않았습니다. 메일함(스팸함 포함)을 확인해 주세요.');
       }
@@ -235,6 +272,41 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
                   setView('auth');
                   setError(null);
                 });
+              }}
+            />
+          </motion.div>
+        </section>
+      </main>
+    );
+  }
+
+  if (view === 'signupOtp') {
+    return (
+      <main className="desktop-auth-container two-col">
+        <AuthCharacterAside isTyping={false} password={password} showPassword={showPassword} />
+        <section className="desktop-auth-panel">
+          <motion.div
+            className="desktop-auth-card"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <SignupOtpForm
+              email={trimmedEmail}
+              onVerifyCode={async code => {
+                const session = await verifySignupOtp(trimmedEmail, code);
+                return Boolean(session);
+              }}
+              onResendCode={async () => {
+                await resendSignupOtp(trimmedEmail);
+              }}
+              onCancel={() => {
+                setView('auth');
+                setSignUp(false);
+                setError(null);
+                setNotice(null);
+                setPassword('');
+                setPasswordConfirmation('');
               }}
             />
           </motion.div>

@@ -32,6 +32,7 @@ export const syncPendingMemos = async (
   }
 
   const {
+    applyRemoteMemo,
     deletedMemoIds,
     markMemoDeletedSynced,
     markMemoSynced,
@@ -69,38 +70,50 @@ export const syncPendingMemos = async (
 
   for (const memo of pendingMemos) {
     const contentHash = memo.contentHash ?? hashText(memo.content);
-    const contentChanged = memo.syncedContentHash !== contentHash;
-    const memoRow = {
-      id: memo.id,
-      user_id: user.id,
-      content: memo.content,
-      category: memo.category,
-      content_hash: contentHash,
-      synced_content_hash: contentHash,
-      sync_status: 'synced',
-      is_archived: Boolean(memo.deletedAt),
-      created_at: new Date(memo.createdAt).toISOString(),
-      updated_at: new Date(memo.updatedAt).toISOString(),
-      ...(contentChanged
-        ? {
-            indexed_content_hash: null,
-            schedule_scanned_hash: null,
-            schedule_scan_status: 'pending',
-            topic_dirty: true,
-          }
-        : {}),
-    };
 
     try {
-      const { error } = await supabase
-        .from('memos')
-        .upsert(memoRow, { onConflict: 'id' });
+      // Optimistic-concurrency upsert keyed on the last-synced content hash.
+      // On a concurrent edit the server keeps its version and preserves ours as
+      // a conflict copy instead of letting this push blindly overwrite it.
+      const { data, error } = await supabase.rpc('upsert_memo_if_base_hash', {
+        p_id: memo.id,
+        p_base_hash: memo.syncedContentHash ?? null,
+        p_content: memo.content,
+        p_content_hash: contentHash,
+        p_category: memo.category,
+        p_content_updated_at: new Date(memo.updatedAt).toISOString(),
+        p_created_at: new Date(memo.createdAt).toISOString(),
+      });
 
       if (error) {
         throw error;
       }
 
-      markMemoSynced(memo.id, contentHash);
+      const result = (Array.isArray(data) ? data[0] : data) as
+        | { content: string | null; content_hash: string | null; status: string }
+        | undefined;
+
+      if (!result) {
+        throw new Error('upsert_memo_if_base_hash returned no row');
+      }
+
+      if (result.status === 'conflict') {
+        // Another device changed this memo first. Adopt the canonical version;
+        // our edit is preserved server-side as a conflict copy.
+        applyRemoteMemo(
+          memo.id,
+          result.content ?? memo.content,
+          result.content_hash ?? contentHash,
+          memo.category,
+        );
+      } else if (result.status === 'deleted') {
+        // Deleted on another device (delete-wins). Stop re-pushing; this
+        // push-only client keeps its local copy.
+        markMemoSynced(memo.id, contentHash);
+      } else {
+        markMemoSynced(memo.id, result.content_hash ?? contentHash);
+      }
+
       syncedCount += 1;
     } catch {
       markMemoSyncFailed(memo.id);

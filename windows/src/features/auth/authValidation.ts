@@ -8,4 +8,6 @@ export const PASSWORD_REQUIREMENTS = [
 export const isStrongPassword = (password: string) =>
   PASSWORD_REQUIREMENTS.every(requirement => requirement.test(password));
 
-export const isCompleteRecoveryOtp = (value: string) => /^\d{6}$/.test(value);
+export const isCompleteOtp = (value: string) => /^\d{6}$/.test(value);
+
+export const isCompleteRecoveryOtp = isCompleteOtp;

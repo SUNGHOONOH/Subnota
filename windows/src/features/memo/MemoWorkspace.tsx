@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { Badge } from '@mantine/core';
 import {
   CalendarPlus,
+  ChevronRight,
+  ExternalLink,
+  Folder,
+  FolderOpen,
   Network,
   NotebookText,
   PanelLeft,
@@ -28,10 +33,16 @@ import {
 } from '../../lib/constants';
 import { DateMatch, formatRelativeDisplayDate } from '../../lib/dateParser';
 import { formatMemoDate } from '../../lib/date';
-import { buildMemoSearchIndex } from '../../lib/memoSearch';
+import { buildMemoSearchIndex, syncMemoSearchIndex } from '../../lib/memoSearch';
 import { MemoChunk } from '../../lib/memoChunker';
 import { NetworkSearchResult } from '../../services/backend/networkService';
-import { MemoRow, TopicCluster, TopicMemoEdge, TopicMembership } from '../../types';
+import {
+  MemoRow,
+  MemoSaveState,
+  TopicCluster,
+  TopicMemoEdge,
+  TopicMembership,
+} from '../../types';
 import KnowledgeGraphView, {
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
@@ -39,6 +50,7 @@ import KnowledgeGraphView, {
 
 interface MemoWorkspaceProps {
   activeMemoId: string | null;
+  ambientError?: string | null;
   ambientQueryChunk: MemoChunk | null;
   ambientResult: NetworkSearchResult | null;
   dateMatches: DateMatch[];
@@ -50,9 +62,11 @@ interface MemoWorkspaceProps {
   isSessionCollapsed?: boolean;
   openMemoPaneNumbers?: Record<string, number>;
   onChangeDraft: (value: string) => void;
+  onAmbientQuery?: (queryText: string) => void;
   onDeleteMemo: () => void;
   onNewMemo: () => void;
   onOpenNetwork: () => void;
+  onRetryAmbient?: () => void;
   openSearchSignal?: number;
   onToggleSession: () => void;
   onRegisterSelectionSchedule: () => void;
@@ -60,12 +74,13 @@ interface MemoWorkspaceProps {
   onSelectMemo: (memo: MemoRow) => void;
   onSelectMemoById: (memoId: string) => void;
   onSelectRange: (start: number, end: number, text?: string) => void;
-  saveState: 'idle' | 'saving' | 'saved' | 'failed';
+  saveState: MemoSaveState;
   selectedText: string;
   title: string;
   topicClusters: TopicCluster[];
   topicEdges: TopicMemoEdge[];
   topicMemberships: TopicMembership[];
+  workspaceContent?: ReactNode;
 }
 
 interface TopicNode {
@@ -83,7 +98,7 @@ interface NetworkDetail {
   result: NetworkSearchResult;
 }
 
-type SidebarMode = 'time' | 'network' | 'search';
+type SidebarMode = 'time' | 'network' | 'search' | 'folders';
 type TopicDetailMode = 'quick' | 'relation';
 
 const SESSION_RAIL_WIDTH = 284;
@@ -118,6 +133,22 @@ const getMemoPreview = (memo: MemoRow) => {
   const preview = lines[1] ?? lines[0] ?? '내용 없음';
 
   return preview.length > 38 ? `${preview.slice(0, 38).trimEnd()}...` : preview;
+};
+
+const MemoSyncBadge = ({ memo }: { memo: MemoRow }) => {
+  if (!memo.local_sync_status) return null;
+  const isSynced = memo.local_sync_status === 'synced';
+  const isFailed = memo.local_sync_status === 'failed';
+  const label = isSynced
+    ? '클라우드 동기화됨'
+    : isFailed
+      ? '클라우드 동기화 실패'
+      : '로컬 저장됨';
+  return (
+    <span aria-label={label} className="memo-sync-badge" title={label}>
+      {isSynced ? '☁︎' : isFailed ? '!' : '✓'}
+    </span>
+  );
 };
 
 const getSections = (memos: MemoRow[]) => {
@@ -332,6 +363,19 @@ const HighlightedMemo = ({ result }: { result: NetworkSearchResult }) => {
   );
 };
 
+// Coral shades for connected-memo dots, darker = more similar (design palette).
+const networkSimilarityColor = (similarity: number) => {
+  if (similarity >= 0.9) return '#cc785c';
+  if (similarity >= 0.8) return '#d4866b';
+  if (similarity >= 0.7) return '#dfa085';
+  return '#e4a98e';
+};
+
+const formatNetworkResultDate = (result: NetworkSearchResult) => {
+  const ms = result.memoUpdatedAt ?? result.memoCreatedAt ?? result.createdAt;
+  return ms ? format(new Date(ms), 'M월 d일') : '';
+};
+
 const formatNetworkSourceLabel = (result: NetworkSearchResult) => {
   if (result.sourceKind === 'inbox') {
     return result.sourceLabel ?? '수집함';
@@ -355,6 +399,7 @@ const formatNetworkSourceLabel = (result: NetworkSearchResult) => {
 
 const MemoWorkspace = ({
   activeMemoId,
+  ambientError = null,
   isSessionCollapsed = false,
   openMemoPaneNumbers,
   ambientQueryChunk,
@@ -366,9 +411,11 @@ const MemoWorkspace = ({
   networkQueryChunk,
   networkResults,
   onChangeDraft,
+  onAmbientQuery,
   onDeleteMemo,
   onNewMemo,
   onOpenNetwork,
+  onRetryAmbient,
   openSearchSignal,
   onToggleSession,
   onRegisterSelectionSchedule,
@@ -382,22 +429,32 @@ const MemoWorkspace = ({
   topicClusters,
   topicEdges,
   topicMemberships,
+  workspaceContent,
 }: MemoWorkspaceProps) => {
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [networkDetail, setNetworkDetail] = useState<NetworkDetail | null>(null);
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('time');
+  const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const searchIndex = useMemo(() => buildMemoSearchIndex(memos), [memos]);
+  const searchIndexRef = useRef(buildMemoSearchIndex([]));
+  const indexedMemoVersionsRef = useRef(new Map<string, string>());
+  const [searchIndexVersion, setSearchIndexVersion] = useState(0);
+  useEffect(() => {
+    syncMemoSearchIndex(searchIndexRef.current, indexedMemoVersionsRef.current, memos);
+    setSearchIndexVersion(version => version + 1);
+  }, [memos]);
   const searchResults = useMemo(() => {
     const query = searchQuery.trim();
     if (!query) {
       return memos.slice(0, 12);
     }
     const byId = new Map(memos.map(memo => [memo.id, memo]));
-    return searchIndex
+    return searchIndexRef.current
       .search(query, {
         boost: { category: 1.4 },
         fuzzy: query.length > 2 ? 0.2 : false,
@@ -406,7 +463,7 @@ const MemoWorkspace = ({
       .slice(0, 20)
       .map(result => byId.get(String(result.id)))
       .filter((memo): memo is MemoRow => Boolean(memo));
-  }, [memos, searchIndex, searchQuery]);
+  }, [memos, searchIndexVersion, searchQuery]);
 
   // App이 검색 단축키로 openSearchSignal을 올리면 검색 모드로 전환한다.
   useEffect(() => {
@@ -446,6 +503,24 @@ const MemoWorkspace = ({
       ? sidebarMemos.filter(memo => activeTopicMemoIds.has(memo.id))
       : sidebarMemos;
   const sections = getSections(visibleMemos);
+  // Topic clusters (State A) rendered as collapsible folders in the session
+  // rail. Reuses getTopicMemoRows so a folder lists the same member memos the
+  // topic detail view would, sorted by membership score then folder size.
+  const topicFolders = useMemo(
+    () =>
+      topicClusters
+        .map(cluster => ({
+          cluster,
+          rows: getTopicMemoRows({
+            memberships: topicMemberships,
+            memos,
+            topicId: cluster.id,
+          }),
+        }))
+        .filter(folder => folder.rows.length > 0)
+        .sort((a, b) => b.rows.length - a.rows.length),
+    [memos, topicClusters, topicMemberships],
+  );
   const topicNodes = useMemo(
     () =>
       buildTopicNodes({
@@ -639,6 +714,17 @@ const MemoWorkspace = ({
     setTopicDetailMode('quick');
   };
 
+  const toggleTopicFolder = (topicId: string) =>
+    setExpandedTopicIds(previous => {
+      const next = new Set(previous);
+      if (next.has(topicId)) {
+        next.delete(topicId);
+      } else {
+        next.add(topicId);
+      }
+      return next;
+    });
+
   return (
     <div className="memo-layout">
       {isSessionCollapsed && (
@@ -688,6 +774,17 @@ const MemoWorkspace = ({
             <Search size={18} />
           </TooltipIconButton>
           <TooltipIconButton
+            className={sidebarMode === 'folders' ? 'active' : ''}
+            onClick={() => {
+              setActiveTopicId(null);
+              setSidebarMode('folders');
+            }}
+            placement="bottom"
+            tooltip="토픽 폴더"
+          >
+            <Folder size={18} />
+          </TooltipIconButton>
+          <TooltipIconButton
             onClick={onToggleSession}
             placement="bottom"
             tooltip="사이드바 접기"
@@ -733,6 +830,7 @@ const MemoWorkspace = ({
                     <span>
                       {formatMemoDate(memo.updated_at)} · {getMemoPreview(memo)}
                     </span>
+                    <MemoSyncBadge memo={memo} />
                   </button>
                 ))
               )}
@@ -742,7 +840,7 @@ const MemoWorkspace = ({
           <>
             <div className="session-header">
               <div>
-                <h2>세션</h2>
+                <h2>노트</h2>
                 <p>{activeTopic ? `필터: ${activeTopic.label}` : '최근 메모'}</p>
               </div>
               <span>{visibleMemos.length}</span>
@@ -759,15 +857,6 @@ const MemoWorkspace = ({
               </button>
             )}
 
-            <button
-              className="new-memo-row"
-              onClick={onNewMemo}
-              type="button"
-            >
-              <Plus size={16} />
-              새 메모
-            </button>
-
             <div className="session-list">
               {sections.map(section => (
                 <section key={section.title}>
@@ -783,13 +872,19 @@ const MemoWorkspace = ({
                       <span>
                         {formatMemoDate(memo.updated_at)} · {getMemoPreview(memo)}
                       </span>
+                      <MemoSyncBadge memo={memo} />
                       {openMemoPaneNumbers?.[memo.id] && (
-                        <span
+                        <Badge
+                          circle
                           className="memo-pane-badge"
+                          color="teal"
+                          component="span"
+                          size="sm"
                           title={`패널 ${openMemoPaneNumbers[memo.id]}에서 열림`}
+                          variant="filled"
                         >
                           {openMemoPaneNumbers[memo.id]}
-                        </span>
+                        </Badge>
                       )}
                     </button>
                   ))}
@@ -799,6 +894,78 @@ const MemoWorkspace = ({
                 <p className="empty-text">
                   이 필터에 해당하는 메모가 없습니다.
                 </p>
+              )}
+            </div>
+          </>
+        ) : sidebarMode === 'folders' ? (
+          <>
+            <div className="session-header">
+              <div>
+                <h2>토픽 폴더</h2>
+                <p>
+                  {topicClusters.length > 0
+                    ? 'State A 토픽 클러스터'
+                    : '아직 토픽이 없습니다'}
+                </p>
+              </div>
+              <span>{topicFolders.length}</span>
+            </div>
+            <div className="topic-folder-list">
+              {topicFolders.length === 0 ? (
+                <p className="empty-text">
+                  저녁 batch가 topic_clusters를 만들면 여기에 폴더가 표시됩니다.
+                </p>
+              ) : (
+                topicFolders.map(({ cluster, rows }) => {
+                  const isExpanded = expandedTopicIds.has(cluster.id);
+
+                  return (
+                    <section className="topic-folder" key={cluster.id}>
+                      <button
+                        aria-expanded={isExpanded}
+                        className="topic-folder-head"
+                        onClick={() => toggleTopicFolder(cluster.id)}
+                        type="button"
+                      >
+                        <span className="topic-folder-chevron">
+                          <ChevronRight size={14} />
+                        </span>
+                        {isExpanded ? (
+                          <FolderOpen size={16} />
+                        ) : (
+                          <Folder size={16} />
+                        )}
+                        <span className="topic-folder-label">
+                          {cluster.label}
+                        </span>
+                        <em className="topic-folder-count">{rows.length}</em>
+                      </button>
+                      {isExpanded && (
+                        <div className="topic-folder-memos">
+                          {rows.map(({ memo }) => (
+                            <button
+                              className={
+                                memo.id === activeMemoId
+                                  ? 'memo-row active'
+                                  : 'memo-row'
+                              }
+                              key={memo.id}
+                              onClick={() => onSelectMemo(memo)}
+                              type="button"
+                            >
+                              <strong>{getMemoTitle(memo)}</strong>
+                              <span>
+                                {formatMemoDate(memo.updated_at)} ·{' '}
+                                {getMemoPreview(memo)}
+                              </span>
+                              <MemoSyncBadge memo={memo} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })
               )}
             </div>
           </>
@@ -860,29 +1027,43 @@ const MemoWorkspace = ({
        </div>
       </motion.aside>
 
+      {workspaceContent ?? (
       <main className="memo-editor-shell">
         <div className="editor-toolbar">
           <div>
             <p className="eyebrow">
-              {saveState === 'saving'
-                ? '저장 중'
+              <span className="save-state-icon" aria-hidden="true">
+                {saveState === 'synced' || saveState === 'syncing' || saveState === 'failed'
+                  ? '☁︎'
+                  : saveState === 'local-failed'
+                    ? '!'
+                    : '✓'}
+              </span>
+              {saveState === 'saving-local'
+                ? '로컬 저장 중'
+                : saveState === 'syncing'
+                  ? '클라우드 동기화 중'
                 : saveState === 'failed'
-                  ? '저장 실패'
-                  : '저장됨'}
+                  ? '로컬 저장됨 · 동기화 실패'
+                  : saveState === 'local-failed'
+                    ? '로컬 저장 실패'
+                  : saveState === 'local'
+                    ? '로컬 저장됨'
+                    : saveState === 'synced'
+                      ? '클라우드 동기화됨'
+                      : '저장됨'}
             </p>
             <h2>{title}</h2>
           </div>
           <div className="toolbar-buttons">
-            <button
+            <TooltipIconButton
               className="ghost-button"
               disabled={!selectedText.trim()}
               onClick={onRegisterSelectionSchedule}
-              title="선택한 문장을 캘린더 블럭으로 등록"
-              type="button"
+              tooltip="일정 등록"
             >
               <CalendarPlus size={16} />
-              일정 등록
-            </button>
+            </TooltipIconButton>
             <button
               className="ghost-button"
               onClick={onOpenNetwork}
@@ -910,6 +1091,7 @@ const MemoWorkspace = ({
             onInsertTextRequestHandled={id => {
               setInsertTextRequest(current => (current?.id === id ? null : current));
             }}
+            onAmbientIdle={onAmbientQuery}
             value={memoDraft}
             onChange={onChangeDraft}
             onSelectionChange={(selectedText: string, from: number, to: number) => {
@@ -919,16 +1101,6 @@ const MemoWorkspace = ({
           />
         </div>
         <div className="editor-assist-row">
-          {['오늘', '내일', '모레'].map(token => (
-            <button
-              className="quick-date-chip"
-              key={token}
-              onClick={() => appendDateToken(token)}
-              type="button"
-            >
-              {token}
-            </button>
-          ))}
           <button
             className="quick-date-chip"
             onClick={() => setDatePickerOpen(value => !value)}
@@ -946,6 +1118,22 @@ const MemoWorkspace = ({
               선택됨: {truncate(selectedText, 30)}
             </span>
           )}
+          {ambientResult && (
+            <button
+              className="ambient-card ambient-card-compact"
+              onClick={() => openNetworkDetail(ambientQueryChunk, ambientResult)}
+              type="button"
+            >
+              <span>{formatNetworkSourceLabel(ambientResult)}</span>
+              <strong>{truncate(ambientResult.chunkText, 72)}</strong>
+            </button>
+          )}
+          {ambientError && (
+            <span className="ambient-inline-error">
+              {ambientError}
+              <button onClick={onRetryAmbient} type="button">다시 시도</button>
+            </span>
+          )}
         </div>
         {isDatePickerOpen && (
           <DateSchedulePopover
@@ -953,33 +1141,8 @@ const MemoWorkspace = ({
             onClose={() => setDatePickerOpen(false)}
           />
         )}
-
-        {ambientResult && (
-          <button
-            className="ambient-card"
-            onClick={() => openNetworkDetail(ambientQueryChunk, ambientResult)}
-            type="button"
-          >
-            <span>{formatNetworkSourceLabel(ambientResult)}</span>
-            <strong>{truncate(ambientResult.chunkText, 72)}</strong>
-          </button>
-        )}
-
         {(networkQueryChunk || networkError || networkResults.length > 0) && (
-          <section className="network-panel">
-            <div className="network-panel-header">
-              <div>
-                <p className="eyebrow">Network</p>
-                <h3>커서 문장 기준 연결</h3>
-              </div>
-            </div>
-            {networkQueryChunk && (
-              <div className="network-query">
-                <span>지금 문장</span>
-                <p>{networkQueryChunk.text}</p>
-              </div>
-            )}
-            {networkError && <p className="form-error">{networkError}</p>}
+          <section className="network-panel network-immersive">
             {networkQueryChunk && networkResults.length > 0 && (
               <KnowledgeGraphView
                 activeNodeId="network:query"
@@ -1001,26 +1164,84 @@ const MemoWorkspace = ({
                 }}
               />
             )}
-            <div className="network-results">
-              {networkResults.map(result => (
-                <button
-                  className="network-result"
-                  key={result.chunkId}
-                  onClick={() => openNetworkDetail(networkQueryChunk, result)}
-                  type="button"
-                >
-                  <span>
-                    {formatNetworkSourceLabel(result)} · 유사도{' '}
-                    {Math.round(result.similarity * 100)}%
-                  </span>
-                  <strong>{result.chunkText}</strong>
-                  <p>{truncate(result.memoContent ?? result.title ?? '', 130)}</p>
+
+            {networkError && (
+              <div className="network-inline-error">
+                <p className="form-error">{networkError}</p>
+                <button className="quick-date-chip" onClick={onOpenNetwork} type="button">
+                  다시 시도
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {networkQueryChunk && (
+              <div className="network-sentence-card">
+                <span className="network-sentence-eyebrow">지금 문장</span>
+                <p>{networkQueryChunk.text}</p>
+              </div>
+            )}
+
+            {networkResults.length > 0 && (
+              <div className="network-connected">
+                <div className="network-connected-head">
+                  <span className="network-connected-eyebrow">연결된 메모</span>
+                  <span className="network-connected-count">
+                    유사도 순 · {networkResults.length}
+                  </span>
+                </div>
+                <div className="network-connected-scroll">
+                  {networkResults.map(result => {
+                    const memo = result.memoId
+                      ? memos.find(item => item.id === result.memoId)
+                      : undefined;
+                    return (
+                      <button
+                        className="network-connected-card"
+                        key={result.chunkId}
+                        onClick={() => openNetworkDetail(networkQueryChunk, result)}
+                        type="button"
+                      >
+                        <div className="network-connected-card-top">
+                          <span
+                            className="network-connected-dot"
+                            style={{
+                              backgroundColor: networkSimilarityColor(result.similarity),
+                            }}
+                          />
+                          <strong>{result.chunkText}</strong>
+                          <span className="network-connected-pct">
+                            {Math.round(result.similarity * 100)}%
+                          </span>
+                        </div>
+                        <div className="network-connected-card-bottom">
+                          <span className="network-connected-date">
+                            {formatNetworkResultDate(result)}
+                          </span>
+                          {memo && (
+                            <span
+                              className="network-connected-open"
+                              onClick={event => {
+                                event.stopPropagation();
+                                onSelectMemo(memo);
+                              }}
+                              role="button"
+                              tabIndex={0}
+                            >
+                              <ExternalLink size={12} />
+                              새 탭으로 노트 열기
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
         )}
       </main>
+      )}
 
       {selectedTopic && (
         <div className="modal-backdrop detail-backdrop" role="presentation">

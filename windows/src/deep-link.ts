@@ -8,6 +8,7 @@
 // Kept free of Electron imports so it can be unit-tested in plain Node.
 
 export type SubnotaDeepLink =
+  | { kind: 'auth'; code: string | null; error: string | null }
   | { kind: 'memo'; text: string }
   | { kind: 'capture'; url: string; title: string };
 
@@ -25,6 +26,16 @@ export const parseSubnotaUrl = (raw: string): SubnotaDeepLink | null => {
 
   // For `subnota://memo?...` the action is the host; tolerate `subnota:///memo`.
   const action = url.hostname || url.pathname.replace(/^\/+/, '');
+
+  if (action === 'auth' && url.pathname === '/callback') {
+    const code = url.searchParams.get('code');
+    const error =
+      url.searchParams.get('error_description') ?? url.searchParams.get('error');
+    if (!code && !error) {
+      return null;
+    }
+    return { kind: 'auth', code, error };
+  }
 
   if (action === 'memo') {
     return { kind: 'memo', text: url.searchParams.get('text') ?? '' };

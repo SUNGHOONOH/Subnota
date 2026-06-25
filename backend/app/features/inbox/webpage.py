@@ -9,6 +9,7 @@ from app.db import DatabaseRow
 from app.features.inbox.constants import (
     IMPORTANT_JSON_TEXT_KEYS,
     MAX_EXTRACTED_TEXT_CHARS,
+    MAX_FETCH_BYTES,
     MAX_FETCH_REDIRECTS,
     MIN_USEFUL_EXTRACTED_TEXT_CHARS,
     PLAYWRIGHT_NAVIGATION_TIMEOUT_MS,
@@ -18,7 +19,11 @@ from app.features.inbox.constants import (
     USER_AGENT,
 )
 from app.features.inbox.utils import clean_text, optional_str
-from app.shared.url_guard import ensure_public_http_url
+from app.shared.url_guard import (
+    build_ssrf_safe_client,
+    ensure_public_http_url,
+    resolve_public_ip_literal,
+)
 
 try:
     from playwright.sync_api import sync_playwright
@@ -54,23 +59,44 @@ def fetch_static_html(url: str) -> str:
     is rejected even if the original URL was public.
     """
     current = ensure_public_http_url(url)
-    with httpx.Client(
+    with build_ssrf_safe_client(
         follow_redirects=False,
         timeout=12,
         headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"},
     ) as client:
         for _ in range(MAX_FETCH_REDIRECTS):
-            response = client.get(current)
-            if response.is_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    break
-                current = ensure_public_http_url(urljoin(current, location))
-                continue
-            response.raise_for_status()
-            return response.text
+            with client.stream("GET", current) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        break
+                    current = ensure_public_http_url(urljoin(current, location))
+                    continue
+                response.raise_for_status()
+                return _read_capped_text(response)
 
     raise ValueError(f"Too many redirects while fetching: {url}")
+
+
+def _read_capped_text(response: httpx.Response) -> str:
+    """Read a streamed response body, aborting if it exceeds MAX_FETCH_BYTES.
+
+    Guards against memory exhaustion from a malicious or runaway URL. The
+    Content-Length header (when present) is rejected up front; the streamed
+    byte total is enforced regardless, since the header can lie or be absent.
+    """
+    declared = response.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > MAX_FETCH_BYTES:
+        raise ValueError(f"Response exceeds maximum size: {declared} bytes")
+    total = 0
+    chunks: list[bytes] = []
+    for chunk in response.iter_bytes():
+        total += len(chunk)
+        if total > MAX_FETCH_BYTES:
+            raise ValueError(f"Response exceeds maximum size: over {MAX_FETCH_BYTES} bytes")
+        chunks.append(chunk)
+    body = b"".join(chunks)
+    return body.decode(response.encoding or "utf-8", errors="replace")
 
 
 def extract_page_metadata_from_html(
@@ -123,7 +149,7 @@ def fetch_rendered_page_html(url: str) -> str | None:
         return None
 
     try:
-        ensure_public_http_url(url)
+        host, _port, host_ip = resolve_public_ip_literal(url)
     except ValueError:
         return None
 
@@ -133,7 +159,15 @@ def fetch_rendered_page_html(url: str) -> str | None:
         playwright = sync_playwright().start()
         browser = playwright.chromium.launch(
             headless=True,
-            args=["--disable-dev-shm-usage", "--no-sandbox"],
+            args=[
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                # Pin the validated public IP so the browser connects to the same
+                # address we checked, closing the DNS-rebinding gap (the route
+                # guard below still re-validates redirects/subresources to other
+                # hosts). Mirrors the httpx path's connect-time IP pinning.
+                f"--host-resolver-rules=MAP {host} {host_ip},EXCLUDE localhost",
+            ],
         )
         page = browser.new_page(
             user_agent=USER_AGENT,

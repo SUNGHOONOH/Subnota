@@ -34,6 +34,7 @@ interface ElectronAPI {
   ) => () => void;
   onMemosUpdated: (callback: () => void) => () => void;
   onOpenSettings: (callback: () => void) => () => void;
+  onNewMemo: (callback: () => void) => () => void;
   onInboxCapture: (
     callback: (payload: { url?: string; title?: string; error?: string }) => void,
   ) => () => void;
@@ -53,6 +54,52 @@ interface ElectronAPI {
   setAuthWindowMode: (isAuthMode: boolean) => Promise<boolean>;
   startOAuth: (authUrl: string) => Promise<string>;
   cancelOAuth: () => Promise<void>;
+  consumeOAuthCallback: () => Promise<{
+    code: string | null;
+    error: string | null;
+  } | null>;
+  localDbSetOwner: (ownerId: string | null) => Promise<void>;
+  localDbList: (ownerId: string | null, recordType: string) => Promise<unknown[]>;
+  localDbUpsert: (
+    ownerId: string | null,
+    recordType: string,
+    recordId: string,
+    value: unknown,
+  ) => Promise<void>;
+  localDbDelete: (
+    ownerId: string | null,
+    recordType: string,
+    recordId: string,
+  ) => Promise<void>;
+  localDbReplaceSynced: (
+    ownerId: string | null,
+    recordType: string,
+    values: unknown[],
+  ) => Promise<unknown[]>;
+  localDbMigrate: (ownerId: string | null, datasets: unknown) => Promise<void>;
+  getDesktopPreferences: () => Promise<{
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }>;
+  setDesktopPreferences: (preferences: {
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }) => Promise<{
+    closeBehavior: 'quit' | 'tray';
+    launchAtLogin: boolean;
+  }>;
+  getLocalStorageInfo: () => Promise<{
+    databasePath: string;
+    size: number;
+  }>;
+  chooseLocalStorage: () => Promise<{
+    databasePath: string;
+    size: number;
+  } | null>;
+  openLocalStorage: () => Promise<void>;
+  backupLocalData: () => Promise<string | null>;
+  restoreLocalData: (filePath: string) => Promise<void>;
+  exportJson: (name: string, value: unknown) => Promise<string | null>;
 }
 
 interface Window {

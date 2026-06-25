@@ -34,6 +34,8 @@ vi.mock('electron', () => ({
   nativeImage: {
     createFromPath: vi.fn(() => ({ isEmpty: () => true })),
   },
+  net: { fetch: vi.fn() },
+  protocol: { handle: vi.fn(), registerSchemesAsPrivileged: vi.fn() },
   screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) },
   session: { defaultSession: { webRequest: { onHeadersReceived: vi.fn() } } },
   shell: { openExternal: vi.fn() },

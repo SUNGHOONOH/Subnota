@@ -1,11 +1,15 @@
+import logging
+
 from pydantic import BaseModel, Field
 
+from app.core import constants
 from app.db import (
     fetch_profile_ids,
     fetch_profile_ids_with_dirty_chunk_memos,
     fetch_profile_ids_with_dirty_schedule_memos,
     fetch_profile_ids_with_dirty_topics,
 )
+from app.db.rate_limits import prune_chunk_embedding_cache
 from app.features.memo.indexing import (
     MemoChunkIndexRequest,
     MemoChunkIndexResponse,
@@ -21,6 +25,8 @@ from app.features.topics.discovery import (
     TopicDiscoveryResponse,
     run_topic_discovery,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DailyMaintenanceRequest(BaseModel):
@@ -61,6 +67,8 @@ class DirtyMemoChunkIndexUsersResponse(BaseModel):
     processed_user_count: int
     processed_memo_count: int
     indexed_chunk_count: int
+    failed_memo_count: int
+    stale_memo_count: int
     results: list[MemoChunkIndexResponse]
 
 
@@ -110,7 +118,7 @@ def run_daily_maintenance(request: DailyMaintenanceRequest) -> DailyMaintenanceR
     )
 
     return DailyMaintenanceResponse(
-        status="ok",
+        status="partial" if chunk_index.status != "ok" else "ok",
         schedule=schedule,
         chunk_index=chunk_index,
         topic=topic,
@@ -133,7 +141,7 @@ def run_daily_maintenance_for_all(
     ]
 
     return DailyMaintenanceAllResponse(
-        status="ok",
+        status="partial" if any(result.status != "ok" for result in results) else "ok",
         processed_user_count=len(results),
         results=results,
     )
@@ -142,6 +150,10 @@ def run_daily_maintenance_for_all(
 def index_dirty_memo_chunks_for_dirty_users(
     request: DirtyMemoChunkIndexUsersRequest,
 ) -> DirtyMemoChunkIndexUsersResponse:
+    prune_chunk_embedding_cache(
+        constants.NETWORK_CACHE_MAX_AGE_DAYS,
+        constants.NETWORK_CACHE_MAX_ROWS_PER_USER,
+    )
     user_ids = fetch_profile_ids_with_dirty_chunk_memos(
         user_limit=request.user_limit,
         row_scan_limit=request.row_scan_limit,
@@ -157,11 +169,13 @@ def index_dirty_memo_chunks_for_dirty_users(
     ]
 
     return DirtyMemoChunkIndexUsersResponse(
-        status="ok",
+        status="partial" if any(result.status != "ok" for result in results) else "ok",
         selected_user_count=len(user_ids),
         processed_user_count=len(results),
         processed_memo_count=sum(result.processed_memo_count for result in results),
         indexed_chunk_count=sum(result.indexed_chunk_count for result in results),
+        failed_memo_count=sum(result.failed_memo_count for result in results),
+        stale_memo_count=sum(result.stale_memo_count for result in results),
         results=results,
     )
 
@@ -202,19 +216,40 @@ def run_topic_discovery_for_dirty_users(
         user_limit=request.user_limit,
         row_scan_limit=request.row_scan_limit,
     )
-    results = [
-        run_topic_discovery(
-            TopicDiscoveryRequest(
-                user_id=user_id,
-                force=request.force,
-                persist=True,
+    results: list[TopicDiscoveryResponse] = []
+
+    for user_id in user_ids:
+        try:
+            results.append(
+                run_topic_discovery(
+                    TopicDiscoveryRequest(
+                        user_id=user_id,
+                        force=request.force,
+                        persist=True,
+                    )
+                )
             )
-        )
-        for user_id in user_ids
-    ]
+        except Exception:
+            logger.warning(
+                "topic discovery failed for user %s",
+                user_id,
+                exc_info=True,
+            )
+            results.append(
+                TopicDiscoveryResponse(
+                    status="failed",
+                    user_id=user_id,
+                    memo_count=0,
+                    cluster_count=0,
+                    model=constants.EMBEDDING_MODEL,
+                    clustering_method=None,
+                    clusters=[],
+                    message="Topic discovery failed. See backend logs.",
+                )
+            )
 
     return DirtyTopicDiscoveryUsersResponse(
-        status="ok",
+        status="partial" if any(result.status == "failed" for result in results) else "ok",
         selected_user_count=len(user_ids),
         processed_user_count=len(results),
         completed_user_count=sum(1 for result in results if result.status == "ok"),

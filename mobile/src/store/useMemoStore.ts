@@ -85,6 +85,12 @@ interface MemoState {
   deleteMemo: (id: string) => void;
   toggleMemoPinned: (id: string) => void;
   markMemoSynced: (id: string, contentHash: string) => void;
+  applyRemoteMemo: (
+    id: string,
+    content: string,
+    contentHash: string,
+    category?: string,
+  ) => void;
   markMemoDeletedSynced: (id: string) => void;
   markMemoSyncFailed: (id: string) => void;
   markMemoScheduleScanned: (id: string, contentHash: string) => void;
@@ -361,6 +367,23 @@ export const useMemoStore = create<MemoState>()(
                   contentHash,
                   lastSyncedAt: Date.now(),
                   syncedContentHash: contentHash,
+                  syncStatus: 'synced',
+                }
+              : m,
+          ),
+        })),
+
+      applyRemoteMemo: (id, content, contentHash, category) =>
+        set(state => ({
+          memos: state.memos.map(m =>
+            m.id === id
+              ? {
+                  ...m,
+                  content,
+                  contentHash,
+                  syncedContentHash: contentHash,
+                  category: category ?? m.category,
+                  lastSyncedAt: Date.now(),
                   syncStatus: 'synced',
                 }
               : m,

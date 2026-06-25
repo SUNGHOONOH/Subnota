@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMemoSearchIndex } from '../lib/memoSearch';
+import { buildMemoSearchIndex, syncMemoSearchIndex } from '../lib/memoSearch';
 import type { MemoRow } from '../types';
 
 const makeMemo = (overrides: Partial<MemoRow>): MemoRow =>
@@ -36,5 +36,21 @@ describe('buildMemoSearchIndex', () => {
     const ids = index.search('회의', { prefix: true }).map(result => result.id);
 
     expect(ids).toEqual(['a']);
+  });
+
+  it('replaces only changed documents in an existing index', () => {
+    const index = buildMemoSearchIndex([]);
+    const versions = new Map<string, string>();
+    syncMemoSearchIndex(index, versions, [
+      makeMemo({ id: 'a', content: '기존 검색어', content_hash: 'old' }),
+      makeMemo({ id: 'b', content: '유지되는 메모', content_hash: 'same' }),
+    ]);
+    syncMemoSearchIndex(index, versions, [
+      makeMemo({ id: 'a', content: '새 검색어', content_hash: 'new' }),
+      makeMemo({ id: 'b', content: '유지되는 메모', content_hash: 'same' }),
+    ]);
+
+    expect(index.search('기존')).toEqual([]);
+    expect(index.search('새').map(result => result.id)).toEqual(['a']);
   });
 });

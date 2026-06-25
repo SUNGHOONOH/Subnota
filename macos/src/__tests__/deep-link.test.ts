@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { parseSubnotaUrl } from '../deep-link';
 
 describe('parseSubnotaUrl', () => {
+  it('parses an OAuth callback with a one-time code', () => {
+    expect(parseSubnotaUrl('subnota://auth/callback?code=one-time-code')).toEqual({
+      kind: 'auth',
+      code: 'one-time-code',
+      error: null,
+    });
+  });
+
+  it('parses an OAuth callback error', () => {
+    expect(
+      parseSubnotaUrl('subnota://auth/callback?error=access_denied'),
+    ).toEqual({
+      kind: 'auth',
+      code: null,
+      error: 'access_denied',
+    });
+  });
+
+  it('rejects an empty OAuth callback', () => {
+    expect(parseSubnotaUrl('subnota://auth/callback')).toBeNull();
+  });
+
   it('parses a memo link with text', () => {
     expect(parseSubnotaUrl('subnota://memo?text=hello%20world')).toEqual({
       kind: 'memo',

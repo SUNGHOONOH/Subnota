@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
+import { CalendarDays } from '@/components/icons';
 import { formatBriefingDate } from '../../lib/date';
 import { BriefingRow, ScheduleInboxRow } from '../../types';
+import DateSchedulePopover from '../memo/components/DateSchedulePopover';
 
 interface BriefingWorkspaceProps {
   briefings: BriefingRow[];
@@ -21,6 +24,19 @@ const getPreview = (content: string) => {
   return line.length > 70 ? `${line.slice(0, 70).trimEnd()}...` : line;
 };
 
+// A candidate "has a time" only when it is not all-day and the extractor found a
+// time phrase. Otherwise approving it opens the mini calendar to pick one.
+const hasScheduledTime = (item: ScheduleInboxRow) =>
+  !item.all_day && item.time_text !== null;
+
+const formatScheduleDate = (item: ScheduleInboxRow) => {
+  const date = new Date(item.scheduled_at);
+  if (!hasScheduledTime(item)) {
+    return `${format(date, 'M월 d일 (EEE)', { locale: ko })} · 시간 미정`;
+  }
+  return format(date, 'M월 d일 (EEE) · a h:mm', { locale: ko });
+};
+
 const BriefingWorkspace = ({
   briefings,
   inboxItems,
@@ -28,14 +44,17 @@ const BriefingWorkspace = ({
   onDismissInbox,
 }: BriefingWorkspaceProps) => {
   const [isBriefingInboxOpen, setBriefingInboxOpen] = useState(false);
-  const [isScheduleInboxOpen, setScheduleInboxOpen] = useState(false);
   const [editingInbox, setEditingInbox] = useState<ScheduleInboxRow | null>(null);
   const [editingTime, setEditingTime] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
   const [selectedBriefing, setSelectedBriefing] = useState<BriefingRow | null>(
     null,
   );
+  const [approvingItem, setApprovingItem] = useState<ScheduleInboxRow | null>(
+    null,
+  );
   const latestBriefing = briefings[0] ?? null;
+
   const openInboxEditor = (item: ScheduleInboxRow) => {
     const scheduledAt = new Date(item.scheduled_at);
 
@@ -55,6 +74,15 @@ const BriefingWorkspace = ({
       title: editingTitle.trim() || editingInbox.title,
     });
     setEditingInbox(null);
+  };
+
+  // 승인: 시간이 있으면 바로 등록, 없으면 미니 캘린더로 날짜를 먼저 받는다.
+  const handleApprove = (item: ScheduleInboxRow) => {
+    if (hasScheduledTime(item)) {
+      onAcceptInbox(item);
+    } else {
+      setApprovingItem(item);
+    }
   };
 
   return (
@@ -78,34 +106,74 @@ const BriefingWorkspace = ({
         </p>
       </button>
 
-      <div className="briefing-cards">
+      {briefings.length > 0 && (
         <button
-          className="inbox-card filled"
+          className="briefing-history-link"
           onClick={() => setBriefingInboxOpen(true)}
           type="button"
         >
-          <div>
-            <strong>과거 브리핑 인박스</strong>
-            <span>
-              {latestBriefing
-                ? getPreview(latestBriefing.content)
-                : '매일 저녁 생성된 브리핑이 쌓입니다'}
-            </span>
-          </div>
-          <em>{briefings.length}</em>
+          과거 브리핑 {briefings.length}개 보기
         </button>
+      )}
 
-        <button
-          className="inbox-card"
-          onClick={() => setScheduleInboxOpen(true)}
-          type="button"
-        >
-          <div>
-            <strong>흩어진 일정 모아보기</strong>
-            <span>저녁 batch가 찾은 후보를 정리합니다</span>
-          </div>
-          <em>{inboxItems.length}</em>
-        </button>
+      <div className="schedule-approve-header">
+        <strong>저장할 일정</strong>
+        <span className="count">{inboxItems.length}</span>
+        <span className="hint">메모에서 찾은 일정 후보예요</span>
+      </div>
+
+      <div className="schedule-approve-list">
+        {inboxItems.length === 0 && (
+          <p className="empty-text">아직 쌓인 일정 후보가 없습니다.</p>
+        )}
+        {inboxItems.map(item => (
+          <article className="schedule-approve-card" key={item.id}>
+            <strong className="schedule-approve-title">{item.title}</strong>
+            <div className="schedule-approve-date">
+              <CalendarDays size={14} />
+              {formatScheduleDate(item)}
+            </div>
+            <p className="schedule-approve-body">{item.source_text}</p>
+            <div className="schedule-approve-actions">
+              <button
+                className="approve-btn"
+                onClick={() => handleApprove(item)}
+                type="button"
+              >
+                승인
+              </button>
+              <button
+                className="edit-btn"
+                onClick={() => openInboxEditor(item)}
+                type="button"
+              >
+                수정
+              </button>
+              <button
+                className="reject-btn"
+                onClick={() => onDismissInbox(item)}
+                type="button"
+              >
+                거절
+              </button>
+            </div>
+            {approvingItem?.id === item.id && (
+              <div className="schedule-approve-picker">
+                <DateSchedulePopover
+                  onApplyDate={(date, allDay) => {
+                    onAcceptInbox({
+                      ...item,
+                      scheduled_at: date.toISOString(),
+                      all_day: allDay,
+                    });
+                    setApprovingItem(null);
+                  }}
+                  onClose={() => setApprovingItem(null)}
+                />
+              </div>
+            )}
+          </article>
+        ))}
       </div>
 
       {isBriefingInboxOpen && (
@@ -139,62 +207,6 @@ const BriefingWorkspace = ({
                   <strong>{formatBriefingDate(item.briefing_date, item.created_at)}</strong>
                   <span>{getPreview(item.content)}</span>
                 </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {isScheduleInboxOpen && (
-        <div className="modal-backdrop" role="presentation">
-          <section className="sheet-panel">
-            <div className="sheet-handle" />
-            <div className="sheet-title-row">
-              <div>
-                <p className="eyebrow">Schedule Inbox</p>
-                <h2>흩어진 일정</h2>
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => setScheduleInboxOpen(false)}
-                type="button"
-              >
-                닫기
-              </button>
-            </div>
-            <div className="schedule-card-row">
-              {inboxItems.length === 0 && (
-                <p className="empty-text">아직 쌓인 일정 후보가 없습니다.</p>
-              )}
-              {inboxItems.map(item => (
-                <article className="schedule-card" key={item.id}>
-                  <span>{format(new Date(item.scheduled_at), 'M월 d일 HH:mm')}</span>
-                  <strong>{item.title}</strong>
-                  <p>{item.source_text}</p>
-                  <div>
-                    <button
-                      className="primary-button"
-                      onClick={() => onAcceptInbox(item)}
-                      type="button"
-                    >
-                      캘린더에 등록
-                    </button>
-                    <button
-                      className="secondary-button"
-                      onClick={() => openInboxEditor(item)}
-                      type="button"
-                    >
-                      수정
-                    </button>
-                    <button
-                      className="secondary-button"
-                      onClick={() => onDismissInbox(item)}
-                      type="button"
-                    >
-                      무시
-                    </button>
-                  </div>
-                </article>
               ))}
             </div>
           </section>

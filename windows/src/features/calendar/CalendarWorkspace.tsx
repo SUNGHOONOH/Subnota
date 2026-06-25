@@ -50,8 +50,18 @@ const TONE_STYLE: Record<string, { accent: string; bg: string; text: string }> =
 const getTone = (color: string | null) =>
   TONE_STYLE[(color ?? '').toUpperCase()] ?? TONE_STYLE[DEFAULT_COLOR];
 
+const parseLocalDate = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getBlockStart = (block: CalendarBlockRow) =>
+  block.all_day && block.all_day_date
+    ? parseLocalDate(block.all_day_date)
+    : new Date(block.start_date);
+
 const getRange = (block: CalendarBlockRow) => {
-  const start = new Date(block.start_date);
+  const start = getBlockStart(block);
   const end = block.end_date
     ? new Date(block.end_date)
     : new Date(start.getTime() + HOUR_MS);
@@ -164,7 +174,7 @@ const CalendarWorkspace = ({
     setEditingBlock(block ?? null);
     setTitle(block?.title ?? '');
     setNote(block?.note ?? '');
-    const base = block ? new Date(block.start_date) : date;
+    const base = block ? getBlockStart(block) : date;
     setSelectedDate(toLocalInputDate(base));
     setTime(block?.all_day ? '' : format(base, 'HH:mm'));
     setEditorOpen(true);
@@ -187,10 +197,10 @@ const CalendarWorkspace = ({
 
   const dayEvents = (date: Date) =>
     blocks
-      .filter(block => isSameDay(new Date(block.start_date), date))
+      .filter(block => isSameDay(getBlockStart(block), date))
       .sort(
         (a, b) =>
-          new Date(a.start_date).getTime() - new Date(b.start_date).getTime(),
+          getBlockStart(a).getTime() - getBlockStart(b).getTime(),
       );
 
   const renderMonth = () => (
@@ -243,7 +253,7 @@ const CalendarWorkspace = ({
                       <span className="cal-chip-title">{block.title}</span>
                       {!block.all_day && (
                         <span className="cal-chip-time">
-                          {format(new Date(block.start_date), 'a h:mm')}
+                          {format(getBlockStart(block), 'a h:mm')}
                         </span>
                       )}
                     </button>

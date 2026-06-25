@@ -78,7 +78,6 @@ import { useWindowSize } from "@/hooks/use-window-size"
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 // --- Components ---
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle"
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
@@ -142,22 +141,6 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <MarkButton type="superscript" />
-        <MarkButton type="subscript" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <TextAlignButton align="left" />
-        <TextAlignButton align="center" />
-        <TextAlignButton align="right" />
-        <TextAlignButton align="justify" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
         <ImageUploadButton text="Add" />
       </ToolbarGroup>
 
@@ -171,10 +154,11 @@ const MainToolbarContent = ({
 
       <Spacer />
 
-      {isMobile && <ToolbarSeparator />}
-
       <ToolbarGroup>
-        <ThemeToggle />
+        <TextAlignButton align="left" />
+        <TextAlignButton align="center" />
+        <TextAlignButton align="right" />
+        <TextAlignButton align="justify" />
       </ToolbarGroup>
     </>
   )
@@ -429,10 +413,11 @@ export function SimpleEditor({
       }
 
       ambientIdleTimerRef.current = window.setTimeout(() => {
-        const chunkText = editor.state.selection.$from.parent.textContent.trim()
-        if (chunkText) {
-          onAmbientIdle(chunkText)
-        }
+        const { $from } = editor.state.selection
+        const paragraph = $from.parent.textContent
+        const start = Math.max(0, Math.min($from.parentOffset, paragraph.length) - 2000)
+        const chunkText = paragraph.slice(start, start + 4000).trim()
+        onAmbientIdle(chunkText)
       }, 900)
     }
 

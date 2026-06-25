@@ -1,11 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, Eye, EyeOff, XCircle } from '@/components/icons';
+import OtpCodeInput from './OtpCodeInput';
 import PasswordConfirmInput from './PasswordConfirmInput';
-import {
-  isCompleteRecoveryOtp,
-  PASSWORD_REQUIREMENTS,
-} from './authValidation';
+import { PASSWORD_REQUIREMENTS } from './authValidation';
 
 interface ResetPasswordFormProps {
   email: string;
@@ -24,7 +22,6 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const verifyingRef = useRef(false);
 
   const requirements = useMemo(
@@ -46,42 +43,13 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
       } else {
         setError('코드가 올바르지 않습니다. 다시 시도해 주세요.');
         setOtp('');
-        inputRefs.current[0]?.focus();
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '코드 확인에 실패했습니다.');
       setOtp('');
-      inputRefs.current[0]?.focus();
     } finally {
       verifyingRef.current = false;
       setVerifying(false);
-    }
-  };
-
-  const handleOtpChange = (index: number, raw: string) => {
-    const value = raw.replace(/\D/g, '').slice(-1);
-    if (raw && !value) return;
-    const chars = otp.split('');
-    chars[index] = value;
-    const next = chars.join('').slice(0, 6);
-    setOtp(next);
-    if (value && index < 5) inputRefs.current[index + 1]?.focus();
-    if (isCompleteRecoveryOtp(next)) void verify(next);
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pasted.length === 6) {
-      setOtp(pasted);
-      inputRefs.current[5]?.focus();
-      void verify(pasted);
     }
   };
 
@@ -106,25 +74,12 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
         <span className="reset-email">{email}</span> 로 보낸 6자리 코드를 입력하세요.
       </p>
 
-      <div className="otp-row" onPaste={handlePaste}>
-        {Array.from({ length: 6 }).map((_, index) => (
-          <input
-            key={index}
-            ref={el => {
-              inputRefs.current[index] = el;
-            }}
-            className="otp-cell"
-            type="text"
-            inputMode="numeric"
-            maxLength={1}
-            value={otp[index] || ''}
-            onChange={e => handleOtpChange(index, e.target.value)}
-            onKeyDown={e => handleKeyDown(index, e)}
-            disabled={isCodeVerified || isVerifying}
-            aria-label={`인증 코드 ${index + 1}번째 자리`}
-          />
-        ))}
-      </div>
+      <OtpCodeInput
+        value={otp}
+        onChange={setOtp}
+        onComplete={verify}
+        disabled={isCodeVerified || isVerifying}
+      />
 
       {isVerifying && <p className="reset-hint">확인 중...</p>}
       {error && <p className="form-error-msg">{error}</p>}

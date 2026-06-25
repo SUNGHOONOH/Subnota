@@ -57,8 +57,10 @@ vi.mock('electron', () => ({
       return image;
     }),
   },
+  net: { fetch: vi.fn() },
+  protocol: { handle: vi.fn(), registerSchemesAsPrivileged: vi.fn() },
   screen: { getPrimaryDisplay: () => ({ workAreaSize: { height: 900, width: 1440 } }) },
-  session: { defaultSession: { webRequest: { onHeadersReceived: vi.fn() } } },
+  session: { defaultSession: { setPermissionRequestHandler: vi.fn(), webRequest: { onHeadersReceived: vi.fn() } } },
   shell: { openExternal: vi.fn() },
   Tray: class MockTray {
     on() { return undefined; }
