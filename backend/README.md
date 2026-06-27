@@ -9,36 +9,59 @@ This backend is intentionally separate from the React Native app and Supabase Ed
 
 - Run nightly schedule suggestion extraction from Supabase memos.
 - Build Kiwi memo chunks and HF embeddings for State B search.
-- Search similar memo chunks with Supabase pgvector.
-- Run State A topic discovery from Supabase memos only when `topic_dirty` exists.
-- Store results into `topic_clusters` and `topic_cluster_memos`.
-- Provide development trigger endpoints for daily batch jobs.
+- Search similar memo chunks with Supabase pgvector (and map similarity to target memos).
+- Run State A topic discovery from Supabase memos only when synced memos are marked dirty.
+- Store clustering results into `topic_clusters`, `topic_cluster_memos`, and `topic_memo_edges`.
+- Analyze inbox URLs (YouTube transcripts, metadata extraction, Playwright scraper fallbacks).
+- Guard all incoming URL requests against SSRF (anti-SSRF routing protection).
+- Provide unified daily maintenance endpoints for background jobs.
 
 ## Non-responsibilities
 
-- It does not own memo editing.
-- It does not run on every keystroke.
-- It does not replace Supabase Auth or RLS.
-- It does not expose Gemini or service role secrets to the React Native client.
-- It should not be called with the full memo list from the app.
+- It does not own memo editing or local data persistence.
+- It does not run on every keystroke in the editor.
+- It does not bypass Supabase Auth or client RLS policies.
+- It does not expose service role tokens, Gemini API keys, or Hugging Face secrets to the clients.
+- It does not store raw user memos locally on the backend.
 
 ## Structure
 
 ```text
 backend/
   app/
-    main.py                         # FastAPI app entrypoint and dev trigger route
-    config.py                       # Environment settings
-    constants.py                    # Backend policy constants
-    db.py                           # Supabase service-role reads/writes
-    hashing.py                      # Hash helpers
-    memo_chunking.py                # Kiwi sentence/network chunks
-    memo_indexing.py                # Dirty memo chunk embedding batch
-    network_search.py               # Cursor chunk pgvector search
-    schedule_batch.py               # Nightly schedule inbox batch
-    schedule_parser.py              # Backend schedule candidate parser
-    maintenance.py                  # Combined daily jobs
-    topic_discovery.py              # State A clustering pipeline
+    api/
+      routes/                       # API endpoints and routers
+        health.py                   # Health check endpoint
+        inbox.py                    # Inbox clip management
+        maintenance.py              # Scheduled batch triggers
+        memo_chunks.py              # Chunk embedding indexing triggers
+        network.py                  # State B network search
+        schedule.py                 # Candidate schedule management
+        topics.py                   # State A topic discovery
+    core/
+      config.py                     # Environment settings & config validation
+      constants.py                  # Thresholds, timeouts, model variables
+    db/                             # Service-role database access layer
+      client.py                     # Supabase client instantiation
+      embeddings.py                 # Vector queries and embedding caches
+      inbox.py                      # Inbox database operations
+      memos.py                      # Raw memo queries & filtering
+      profiles.py                   # User profile management
+      rate_limits.py                # Rate-limiting table checks
+      schedule.py                   # Schedule updates
+      topics.py                     # Topic clusters, memberships & edges
+      types.py                      # DB model type defs
+      utils.py                      # DB operation helpers
+    features/                       # Core enrichment pipelines
+      inbox/                        # Web clipping, scraping, summary (Gemini/Playwright)
+      memo/                         # Sentence chunking (Kiwi) and embedding creation
+      network/                      # Cursor chunk similarity search (pgvector)
+      schedule/                     # Nightly schedule candidate extraction
+      topics/                       # State A topic clustering pipeline
+      maintenance/                  # Combined daily workflow coordinator
+    shared/
+      url_guard.py                  # Anti-SSRF URL validator
+    main.py                         # FastAPI application entrypoint
   .env.example
   pyproject.toml
 ```
@@ -65,18 +88,26 @@ BACKEND_ADMIN_KEY=...
 
 Do not commit `backend/.env`.
 
-Development triggers:
+Development triggers (all maintenance and discovery routes require the admin key header):
 
 ```bash
 curl -X POST http://localhost:8000/topic-discovery/run \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"user_id":"00000000-0000-0000-0000-000000000000","force":true}'
 
 curl -X POST http://localhost:8000/maintenance/daily \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"user_id":"00000000-0000-0000-0000-000000000000"}'
 
 curl -X POST http://localhost:8000/maintenance/daily-all \
+  -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Dirty-only endpoints used by scheduled Cloud Cron
+curl -X POST http://localhost:8000/maintenance/memo-chunks/index-dirty-users \
   -H "x-backend-admin-key: <BACKEND_ADMIN_KEY>" \
   -H "Content-Type: application/json" \
   -d '{}'

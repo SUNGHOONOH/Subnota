@@ -20,6 +20,15 @@ const brickSyncHash = (brick: CalendarBrick) =>
     }),
   );
 
+const toLocalCalendarDate = (value: number) => {
+  const date = new Date(value);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+};
+
 const needsSync = (brick: CalendarBrick) => {
   if (!isUuid(brick.id)) {
     return false;
@@ -87,18 +96,23 @@ export const syncPendingCalendarBricks = async (
       }
 
       const syncedHash = brickSyncHash(brick);
+      const allDay = !brick.time;
+      const scheduledAt = brick.scheduledAt ?? Date.now();
       const { error } = await supabase.from('calendar_blocks').upsert(
         {
           id: brick.id,
           user_id: user.id,
           title: brick.title,
           note: brick.note,
-          start_date: new Date(brick.scheduledAt ?? Date.now()).toISOString(),
+          start_date: new Date(scheduledAt).toISOString(),
           end_date: null,
-          all_day: !brick.time,
+          all_day: allDay,
+          all_day_date: allDay ? toLocalCalendarDate(scheduledAt) : null,
+          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           order: brick.order,
           color: brick.tone,
           is_completed: false,
+          completed_at: null,
         },
         { onConflict: 'id' },
       );
