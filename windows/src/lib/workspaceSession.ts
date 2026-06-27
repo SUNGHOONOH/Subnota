@@ -2,7 +2,7 @@ import type { MemoSplitPaneState } from '../features/memo/components/MemoSplitWo
 import type { TabKey } from '../types';
 
 const WORKSPACE_SESSION_VERSION = 1;
-const MAX_PANE_COUNT = 3;
+const MAX_PANE_COUNT = 2;
 const VALID_TABS = new Set<TabKey>(['memo', 'calendar', 'inbox', 'briefing']);
 const VALID_VIEWS = new Set([
   'memo',

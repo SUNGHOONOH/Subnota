@@ -65,9 +65,16 @@ const getBackendUrl = () => {
   return (import.meta.env.VITE_MEMO_BACKEND_URL ?? '').trim();
 };
 
-const getAccessToken = async () => {
+const getAccessToken = async (refresh = false) => {
   if (!isSupabaseConfigured()) {
     throw new Error('Supabase is not configured.');
+  }
+
+  if (refresh) {
+    const {
+      data: { session },
+    } = await supabase.auth.refreshSession();
+    return session?.access_token ?? null;
   }
 
   const {
@@ -88,14 +95,23 @@ const requestBackend = async <T>(path: string, init: RequestInit = {}) => {
   }
 
   const token = await getAccessToken();
-  const response = await fetch(`${backendUrl.replace(/\/$/, '')}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
+  const request = (accessToken: string) =>
+    fetch(`${backendUrl.replace(/\/$/, '')}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+
+  let response = await request(token);
+  if (response.status === 401) {
+    const refreshedToken = await getAccessToken(true);
+    if (refreshedToken && refreshedToken !== token) {
+      response = await request(refreshedToken);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`Inbox request failed: ${response.status}`);

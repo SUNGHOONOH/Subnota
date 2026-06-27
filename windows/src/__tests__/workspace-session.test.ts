@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeWorkspaceSession } from '../lib/workspaceSession';
 
 describe('workspace session persistence', () => {
-  it('restores at most three panes and clears transient loading state', () => {
+  it('restores at most two panes and clears transient loading state', () => {
     const session = normalizeWorkspaceSession({
       activeMemoId: 'memo-2',
       activeTab: 'memo',
@@ -39,7 +39,7 @@ describe('workspace session persistence', () => {
       version: 1,
     });
 
-    expect(session?.splitPanes).toHaveLength(3);
+    expect(session?.splitPanes).toHaveLength(2);
     expect(session?.focusedPaneId).toBe('pane-2');
     expect(session?.paneWidths).toEqual({ 'pane-1': 35, 'pane-2': 65 });
     expect(session?.splitPanes[0].networkIsLoading).toBe(false);

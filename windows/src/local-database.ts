@@ -3,10 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
-const RECORD_TYPES = new Set(['memo', 'calendar', 'inbox']);
+const RECORD_TYPES = new Set([
+  'memo',
+  'calendar',
+  'inbox',
+  'activity_completion',
+  'daily_completion',
+  'tree',
+]);
 const PENDING_TIMEOUT_MS = 10_000;
 const QUIT_DRAIN_DEADLINE_MS = 2_000;
 const ownersByWebContents = new Map<number, string>();
+const ownerCleanupListenersByWebContents = new Set<number>();
 const pending = new Map<number, {
   reject: (error: Error) => void;
   resolve: (value: unknown) => void;
@@ -218,6 +226,15 @@ const normalizedRecord = (record: unknown) => {
 };
 const ownerFor = (event: Electron.IpcMainInvokeEvent) =>
   ownersByWebContents.get(event.sender.id) ?? 'guest';
+const ensureOwnerCleanupListener = (sender: Electron.WebContents) => {
+  const senderId = sender.id;
+  if (ownerCleanupListenersByWebContents.has(senderId)) return;
+  ownerCleanupListenersByWebContents.add(senderId);
+  sender.once('destroyed', () => {
+    ownersByWebContents.delete(senderId);
+    ownerCleanupListenersByWebContents.delete(senderId);
+  });
+};
 const ownerForRequest = (event: Electron.IpcMainInvokeEvent, ownerId: unknown) => {
   const requestedOwner = normalizedOwner(ownerId);
   if (ownerFor(event) !== requestedOwner) {
@@ -229,7 +246,7 @@ const ownerForRequest = (event: Electron.IpcMainInvokeEvent, ownerId: unknown) =
 ipcMain.handle('local-db:set-owner', (event, ownerId: unknown) => {
   assertTrustedSender(event);
   ownersByWebContents.set(event.sender.id, normalizedOwner(ownerId));
-  event.sender.once('destroyed', () => ownersByWebContents.delete(event.sender.id));
+  ensureOwnerCleanupListener(event.sender);
 });
 ipcMain.handle('local-db:list', (event, ownerId: unknown, recordType: unknown) => {
   assertTrustedSender(event);

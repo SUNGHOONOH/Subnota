@@ -108,14 +108,20 @@ const InboxWorkspace = ({
         <button disabled={isSaving || !draft.trim()} type="submit">
           {isSaving ? '저장 중' : '저장'}
         </button>
+        <button
+          aria-label="새로고침"
+          className="inbox-refresh-btn"
+          disabled={isLoading}
+          onClick={onRefresh}
+          title="새로고침"
+          type="button"
+        >
+          <RefreshCw size={14} />
+        </button>
       </form>
 
       <div className="inbox-list-header">
         <strong>최근 수집함</strong>
-        <button className="ghost-button" disabled={isLoading} onClick={onRefresh} type="button">
-          <RefreshCw size={15} />
-          {isLoading ? '불러오는 중' : '새로고침'}
-        </button>
       </div>
 
       <section className="inbox-grid">

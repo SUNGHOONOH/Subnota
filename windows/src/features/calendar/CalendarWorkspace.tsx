@@ -12,10 +12,24 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
+import { Burger, CloseButton } from '@mantine/core';
 import { ChevronLeft, ChevronRight, Trash2 } from '@/components/icons';
 
 import { createUuid } from '../../lib/contentHash';
 import { CalendarBlockRow } from '../../types';
+import { getBlockStart } from './calendarUtils';
+import DayTodoPanel from './components/DayTodoPanel';
+import ForestModal from '../tree/components/ForestModal';
+import TreeCard from '../tree/components/TreeCard';
+import { ForestTree, GrowingTree } from '../tree/model/treeTypes';
+
+export interface CalendarTreePanel {
+  forest: ForestTree[];
+  onPlant: () => void;
+  tree: GrowingTree;
+  userId: string;
+  wateringSignal: number;
+}
 
 interface CalendarWorkspaceProps {
   blocks: CalendarBlockRow[];
@@ -29,13 +43,18 @@ interface CalendarWorkspaceProps {
     startDate: string;
     title: string;
   }) => void;
+  onToggleCompleted: (blockId: string) => void;
+  treePanel: CalendarTreePanel | null;
 }
 
-type ViewType = 'day' | 'week' | 'month';
+type ViewType = 'week' | 'month';
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const HOUR_HEIGHT = 48;
+const HOUR_HEIGHT = 40;
+// Month cells show one representative event + a "+N" badge so a busy day never
+// grows the row height (keeps every week row the same ratio).
+const MONTH_MAX_CHIPS = 1;
 const DEFAULT_COLOR = '#66705A';
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -49,16 +68,6 @@ const TONE_STYLE: Record<string, { accent: string; bg: string; text: string }> =
 
 const getTone = (color: string | null) =>
   TONE_STYLE[(color ?? '').toUpperCase()] ?? TONE_STYLE[DEFAULT_COLOR];
-
-const parseLocalDate = (value: string) => {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-const getBlockStart = (block: CalendarBlockRow) =>
-  block.all_day && block.all_day_date
-    ? parseLocalDate(block.all_day_date)
-    : new Date(block.start_date);
 
 const getRange = (block: CalendarBlockRow) => {
   const start = getBlockStart(block);
@@ -113,9 +122,14 @@ const CalendarWorkspace = ({
   blocks,
   onDeleteBlock,
   onSaveBlock,
+  onToggleCompleted,
+  treePanel,
 }: CalendarWorkspaceProps) => {
-  const [view, setView] = useState<ViewType>('month');
+  const [view, setView] = useState<ViewType>('week');
   const [anchor, setAnchor] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState(new Date());
+  const [forestOpen, setForestOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [isEditorOpen, setEditorOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<CalendarBlockRow | null>(null);
@@ -139,21 +153,17 @@ const CalendarWorkspace = ({
       eachDayOfInterval({ end: endOfWeek(anchor), start: startOfWeek(anchor) }),
     [anchor],
   );
-  const timeGridDays = view === 'day' ? [anchor] : weekDays;
 
   const title_ = useMemo(() => {
     if (view === 'month') {
       return format(anchor, 'yyyy년 M월');
-    }
-    if (view === 'day') {
-      return format(anchor, 'M월 d일 (E)');
     }
     const start = startOfWeek(anchor);
     const end = endOfWeek(anchor);
     return `${format(start, 'M.d')} – ${format(end, 'M.d')}`;
   }, [anchor, view]);
 
-  // Scroll the time grid to the morning when entering week/day views.
+  // Scroll the time grid to the morning when entering the week view.
   useEffect(() => {
     if (view === 'month' || !timeGridRef.current) {
       return;
@@ -162,12 +172,16 @@ const CalendarWorkspace = ({
   }, [view]);
 
   const move = (direction: -1 | 1) => {
-    setAnchor(current => {
-      if (view === 'month') {
-        return addMonths(current, direction);
-      }
-      return addDays(current, direction * (view === 'week' ? 7 : 1));
-    });
+    setAnchor(current =>
+      view === 'month'
+        ? addMonths(current, direction)
+        : addDays(current, direction * 7),
+    );
+  };
+
+  const selectDay = (date: Date) => {
+    setSelectedDay(date);
+    setAnchor(date);
   };
 
   const openEditor = (date: Date, block?: CalendarBlockRow) => {
@@ -220,11 +234,14 @@ const CalendarWorkspace = ({
           const events = dayEvents(date);
           const inMonth = isSameMonth(date, anchor);
           const firstOfMonth = date.getDate() === 1;
+          const isSelected = isSameDay(date, selectedDay);
           return (
             <div
-              className={`cal-month-cell${inMonth ? '' : ' muted'}`}
+              className={`cal-month-cell${inMonth ? '' : ' muted'}${
+                isSelected ? ' selected' : ''
+              }`}
               key={date.toISOString()}
-              onClick={() => openEditor(date)}
+              onClick={() => selectDay(date)}
               role="button"
               tabIndex={0}
             >
@@ -236,11 +253,11 @@ const CalendarWorkspace = ({
                 {firstOfMonth ? format(date, 'M월 d일') : format(date, 'd')}
               </span>
               <div className="cal-chips">
-                {events.slice(0, 3).map(block => {
+                {events.slice(0, MONTH_MAX_CHIPS).map(block => {
                   const tone = getTone(block.color);
                   return (
                     <button
-                      className="cal-chip"
+                      className={`cal-chip${block.is_completed ? ' completed' : ''}`}
                       key={block.id}
                       onClick={event => {
                         event.stopPropagation();
@@ -259,8 +276,8 @@ const CalendarWorkspace = ({
                     </button>
                   );
                 })}
-                {events.length > 3 && (
-                  <span className="cal-more">{events.length - 3} more…</span>
+                {events.length > MONTH_MAX_CHIPS && (
+                  <span className="cal-more">+{events.length - MONTH_MAX_CHIPS}</span>
                 )}
               </div>
             </div>
@@ -273,13 +290,18 @@ const CalendarWorkspace = ({
   const renderTimeGrid = () => {
     const now = new Date();
     return (
-      <div className={`cal-timegrid-wrap view-${view}`}>
+      <div className="cal-timegrid-wrap view-week">
         <div className="cal-timegrid-head">
           <div className="cal-time-gutter-head" />
-          {timeGridDays.map(date => (
+          {weekDays.map(date => (
             <div
-              className={`cal-col-head${isToday(date) ? ' today' : ''}`}
+              className={`cal-col-head${isToday(date) ? ' today' : ''}${
+                isSameDay(date, selectedDay) ? ' selected' : ''
+              }`}
               key={date.toISOString()}
+              onClick={() => setSelectedDay(date)}
+              role="button"
+              tabIndex={0}
             >
               <span className="cal-col-dow">{DAY_LABELS[date.getDay()]}</span>
               <span className="cal-col-date">{format(date, 'd')}</span>
@@ -289,7 +311,7 @@ const CalendarWorkspace = ({
 
         <div className="cal-allday-row">
           <div className="cal-time-gutter-head all">종일</div>
-          {timeGridDays.map(date => (
+          {weekDays.map(date => (
             <div className="cal-allday-cell" key={date.toISOString()}>
               {dayEvents(date)
                 .filter(block => block.all_day)
@@ -297,7 +319,7 @@ const CalendarWorkspace = ({
                   const tone = getTone(block.color);
                   return (
                     <button
-                      className="cal-allday-event"
+                      className={`cal-allday-event${block.is_completed ? ' completed' : ''}`}
                       key={block.id}
                       onClick={() => openEditor(date, block)}
                       style={{ backgroundColor: tone.bg, color: tone.text }}
@@ -323,7 +345,7 @@ const CalendarWorkspace = ({
                 </div>
               ))}
             </div>
-            {timeGridDays.map(date => {
+            {weekDays.map(date => {
               const laid = layoutDayEvents(
                 dayEvents(date).filter(block => !block.all_day),
               );
@@ -336,6 +358,7 @@ const CalendarWorkspace = ({
                       onClick={() => {
                         const target = new Date(date);
                         target.setHours(hour, 0, 0, 0);
+                        setSelectedDay(date);
                         openEditor(target);
                       }}
                       style={{ height: HOUR_HEIGHT }}
@@ -359,7 +382,7 @@ const CalendarWorkspace = ({
                     );
                     return (
                       <button
-                        className="cal-event"
+                        className={`cal-event${block.is_completed ? ' completed' : ''}`}
                         key={block.id}
                         onClick={() => openEditor(date, block)}
                         style={{
@@ -388,51 +411,106 @@ const CalendarWorkspace = ({
   };
 
   return (
-    <div className="cal-root">
-      <div className="cal-header">
-        <h2 className="cal-title">{title_}</h2>
+    <div className={`cal-layout view-${view}${drawerOpen ? ' drawer-open' : ''}`}>
+      <div className="cal-root">
+        <div className="cal-header">
+          <h2 className="cal-title">{title_}</h2>
 
-        <div className="cal-views">
-          {(['day', 'week', 'month'] as ViewType[]).map(key => (
-            <button
-              className={view === key ? 'active' : ''}
-              key={key}
-              onClick={() => setView(key)}
-              type="button"
-            >
-              {key === 'day' ? '일' : key === 'week' ? '주' : '월'}
-            </button>
-          ))}
+          <div className="cal-toolbar">
+            <div className="cal-views">
+              {(['week', 'month'] as ViewType[]).map(key => (
+                <button
+                  className={view === key ? 'active' : ''}
+                  key={key}
+                  onClick={() => setView(key)}
+                  type="button"
+                >
+                  {key === 'week' ? '주' : '월'}
+                </button>
+              ))}
+            </div>
+
+            <div className="cal-nav">
+              <button
+                aria-label="이전"
+                className="cal-nav-icon"
+                onClick={() => move(-1)}
+                type="button"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                className="cal-today"
+                onClick={() => {
+                  setAnchor(new Date());
+                  setSelectedDay(new Date());
+                }}
+                type="button"
+              >
+                오늘
+              </button>
+              <button
+                aria-label="다음"
+                className="cal-nav-icon"
+                onClick={() => move(1)}
+                type="button"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            <Burger
+              aria-label="Todo 패널"
+              className="cal-burger"
+              onClick={() => setDrawerOpen(open => !open)}
+              opened={drawerOpen}
+              size="sm"
+            />
+          </div>
         </div>
 
-        <div className="cal-nav">
-          <button
-            aria-label="이전"
-            className="cal-nav-icon"
-            onClick={() => move(-1)}
-            type="button"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            className="cal-today"
-            onClick={() => setAnchor(new Date())}
-            type="button"
-          >
-            오늘
-          </button>
-          <button
-            aria-label="다음"
-            className="cal-nav-icon"
-            onClick={() => move(1)}
-            type="button"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
+        {view === 'month' ? renderMonth() : renderTimeGrid()}
       </div>
 
-      {view === 'month' ? renderMonth() : renderTimeGrid()}
+      <button
+        aria-label="패널 닫기"
+        className="cal-drawer-backdrop"
+        onClick={() => setDrawerOpen(false)}
+        type="button"
+      />
+
+      <aside className="cal-side">
+        <CloseButton
+          aria-label="패널 닫기"
+          className="cal-drawer-close"
+          onClick={() => setDrawerOpen(false)}
+        />
+        <DayTodoPanel
+          blocks={dayEvents(selectedDay)}
+          date={selectedDay}
+          onAdd={() => openEditor(selectedDay)}
+          onEdit={block => openEditor(getBlockStart(block), block)}
+          onToggle={onToggleCompleted}
+        />
+        {treePanel && (
+          <TreeCard
+            forestCount={treePanel.forest.length}
+            onOpenForest={() => setForestOpen(true)}
+            onPlant={treePanel.onPlant}
+            tree={treePanel.tree}
+            wateringSignal={treePanel.wateringSignal}
+          />
+        )}
+      </aside>
+
+      {treePanel && forestOpen && (
+        <ForestModal
+          forest={treePanel.forest}
+          growing={treePanel.tree}
+          onClose={() => setForestOpen(false)}
+          userId={treePanel.userId}
+        />
+      )}
 
       {isEditorOpen && (
         <div className="modal-backdrop" role="presentation">

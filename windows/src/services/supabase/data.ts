@@ -12,6 +12,7 @@ import {
   TopicMemoEdge,
   TopicMembership,
 } from '../../types';
+import { ForestTree } from '../../features/tree/model/treeTypes';
 import { supabase } from './client';
 
 export const ensureProfile = async (userId: string) => {
@@ -261,7 +262,7 @@ export const fetchCalendarBlocks = async (session: Session) => {
   const { data, error } = await supabase
     .from('calendar_blocks')
     .select(
-      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, completed_at, created_at, updated_at',
     )
     .eq('user_id', session.user.id)
     .order('start_date', { ascending: true });
@@ -287,7 +288,9 @@ export const upsertCalendarBlock = async (
   block: {
     allDay: boolean;
     color: string;
+    completedAt?: string | null;
     id: string;
+    isCompleted?: boolean;
     note: string | null;
     order?: number;
     startDate: string;
@@ -309,12 +312,13 @@ export const upsertCalendarBlock = async (
         time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         order: block.order ?? 0,
         color: block.color,
-        is_completed: false,
+        is_completed: block.isCompleted ?? false,
+        completed_at: block.completedAt ?? null,
       },
       { onConflict: 'id' },
     )
     .select(
-      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, completed_at, created_at, updated_at',
     )
     .single();
 
@@ -337,11 +341,88 @@ export const deleteCalendarBlock = async (session: Session, blockId: string) => 
   }
 };
 
+// Growth events are append-only and idempotent: ignoreDuplicates makes the
+// insert a no-op when the unique (user, block) / (user, day) key already exists.
+export const recordActivityCompletion = async (
+  session: Session,
+  record: { calendar_block_id: string; completed_at: string; id: string; local_date: string },
+) => {
+  const { error } = await supabase.from('activity_completions').upsert(
+    {
+      id: record.id,
+      user_id: session.user.id,
+      calendar_block_id: record.calendar_block_id,
+      completed_at: record.completed_at,
+      local_date: record.local_date,
+    },
+    { onConflict: 'user_id,calendar_block_id', ignoreDuplicates: true },
+  );
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const recordDailyCompletion = async (
+  session: Session,
+  record: { completed_at: string; id: string; local_date: string; todo_count: number },
+) => {
+  const { error } = await supabase.from('daily_completions').upsert(
+    {
+      id: record.id,
+      user_id: session.user.id,
+      local_date: record.local_date,
+      completed_at: record.completed_at,
+      todo_count: record.todo_count,
+    },
+    { onConflict: 'user_id,local_date', ignoreDuplicates: true },
+  );
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const fetchTrees = async (session: Session): Promise<ForestTree[]> => {
+  const { data, error } = await supabase
+    .from('trees')
+    .select('id, generation, planted_at, final_params, completed_todo_count, completed_day_count')
+    .eq('user_id', session.user.id)
+    .order('generation', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as ForestTree[];
+};
+
+// Planting is a single idempotent insert: unique(user_id, generation) makes a
+// double-plant a no-op, so it is atomic without a multi-step RPC.
+export const recordPlantedTree = async (session: Session, tree: ForestTree) => {
+  const { error } = await supabase.from('trees').upsert(
+    {
+      id: tree.id,
+      user_id: session.user.id,
+      generation: tree.generation,
+      planted_at: tree.planted_at,
+      final_params: tree.final_params,
+      completed_todo_count: tree.completed_todo_count,
+      completed_day_count: tree.completed_day_count,
+    },
+    { onConflict: 'user_id,generation', ignoreDuplicates: true },
+  );
+
+  if (error) {
+    throw error;
+  }
+};
+
 export const fetchScheduleInbox = async (session: Session) => {
   const { data, error } = await supabase
     .from('schedule_inbox')
     .select(
-      'id, memo_id, title, source_text, scheduled_at, time_text, all_day, confidence, status',
+      'id, memo_id, title, source_text, scheduled_at, time_text, all_day, confidence, status, created_at',
     )
     .eq('user_id', session.user.id)
     .eq('status', 'pending')

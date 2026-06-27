@@ -1247,6 +1247,11 @@ code {
   width: min(620px, calc(100vw - 48px));
 }
 
+/* Settings modal: cool-gray active tab in the sidebar (design screen 7). */
+.settings-tab[data-active] {
+  background: light-dark(#e8ebf0, var(--mantine-color-dark-5));
+}
+
 .search-input-row {
   align-items: center;
   border-bottom: 1px solid #e5ddd0;
@@ -1948,33 +1953,345 @@ code {
 
 /* TOAST UI Calendar host + warm-tone overrides. */
 /* ── Apple-style custom calendar ── */
+.cal-layout {
+  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden; /* clip the closed drawer parked off the right edge */
+  position: relative;
+}
+
+/* Wide mode: toolbar is transparent so views stay centered between title and
+   nav; the drawer toggle + backdrop only exist in the compact container query. */
+.cal-toolbar { display: contents; }
+.cal-burger { display: none; }
+.cal-drawer-backdrop { display: none; }
+.cal-drawer-close { display: none; }
+
+/* Month view: todo + tree sit along the bottom (calendar grid keeps full width). */
+.cal-layout.view-month {
+  flex-direction: column;
+}
+
+.cal-layout.view-month .cal-side {
+  border-left: 0;
+  border-top: 1px solid #ececec;
+  flex: 0 0 auto;
+  flex-direction: row;
+  max-height: 38%;
+}
+
+.cal-layout.view-month .cal-todo-panel {
+  flex: 1;
+}
+
+.cal-layout.view-month .tree-card {
+  border-left: 1px solid #ececec;
+  border-top: 0;
+  flex: 0 0 auto;
+}
+
 .cal-root {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   padding: 16px 20px 18px;
 }
+
+/* Selected day + completed-event affordances. */
+.cal-month-cell.selected,
+.cal-col-head.selected {
+  box-shadow: inset 0 0 0 2px rgba(102, 112, 90, 0.55);
+}
+
+.cal-chip.completed,
+.cal-event.completed,
+.cal-allday-event.completed {
+  opacity: 0.5;
+}
+
+.cal-event.completed strong,
+.cal-chip.completed .cal-chip-title {
+  text-decoration: line-through;
+}
+
+/* Selected-day Todo panel (right side of the calendar). */
+.cal-side {
+  display: flex;
+  flex: 0 0 280px;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid #ececec;
+}
+
+.cal-todo-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 14px;
+}
+
+.cal-todo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cal-todo-date {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cal-todo-add {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: #f0f0ef;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cal-todo-add:hover { background: #e6e6e4; }
+
+.cal-todo-empty {
+  padding: 8px 2px;
+  color: #9a9a96;
+  font-size: 13px;
+}
+
+.cal-todo-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.cal-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+
+.cal-todo-item:hover { background: #f6f6f5; }
+.cal-todo-item.completed { opacity: 0.55; }
+.cal-todo-item.completed .cal-todo-text { text-decoration: line-through; }
+
+.cal-todo-check {
+  display: flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #c7c7c2;
+  border-radius: 5px;
+  background: transparent;
+  color: #4b5741;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.cal-todo-item.completed .cal-todo-check {
+  border-color: #66705a;
+  background: #66705a;
+  color: #fff;
+}
+
+.cal-todo-title {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.cal-todo-time {
+  flex: 0 0 auto;
+  color: #8a8a85;
+  font-size: 11px;
+}
+
+.cal-todo-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Current pixel tree card (under the Todo panel). */
+.tree-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-top: 1px solid #ececec;
+}
+
+.tree-card-canvas {
+  position: relative;
+  image-rendering: pixelated;
+}
+
+.tree-card-canvas.watering {
+  animation: tree-water 1.3s ease;
+}
+
+.tree-water-drop {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 4px;
+  height: 8px;
+  border-radius: 0 0 2px 2px;
+  background: #6fb0e0;
+  animation: tree-drop 0.8s ease forwards;
+}
+
+@keyframes tree-water {
+  30% { transform: translateY(-2px) scale(1.03); }
+  60% { transform: translateY(0) scale(1); }
+}
+@keyframes tree-drop {
+  from { transform: translate(-50%, 0); opacity: 1; }
+  to { transform: translate(-50%, 70px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-card-canvas.watering { animation: none; }
+  .tree-water-drop { animation: tree-drop-fade 0.6s ease forwards; }
+  @keyframes tree-drop-fade {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+}
+
+.tree-card-message {
+  margin: 0;
+  color: #6a6a64;
+  font-size: 12px;
+  text-align: center;
+}
+
+.tree-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tree-plant-btn,
+.tree-forest-btn {
+  padding: 5px 12px;
+  border: 1px solid #d6d6d2;
+  border-radius: 7px;
+  background: #f4f4f2;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tree-plant-btn {
+  border-color: #66705a;
+  background: #66705a;
+  color: #fff;
+}
+
+.tree-plant-btn:hover { background: #58614e; }
+.tree-forest-btn:hover { background: #e9e9e6; }
+
+/* Forest modal (planted-tree grid). */
+.forest-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 90vw);
+  max-height: 80vh;
+  padding: 20px;
+  border-radius: 14px;
+  background: #fff;
+  overflow-y: auto;
+}
+
+.forest-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.forest-modal-head h2 { margin: 0; font-size: 16px; }
+
+.forest-modal-head button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.forest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 12px;
+}
+
+.forest-tree-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  image-rendering: pixelated;
+}
+
+.forest-tree-card.growing { border-style: dashed; }
+.forest-tree-date { font-size: 11px; font-weight: 600; }
+.forest-tree-meta { color: #8a8a85; font-size: 10px; }
+.forest-modal-note { margin: 0; color: #8a8a85; font-size: 12px; text-align: center; }
 
 .cal-header {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
 }
 
 .cal-title {
   color: var(--legacy-ink);
+  flex: 1 1 160px;
   font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cal-views {
   background: #ececec;
   border-radius: 9px;
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 2px;
   margin: 0 auto;
   padding: 2px;
@@ -2002,6 +2319,7 @@ code {
 .cal-nav {
   align-items: center;
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
 }
 
@@ -2036,6 +2354,8 @@ code {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow-x: auto; /* calendar exception: scroll when below the content floor */
 }
 
 .cal-weekday-row {
@@ -2061,6 +2381,11 @@ code {
   grid-auto-rows: 1fr;
   grid-template-columns: repeat(7, 1fr);
   min-height: 0;
+}
+
+.cal-weekday-row,
+.cal-month-grid {
+  min-width: 360px; /* month floor, aligned with the week grid floor above */
 }
 
 .cal-month-cell {
@@ -2147,10 +2472,13 @@ code {
 }
 
 .cal-more {
-  color: #8a8a8a;
+  align-self: flex-start;
+  background: #f0f0ef;
+  border-radius: 999px;
+  color: #6b6760;
   font-size: 11px;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 1px 8px;
 }
 
 /* ── Week / Day time grid ── */
@@ -2159,10 +2487,21 @@ code {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow-x: auto; /* calendar exception: scroll when below the content floor */
 }
 
 .cal-timegrid-wrap.view-week { --cal-cols: 7; }
-.cal-timegrid-wrap.view-day { --cal-cols: 1; }
+
+/* Content floor: below this the calendar scrolls horizontally inside its own
+   wrapper rather than crushing columns. The calendar is the deliberate exception
+   to the clip rule (other content panes clip at the pane edge). */
+.cal-timegrid-head,
+.cal-allday-row,
+.cal-timegrid-scroll,
+.cal-timegrid-body {
+  min-width: 360px;
+}
 
 .cal-timegrid-head,
 .cal-allday-row,
@@ -2236,7 +2575,7 @@ code {
 .cal-timegrid-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden auto; /* vertical only; wrap owns horizontal scroll so head + body stay aligned */
 }
 
 .cal-timegrid-body {
@@ -2303,6 +2642,96 @@ code {
 
   strong { font-size: 12px; font-weight: 600; }
   span { font-size: 11px; opacity: 0.75; }
+}
+
+/* Compact width: keep header on one line; in week view the side panel collapses
+   into a drawer. Threshold is intentionally small so the inline sidebar persists
+   at larger panes (Obsidian collapses late + manual, not eagerly by width). */
+@container (max-width: 600px) {
+  .cal-root {
+    padding: 14px 12px 16px;
+  }
+
+  .cal-header {
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cal-title {
+    font-size: 22px;
+    line-height: 1.15;
+  }
+
+  /* Group view-switch + nav + burger so they never wrap apart (one line). */
+  .cal-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .cal-views {
+    margin: 0;
+  }
+
+  .cal-views button {
+    min-width: 42px;
+    padding: 0 12px;
+  }
+
+  .cal-today {
+    padding: 0 12px;
+  }
+
+  /* Drawer is week-only; month view always keeps todo/tree along the bottom. */
+  .cal-layout.view-week .cal-burger {
+    display: inline-flex;
+  }
+
+  .cal-layout.view-week .cal-drawer-close {
+    align-self: flex-end;
+    display: flex;
+    margin: 8px 8px 0;
+  }
+
+  .cal-layout.view-week .cal-side {
+    border-left: 1px solid #ececec;
+    bottom: 0;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+    position: absolute;
+    right: 0;
+    top: 0;
+    transform: translateX(101%);
+    transition: transform 0.22s ease;
+    width: min(300px, 86%);
+    z-index: 20;
+    background: var(--legacy-bg-paper);
+  }
+
+  .cal-layout.view-week.drawer-open .cal-side {
+    transform: translateX(0);
+  }
+
+  .cal-layout.view-week.drawer-open .cal-drawer-backdrop {
+    border: 0;
+    bottom: 0;
+    cursor: default;
+    display: block;
+    left: 0;
+    padding: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-side {
+    transition: none;
+  }
 }
 
 /* ── Calendar event modal (cool / clean) ── */
@@ -3175,11 +3604,24 @@ code {
   position: relative;
 }
 
+.schedule-approve-title-row {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
 .schedule-approve-title {
   color: #1d1d1f;
   display: block;
   font-size: 16px;
   font-weight: 700;
+}
+
+.schedule-approve-ago {
+  color: #9b9890;
+  flex: none;
+  font-size: 13px;
 }
 
 .schedule-approve-date {
@@ -3716,9 +4158,11 @@ code {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 18px 22px;
 }
 
 .inbox-url-form {
+  align-items: center;
   display: flex;
   gap: 8px;
   max-width: 720px;
@@ -3728,13 +4172,13 @@ code {
 .inbox-url-form input {
   background: #f5f6f8;
   border: 1px solid #e6e8ec;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #1d1d1f;
   flex: 1;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   min-width: 0;
-  padding: 9px 12px;
+  padding: 7px 12px;
 }
 
 .inbox-url-form input:focus {
@@ -3746,17 +4190,32 @@ code {
 .inbox-url-form button {
   background: #1d1d1f;
   border: 1px solid #1d1d1f;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #ffffff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  min-height: 38px;
-  padding: 0 18px;
+  min-height: 32px;
+  padding: 0 14px;
 }
 
 .inbox-url-form button:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+/* Refresh moved into the form row as a compact icon button (design screen 3). */
+.inbox-url-form .inbox-refresh-btn {
+  align-items: center;
+  background: var(--legacy-bg-paper);
+  border: 1px solid #e6e8ec;
+  color: #6b6760;
+  display: inline-flex;
+  flex: none;
+  height: 32px;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  width: 32px;
 }
 
 .inbox-list-header {
@@ -4277,6 +4736,7 @@ code {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .split-workspace-commandbar {
@@ -4478,7 +4938,7 @@ code {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: hidden; /* never scroll the workspace sideways; panes clip instead */
 }
 
 .split-pane {
@@ -4487,7 +4947,7 @@ code {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 0; /* yield space: note text reflows, content panes clip at edge */
   overflow: hidden;
   position: relative;
   
@@ -4956,6 +5416,77 @@ code {
   }
 }
 
+.split-topics-stage {
+  background: #fbfbfa;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+.split-topics-stage-title {
+  color: #242424;
+  font-size: 18px;
+  font-weight: var(--legacy-weight-semibold);
+  left: 50%;
+  letter-spacing: 0;
+  line-height: 1;
+  pointer-events: none;
+  position: absolute;
+  text-wrap: balance;
+  top: 24px;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+.split-topics-stage .split-knowledge-graph {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+  margin: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.split-topics-stage .split-knowledge-graph .knowledge-graph-canvas {
+  height: 100%;
+  min-height: 0;
+}
+
+.split-topics-stage .split-knowledge-graph .knowledge-graph-controls {
+  background: transparent;
+  border: 0;
+  bottom: auto;
+  box-shadow: none;
+  flex-direction: column;
+  gap: 12px;
+  left: auto;
+  padding: 0;
+  right: 24px;
+  top: 92px;
+  transform: none;
+}
+
+.split-topics-stage .knowledge-graph-control-button {
+  background: transparent;
+  color: #707070;
+  height: 40px;
+  transition-duration: 140ms;
+  transition-property: background-color, color, transform;
+  width: 40px;
+}
+
+.split-topics-stage .knowledge-graph-control-button:hover:not(:disabled):not([aria-disabled='true']) {
+  background: rgba(0, 0, 0, 0.04);
+  color: #303030;
+}
+
+.split-topics-stage .knowledge-graph-control-button:active:not(:disabled):not([aria-disabled='true']) {
+  transform: scale(0.96);
+}
+
 .split-network-results {
   display: flex;
   flex-direction: column;
@@ -5024,18 +5555,26 @@ code {
   transform: none;
 }
 
+.net-overlay-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  left: 16px;
+  max-width: min(320px, calc(100% - 32px));
+  position: absolute;
+  top: 16px;
+  z-index: 4;
+}
+
 .net-query-card {
   background: var(--legacy-bg-surface);
   border: 1px solid var(--legacy-border);
   border-radius: var(--legacy-radius-card);
   box-shadow: var(--legacy-shadow-panel);
-  left: 16px;
-  max-width: 320px;
   padding: 10px 13px;
   pointer-events: none;
-  position: absolute;
-  top: 16px;
-  z-index: 3;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .net-query-eyebrow {
@@ -5052,6 +5591,8 @@ code {
   font-weight: var(--legacy-weight-semibold);
   line-height: 1.4;
   margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .net-loading {
@@ -5063,7 +5604,32 @@ code {
 }
 
 .net-inline-error {
-  margin: 16px;
+  align-items: center;
+  background: rgba(247, 249, 255, 0.92);
+  border: 1px solid rgba(93, 120, 230, 0.24);
+  border-radius: var(--legacy-radius-card);
+  box-shadow: 0 8px 24px rgba(44, 37, 32, 0.08);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  pointer-events: auto;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.net-inline-error .form-error {
+  color: #4f5fa8;
+  font-size: var(--legacy-font-size-sm);
+  font-weight: var(--legacy-weight-semibold);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.net-inline-error .quick-date-chip {
+  min-height: 30px;
+  white-space: nowrap;
 }
 
 .net-result-dock {

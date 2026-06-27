@@ -27,6 +27,7 @@ import {
   PlusIcon,
   ShareIcon,
   SparklesIcon,
+  Squares2X2Icon,
   TrashIcon,
   ViewfinderCircleIcon,
   ViewColumnsIcon,
@@ -76,6 +77,7 @@ export const RefreshCw = adapt(ArrowPathIcon);
 export const Search = adapt(MagnifyingGlassIcon);
 export const Settings = adapt(Cog6ToothIcon);
 export const Sparkles = adapt(SparklesIcon);
+export const Topics = adapt(Squares2X2Icon);
 export const Trash2 = adapt(TrashIcon);
 export const FocusNode = adapt(ViewfinderCircleIcon);
 export const X = adapt(XMarkIcon);

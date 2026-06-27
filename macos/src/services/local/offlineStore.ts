@@ -1,6 +1,7 @@
 import { hashText } from '../../lib/contentHash';
 import { getMemoCategory } from '../../lib/memoCategory';
 import { CalendarBlockRow, MemoRow } from '../../types';
+import { ActivityCompletion, DailyCompletion, ForestTree } from '../../features/tree/model/treeTypes';
 import { InboxSession, InboxSourceType } from '../backend/inboxService';
 
 const MEMOS_KEY = 'subnota.macos.local.memos.v1';
@@ -10,7 +11,13 @@ const ACTIVE_OWNER_KEY = 'subnota.macos.local.activeOwner.v1';
 const SQLITE_MIGRATION_KEY = 'subnota.macos.sqliteMigration.v1';
 
 type LocalSyncStatus = 'failed' | 'pending' | 'pending_delete' | 'synced';
-type RecordType = 'calendar' | 'inbox' | 'memo';
+type RecordType =
+  | 'activity_completion'
+  | 'calendar'
+  | 'daily_completion'
+  | 'inbox'
+  | 'memo'
+  | 'tree';
 
 export type LocalMemoRow = MemoRow & { local_sync_status?: LocalSyncStatus };
 export type LocalCalendarBlockRow = CalendarBlockRow & {
@@ -291,4 +298,71 @@ export const removeLocalInboxSession = async (clientId: string, ownerId?: string
   await ensureMigrated(ownerId);
   await getApi().localDbSetOwner?.(ownerKey(ownerId));
   await getApi().localDbDelete(ownerKey(ownerId), 'inbox', clientId);
+};
+
+// Growth events (append-only). Keyed by block id / local date so re-recording
+// the same completion is a no-op locally (matches the DB unique constraints).
+export type LocalActivityCompletion = ActivityCompletion & {
+  local_sync_status?: LocalSyncStatus;
+};
+export type LocalDailyCompletion = DailyCompletion & {
+  local_sync_status?: LocalSyncStatus;
+};
+
+export const loadLocalActivityCompletions = (ownerId?: string) =>
+  list<LocalActivityCompletion>('activity_completion', ownerId);
+
+export const upsertLocalActivityCompletion = async (
+  record: ActivityCompletion,
+  syncStatus: LocalSyncStatus = 'pending',
+  ownerId?: string,
+) => {
+  const next = { ...record, local_sync_status: syncStatus };
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(
+    ownerKey(ownerId),
+    'activity_completion',
+    record.calendar_block_id,
+    next,
+  );
+  return next;
+};
+
+export const loadLocalDailyCompletions = (ownerId?: string) =>
+  list<LocalDailyCompletion>('daily_completion', ownerId);
+
+export const upsertLocalDailyCompletion = async (
+  record: DailyCompletion,
+  syncStatus: LocalSyncStatus = 'pending',
+  ownerId?: string,
+) => {
+  const next = { ...record, local_sync_status: syncStatus };
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(
+    ownerKey(ownerId),
+    'daily_completion',
+    record.local_date,
+    next,
+  );
+  return next;
+};
+
+// Planted (forest) trees. Keyed by generation so a re-plant is a no-op locally.
+export type LocalForestTree = ForestTree & { local_sync_status?: LocalSyncStatus };
+
+export const loadLocalTrees = (ownerId?: string) =>
+  list<LocalForestTree>('tree', ownerId);
+
+export const upsertLocalTree = async (
+  record: ForestTree,
+  syncStatus: LocalSyncStatus = 'pending',
+  ownerId?: string,
+) => {
+  const next = { ...record, local_sync_status: syncStatus };
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(ownerKey(ownerId), 'tree', String(record.generation), next);
+  return next;
 };

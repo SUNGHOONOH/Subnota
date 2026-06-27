@@ -200,10 +200,15 @@ export default function SettingsModal(props: SettingsModalProps) {
       radius="xl"
     >
       <Tabs
+        classNames={{ tab: 'settings-tab' }}
         defaultValue="general"
         orientation="vertical"
         styles={{
-          list: { padding: 16, width: 210 },
+          list: {
+            background: 'light-dark(#f7f8fa, var(--mantine-color-dark-6))',
+            padding: 16,
+            width: 210,
+          },
           panel: { minWidth: 0 },
           root: { minHeight: 650 },
           tab: { minHeight: 42 },

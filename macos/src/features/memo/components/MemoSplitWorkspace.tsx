@@ -22,13 +22,18 @@ import TooltipIconButton from '../../../components/TooltipIconButton';
 import { ThemeToggle } from '../../../components/tiptap-templates/simple/theme-toggle';
 import { MemoRow, CalendarBlockRow, BriefingRow, ScheduleInboxRow, TopicCluster, TopicMembership } from '../../../types';
 import { MemoChunk } from '../../../lib/memoChunker';
-import { NetworkRequestError, NetworkSearchResult, searchCursorNetwork } from '../../../services/backend/networkService';
+import {
+  NETWORK_SEARCH_EMPTY_MESSAGE,
+  NetworkSearchResult,
+  formatNetworkSearchErrorMessage,
+  searchCursorNetwork,
+} from '../../../services/backend/networkService';
 import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
 import {
   SimpleEditor,
   SimpleEditorToolbar,
 } from '../../../components/tiptap-templates/simple/simple-editor';
-import CalendarWorkspace from '../../calendar/CalendarWorkspace';
+import CalendarWorkspace, { CalendarTreePanel } from '../../calendar/CalendarWorkspace';
 import BriefingWorkspace from '../../briefing/BriefingWorkspace';
 import InboxWorkspace from '../../inbox/InboxWorkspace';
 import { getMemoCategory } from '../../../lib/memoCategory';
@@ -45,6 +50,7 @@ export type MemoSplitPaneView =
   | 'calendar'
   | 'briefing'
   | 'network'
+  | 'topics'
   | 'source';
 
 export interface MemoSplitEditorState {
@@ -81,8 +87,9 @@ const VIEW_LABELS: Record<MemoSplitPaneView, string> = {
   calendar: '캘린더',
   inbox: '웹 inbox',
   memo: '노트',
-  network: '무의식',
+  network: '네트워크 검색',
   source: '링크',
+  topics: 'Topics',
 };
 
 const MENU_VIEWS: MemoSplitPaneView[] = [
@@ -90,8 +97,11 @@ const MENU_VIEWS: MemoSplitPaneView[] = [
   'inbox',
   'calendar',
   'briefing',
-  'network',
+  'topics',
 ];
+// Drag floor only — keeps a pane grabbable. Auto-layout (window narrowing) has no
+// floor (CSS min-width:0), so content panes clip rather than forcing a scrollbar.
+const SPLIT_PANE_MIN_WIDTH_PX = 240;
 
 const createEditorId = () =>
   `editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -231,21 +241,13 @@ const buildSplitTopicGraph = (
   memberships: TopicMembership[],
   activeMemoId: string | null,
 ) => {
-  const nodes: KnowledgeGraphNode[] = [
-    {
-      color: '#8b7355',
-      id: 'topic-root',
-      label: 'Topics',
-      size: 10,
-      x: 0,
-      y: 0,
-    },
-  ];
+  const nodes: KnowledgeGraphNode[] = [];
   const edges: KnowledgeGraphEdge[] = [];
   const total = Math.max(clusters.length, 1);
 
   clusters.forEach((cluster, index) => {
     const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
+    const ring = 0.58 + (index % 3) * 0.22;
     const topicMemberships = memberships.filter(item => item.topicId === cluster.id);
     const isActiveLinked = Boolean(
       activeMemoId && topicMemberships.some(item => item.memoId === activeMemoId),
@@ -257,15 +259,9 @@ const buildSplitTopicGraph = (
       color: isActiveLinked ? '#236b45' : '#5c4d3c',
       id: nodeId,
       label: cluster.label,
-      size: clamp(6 + count * 0.75 + (cluster.confidence ?? 0) * 4, 7, 16),
-      x: Math.cos(angle),
-      y: Math.sin(angle),
-    });
-    edges.push({
-      id: `topic-root-${cluster.id}`,
-      source: 'topic-root',
-      target: nodeId,
-      weight: isActiveLinked ? 1 : clamp((cluster.confidence ?? 0.45), 0.25, 0.9),
+      size: clamp(5.5 + count * 0.55 + (cluster.confidence ?? 0) * 3, 6, 13),
+      x: Math.cos(angle) * ring,
+      y: Math.sin(angle) * ring,
     });
   });
 
@@ -309,6 +305,8 @@ interface MemoSplitWorkspaceProps {
   calendarBlocks: CalendarBlockRow[];
   onDeleteCalendarBlock: (id: string) => void;
   onSaveCalendarBlock: (draft: any) => Promise<void>;
+  onToggleCalendarBlockCompleted: (id: string) => void;
+  calendarTreePanel: CalendarTreePanel | null;
 
   // 수집함 연동
   inboxItems: any[];
@@ -322,7 +320,7 @@ interface MemoSplitWorkspaceProps {
   onAcceptInbox: (item: ScheduleInboxRow) => void;
   onDismissInbox: (item: ScheduleInboxRow) => void;
 
-  // 무의식 토픽 지도 데이터
+  // Topics 지도 데이터
   topicClusters: TopicCluster[];
   topicMemberships: TopicMembership[];
 }
@@ -352,6 +350,8 @@ const MemoSplitWorkspace = ({
   calendarBlocks,
   onDeleteCalendarBlock,
   onSaveCalendarBlock,
+  onToggleCalendarBlockCompleted,
+  calendarTreePanel,
   inboxItems,
   isInboxLoading,
   onRefreshInbox,
@@ -588,7 +588,10 @@ const MemoSplitWorkspace = ({
           return;
         }
         patchEditorById(pane.id, editor.id, {
-          networkErrorMessage: response.message ?? null,
+          networkErrorMessage:
+            response.results.length === 0
+              ? response.message ?? NETWORK_SEARCH_EMPTY_MESSAGE
+              : null,
           networkIsLoading: false,
           networkQueryChunk: response.queryChunk,
           networkRequestId,
@@ -603,12 +606,9 @@ const MemoSplitWorkspace = ({
           return;
         }
         patchEditorById(pane.id, editor.id, {
-          networkErrorMessage:
-            error instanceof NetworkRequestError && error.retryAfterSeconds
-              ? `${error.message} ${error.retryAfterSeconds}초 후 다시 시도할 수 있습니다.`
-              : error instanceof Error
-                ? error.message
-                : '네트워크 검색에 실패했습니다.',
+          networkErrorMessage: formatNetworkSearchErrorMessage(error, {
+            isOnline: navigator.onLine,
+          }),
           networkIsLoading: false,
           networkRequestId,
           networkResults: [],
@@ -728,8 +728,11 @@ const MemoSplitWorkspace = ({
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const deltaPercent = ((moveEvent.clientX - startX) / containerWidth) * 100;
-      const minPercent = 16;
       const combined = leftStart + rightStart;
+      const minPercent = Math.min(
+        (SPLIT_PANE_MIN_WIDTH_PX / containerWidth) * 100,
+        combined / 2,
+      );
       const nextLeft = clamp(leftStart + deltaPercent, minPercent, combined - minPercent);
       const nextRight = combined - nextLeft;
 
@@ -951,6 +954,8 @@ const MemoSplitWorkspace = ({
           blocks={calendarBlocks}
           onDeleteBlock={onDeleteCalendarBlock}
           onSaveBlock={onSaveCalendarBlock}
+          onToggleCompleted={onToggleCalendarBlockCompleted}
+          treePanel={calendarTreePanel}
         />
       );
     }
@@ -977,7 +982,15 @@ const MemoSplitWorkspace = ({
       );
     }
 
-    if (editor.view === 'network') {
+    if (
+      editor.view === 'network' &&
+      (
+        editor.networkIsLoading ||
+        editor.networkErrorMessage ||
+        editor.networkQueryChunk ||
+        editor.networkResults
+      )
+    ) {
       if (
         editor.networkIsLoading ||
         editor.networkErrorMessage ||
@@ -1005,27 +1018,29 @@ const MemoSplitWorkspace = ({
 
         return (
           <div className="split-network-search net-graph-view">
-            <div className="net-query-card">
-              <span className="net-query-eyebrow">지금 문장</span>
-              <p className="net-query-text">
-                {editor.networkQueryChunk?.text?.trim() ||
-                  '문장을 선택하거나 작성해 주세요.'}
-              </p>
+            <div className="net-overlay-stack">
+              <div className="net-query-card">
+                <span className="net-query-eyebrow">지금 문장</span>
+                <p className="net-query-text">
+                  {editor.networkQueryChunk?.text?.trim() ||
+                    '문장을 선택하거나 작성해 주세요.'}
+                </p>
+              </div>
+              {editor.networkErrorMessage && (
+                <div className="network-inline-error net-inline-error">
+                  <p className="form-error">{editor.networkErrorMessage}</p>
+                  <button
+                    className="quick-date-chip"
+                    onClick={() => void runEditorNetworkSearch(pane, editor)}
+                    type="button"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              )}
             </div>
             {editor.networkIsLoading && (
               <p className="loading-text net-loading">연결성 찾는 중...</p>
-            )}
-            {editor.networkErrorMessage && (
-              <div className="network-inline-error net-inline-error">
-                <p className="form-error">{editor.networkErrorMessage}</p>
-                <button
-                  className="quick-date-chip"
-                  onClick={() => void runEditorNetworkSearch(pane, editor)}
-                  type="button"
-                >
-                  다시 시도
-                </button>
-              </div>
             )}
             {editor.networkResults && editor.networkResults.length > 0 && (
               <>
@@ -1087,17 +1102,18 @@ const MemoSplitWorkspace = ({
           </div>
         );
       }
+    }
 
-      // Default Topic Clusters discovery view
+    if (editor.view === 'topics' || editor.view === 'network') {
+      // `network` fallback preserves previously persisted State A tabs.
       if (topicClusters.length > 0) {
         const activeTopicId =
           topicMemberships.find(membership => membership.memoId === editor.memoId)?.topicId ?? null;
         const graph = buildSplitTopicGraph(topicClusters, topicMemberships, editor.memoId);
 
         return (
-          <div className="split-global-network">
-            <h4>Topics</h4>
-            <p>토픽 발견 맵</p>
+          <div className="split-global-network split-topics-stage">
+            <div className="split-topics-stage-title">Topics</div>
             <KnowledgeGraphView
               activeNodeId={activeTopicId ? `topic:${activeTopicId}` : null}
               ariaLabel="토픽 지식 그래프"
@@ -1119,25 +1135,6 @@ const MemoSplitWorkspace = ({
                 }
               }}
             />
-            <div className="split-topic-list">
-              {topicClusters.map(cluster => (
-                <button
-                  key={cluster.id}
-                  className="split-topic-chip"
-                  onClick={() => {
-                    // Open first memo of topic
-                    const memId = topicMemberships.find(m => m.topicId === cluster.id)?.memoId;
-                    const target = memos.find(m => m.id === memId);
-                    if (target) {
-                      onSelectMemoById(target.id);
-                      openMemoInPane(pane.id, target);
-                    }
-                  }}
-                >
-                  {cluster.label}
-                </button>
-              ))}
-            </div>
           </div>
         );
       }
@@ -1363,7 +1360,7 @@ const MemoSplitWorkspace = ({
             tooltip={
               canAddPane
                 ? 'split 패널 추가'
-                : 'split 패널은 최대 3개까지 열 수 있습니다'
+                : 'split 패널은 최대 2개까지 열 수 있습니다'
             }
           >
             <Columns2 size={18} />
@@ -1439,7 +1436,7 @@ const MemoSplitWorkspace = ({
                   tooltip={
                     canAddPane
                       ? 'split 패널 추가'
-                      : 'split 패널은 최대 3개까지 열 수 있습니다'
+                      : 'split 패널은 최대 2개까지 열 수 있습니다'
                   }
                 >
                   <Columns2 size={14} />

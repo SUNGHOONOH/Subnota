@@ -210,13 +210,22 @@ export interface SimpleEditorProps {
   showVersionLabel?: boolean;
 }
 
-export function SimpleEditorToolbar({ editor }: { editor: Editor | null }) {
+export function SimpleEditorToolbar({
+  editor,
+  disabled = false,
+}: {
+  editor: Editor | null
+  disabled?: boolean
+}) {
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
     "main"
   )
 
   return (
-    <div className="simple-editor-toolbar-host">
+    <div
+      aria-disabled={disabled || undefined}
+      className={`simple-editor-toolbar-host${disabled ? " is-disabled" : ""}`}
+    >
       <EditorContext.Provider value={{ editor }}>
         <Toolbar>
           {mobileView === "main" ? (

@@ -20,11 +20,11 @@ export interface KnowledgeGraphEdge {
 }
 
 export const GRAPH_COLORS = {
-  active: '#236b45',
-  activeEdge: '#7f8a6f',
-  defaultEdge: '#d8cebc',
-  defaultNode: '#5c4d3c',
-  mutedNode: '#c8bda9',
+  active: '#1d1d1f',
+  activeEdge: '#cc785c',
+  defaultEdge: '#e6e3dd',
+  defaultNode: '#cc785c',
+  mutedNode: '#c7c3bb',
 } as const;
 
 const normalizeWeight = (weight?: number) => {

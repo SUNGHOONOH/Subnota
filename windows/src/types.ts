@@ -26,6 +26,7 @@ export interface CalendarBlockRow {
   all_day: boolean | null;
   all_day_date?: string | null;
   color: string | null;
+  completed_at: string | null;
   created_at: string;
   end_date: string | null;
   id: string;
@@ -42,6 +43,7 @@ export interface CalendarBlockRow {
 export interface ScheduleInboxRow {
   all_day: boolean | null;
   confidence: 'auto' | 'candidate' | null;
+  created_at: string;
   id: string;
   memo_id: string;
   scheduled_at: string;

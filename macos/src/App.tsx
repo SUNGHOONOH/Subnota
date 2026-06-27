@@ -65,9 +65,12 @@ import {
   createLocalMemoRow,
   createLocalInboxSession,
   getLocalWorkspaceOwner,
+  loadLocalActivityCompletions,
   loadLocalCalendarBlocks,
+  loadLocalDailyCompletions,
   loadLocalInboxQueue,
   loadLocalMemos,
+  loadLocalTrees,
   loadVisibleLocalCalendarBlocks,
   loadVisibleLocalMemos,
   markLocalCalendarBlockDeleted,
@@ -78,12 +81,16 @@ import {
   replaceSyncedCalendarBlocks,
   replaceSyncedMemos,
   setLocalWorkspaceOwner,
+  upsertLocalActivityCompletion,
   upsertLocalCalendarBlock,
+  upsertLocalDailyCompletion,
   upsertLocalMemo,
+  upsertLocalTree,
 } from './services/local/offlineStore';
 import {
-  NetworkRequestError,
+  NETWORK_SEARCH_EMPTY_MESSAGE,
   NetworkSearchResult,
+  formatNetworkSearchErrorMessage,
   searchCursorNetwork,
 } from './services/backend/networkService';
 import {
@@ -95,7 +102,11 @@ import {
   fetchMemos,
   fetchScheduleInbox,
   fetchTopicMap,
+  fetchTrees,
   getSession,
+  recordActivityCompletion,
+  recordDailyCompletion,
+  recordPlantedTree,
   sendPasswordResetOtp,
   signOut,
   updateScheduleInboxStatus,
@@ -103,6 +114,17 @@ import {
   upsertMemo,
 } from './services/supabase/data';
 import { isSupabaseConfigured, supabase } from './services/supabase/client';
+import {
+  blockLocalDate,
+  blocksForLocalDate,
+  isDayComplete,
+} from './features/tree/model/dayCompletion';
+import { deriveGrowingTree } from './features/tree/model/deriveGrowingTree';
+import {
+  ActivityCompletion,
+  DailyCompletion,
+  ForestTree,
+} from './features/tree/model/treeTypes';
 import {
   BriefingRow,
   CalendarBlockRow,
@@ -119,7 +141,7 @@ const SAVE_DELAY_MS = 900;
 // 첫 부팅 동기화가 느리거나 끊겨도 로딩화면에 갇히지 않도록 하는 상한.
 // 초과하면 로컬 데이터로 진입하고 동기화는 백그라운드에서 계속된다(local-first).
 const BOOT_SYNC_TIMEOUT_MS = 8000;
-const MAX_SPLIT_PANE_COUNT = 3;
+const MAX_SPLIT_PANE_COUNT = 2;
 const LAST_SYNC_STORAGE_KEY = 'subnota.lastSyncAt.v1';
 
 const toLocalCalendarDate = (value: string) => {
@@ -247,6 +269,10 @@ const App = () => {
   } | null>(null);
   const [briefings, setBriefings] = useState<BriefingRow[]>([]);
   const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlockRow[]>([]);
+  const [activityCompletions, setActivityCompletions] = useState<ActivityCompletion[]>([]);
+  const [dailyCompletions, setDailyCompletions] = useState<DailyCompletion[]>([]);
+  const [forestTrees, setForestTrees] = useState<ForestTree[]>([]);
+  const [wateringSignal, setWateringSignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isBooting, setBooting] = useState(true);
   const [bootMessageIndex, setBootMessageIndex] = useState(
@@ -267,6 +293,11 @@ const App = () => {
   const [scheduleInbox, setScheduleInbox] = useState<ScheduleInboxRow[]>([]);
   const [saveState, setSaveState] = useState<MemoSaveState>('idle');
   const [session, setSession] = useState<Session | null>(null);
+  const treeUserId = session?.user.id ?? 'local';
+  const growingTree = useMemo(
+    () => deriveGrowingTree(treeUserId, forestTrees, activityCompletions, dailyCompletions),
+    [treeUserId, forestTrees, activityCompletions, dailyCompletions],
+  );
   const [selectedTextState, setSelectedTextState] = useState('');
   const [selectionEnd, setSelectionEnd] = useState(0);
   const [selectionStart, setSelectionStart] = useState(0);
@@ -701,15 +732,22 @@ const App = () => {
   }, []);
 
   const applyLocalWorkspace = useCallback(async (ownerId?: string) => {
-    const [localMemos, localBlocks, localInbox] = await Promise.all([
-      loadVisibleLocalMemos(ownerId),
-      loadVisibleLocalCalendarBlocks(ownerId),
-      loadLocalInboxQueue(ownerId),
-    ]);
+    const [localMemos, localBlocks, localInbox, localActivities, localDailies, localTrees] =
+      await Promise.all([
+        loadVisibleLocalMemos(ownerId),
+        loadVisibleLocalCalendarBlocks(ownerId),
+        loadLocalInboxQueue(ownerId),
+        loadLocalActivityCompletions(ownerId),
+        loadLocalDailyCompletions(ownerId),
+        loadLocalTrees(ownerId),
+      ]);
 
     setMemos(localMemos);
     setCalendarBlocks(localBlocks);
     setInboxItems(localInbox);
+    setActivityCompletions(localActivities);
+    setDailyCompletions(localDailies);
+    setForestTrees([...localTrees].sort((a, b) => a.generation - b.generation));
     setBriefings([]);
     setScheduleInbox([]);
     setTopicClusters([]);
@@ -753,7 +791,9 @@ const App = () => {
         const savedBlock = await upsertCalendarBlock(currentSession, {
           allDay: Boolean(block.all_day),
           color: block.color ?? '#66705A',
+          completedAt: block.completed_at ?? null,
           id: block.id,
+          isCompleted: Boolean(block.is_completed),
           note: block.note,
           order: block.order ?? 0,
           startDate: block.start_date,
@@ -856,6 +896,29 @@ const App = () => {
         setTopicClusters(nextTopicMap.clusters);
         setTopicEdges(nextTopicMap.edges);
         setTopicMemberships(nextTopicMap.memberships);
+
+        // Forest = cloud trees ∪ any trees planted while offline (pushed now).
+        const cloudTrees = await fetchTrees(currentSession).catch(() => [] as ForestTree[]);
+        if (isCurrentLoad()) {
+          const localTrees = await loadLocalTrees(ownerId);
+          const byGeneration = new Map<number, ForestTree>();
+          for (const tree of cloudTrees) {
+            byGeneration.set(tree.generation, tree);
+          }
+          for (const tree of localTrees) {
+            if (!byGeneration.has(tree.generation)) {
+              byGeneration.set(tree.generation, tree);
+              await recordPlantedTree(currentSession, tree).catch(() => undefined);
+            }
+          }
+          const mergedTrees = [...byGeneration.values()].sort(
+            (a, b) => a.generation - b.generation,
+          );
+          await Promise.all(
+            mergedTrees.map(tree => upsertLocalTree(tree, 'synced', ownerId).catch(() => undefined)),
+          );
+          setForestTrees(mergedTrees);
+        }
 
         hydrateActiveMemo(mergedMemos);
         const syncedAt = new Date().toISOString();
@@ -1097,15 +1160,9 @@ const App = () => {
           }
           setAmbientQueryChunk(null);
           setAmbientResult(null);
-          setAmbientError(
-            !navigator.onLine
-              ? '오프라인 상태라 연결 추천을 불러오지 못했습니다.'
-              : caught instanceof NetworkRequestError && caught.retryAfterSeconds
-                ? `${caught.message} ${caught.retryAfterSeconds}초 후 다시 시도할 수 있습니다.`
-              : caught instanceof Error
-                ? caught.message
-                : '연결 추천을 불러오지 못했습니다.',
-          );
+          setAmbientError(formatNetworkSearchErrorMessage(caught, {
+            isOnline: navigator.onLine,
+          }));
         });
 
     return () => {
@@ -1342,6 +1399,7 @@ const App = () => {
       end_date: null,
       id,
       is_completed: existingBlock?.is_completed ?? false,
+      completed_at: existingBlock?.completed_at ?? null,
       local_sync_status: 'pending',
       note: draft.note,
       order: draft.order ?? 0,
@@ -1365,7 +1423,12 @@ const App = () => {
 
     void (async () => {
       try {
-        const block = await upsertCalendarBlock(currentSession, { ...draft, id });
+        const block = await upsertCalendarBlock(currentSession, {
+          ...draft,
+          id,
+          isCompleted: existingBlock?.is_completed ?? false,
+          completedAt: existingBlock?.completed_at ?? null,
+        });
         await upsertLocalCalendarBlock(block, 'synced', ownerId);
         if (!isCurrentSession(currentSession)) return;
         setCalendarBlocks(previous =>
@@ -1377,6 +1440,151 @@ const App = () => {
         setCalendarBlocks(previous =>
           previous.map(item =>
             item.id === id ? { ...item, local_sync_status: 'failed' } : item,
+          ),
+        );
+      }
+    })();
+  };
+
+  // Permanent growth events: recorded the first time a block is completed and
+  // when a whole day becomes complete. Local-first (works offline); the cloud
+  // insert is best-effort and idempotent. Never removed on uncomplete/delete.
+  const recordGrowthOnComplete = async (
+    block: CalendarBlockRow,
+    nextBlocks: CalendarBlockRow[],
+  ) => {
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
+    const now = new Date().toISOString();
+    const localDate = blockLocalDate(block);
+
+    const activity = await loadLocalActivityCompletions(ownerId);
+    if (!activity.some(item => item.calendar_block_id === block.id)) {
+      const record = {
+        id: createUuid(),
+        calendar_block_id: block.id,
+        completed_at: now,
+        local_date: localDate,
+      };
+      await upsertLocalActivityCompletion(record, 'pending', ownerId);
+      setActivityCompletions(previous => [...previous, record]);
+      if (currentSession) {
+        try {
+          await recordActivityCompletion(currentSession, record);
+          await upsertLocalActivityCompletion(record, 'synced', ownerId);
+        } catch {
+          // Stays pending for a later sync.
+        }
+      }
+    }
+
+    const dayBlocks = blocksForLocalDate(nextBlocks, localDate);
+    if (isDayComplete(dayBlocks)) {
+      const daily = await loadLocalDailyCompletions(ownerId);
+      if (!daily.some(item => item.local_date === localDate)) {
+        const record = {
+          id: createUuid(),
+          local_date: localDate,
+          completed_at: now,
+          todo_count: dayBlocks.length,
+        };
+        await upsertLocalDailyCompletion(record, 'pending', ownerId);
+        setDailyCompletions(previous => [...previous, record]);
+        setWateringSignal(value => value + 1);
+        if (currentSession) {
+          try {
+            await recordDailyCompletion(currentSession, record);
+            await upsertLocalDailyCompletion(record, 'synced', ownerId);
+          } catch {
+            // Stays pending for a later sync.
+          }
+        }
+      }
+    }
+  };
+
+  const handlePlantTree = async () => {
+    if (!growingTree.isMature) {
+      return;
+    }
+    const ownerId = session?.user.id;
+    const tree: ForestTree = {
+      id: createUuid(),
+      generation: growingTree.generation,
+      planted_at: new Date().toISOString(),
+      final_params: growingTree.params,
+      completed_todo_count: growingTree.stats.totalCompleted,
+      completed_day_count: growingTree.stats.completedDays,
+    };
+    setForestTrees(previous => [...previous, tree]);
+    await upsertLocalTree(tree, 'pending', ownerId);
+    if (session) {
+      try {
+        await recordPlantedTree(session, tree);
+        await upsertLocalTree(tree, 'synced', ownerId);
+      } catch {
+        // Stays pending for a later sync.
+      }
+    }
+  };
+
+  const toggleCalendarBlockCompleted = async (blockId: string) => {
+    const currentSession = session;
+    const ownerId = currentSession?.user.id;
+    const existing = calendarBlocks.find(block => block.id === blockId);
+    if (!existing) {
+      return;
+    }
+    const nextCompleted = !existing.is_completed;
+    const now = new Date().toISOString();
+    const updated: CalendarBlockRow = {
+      ...existing,
+      is_completed: nextCompleted,
+      completed_at: nextCompleted ? now : null,
+      local_sync_status: 'pending',
+      updated_at: now,
+    };
+
+    setCalendarBlocks(previous =>
+      previous.map(block => (block.id === blockId ? updated : block)),
+    );
+    await upsertLocalCalendarBlock(updated, 'pending', ownerId);
+
+    if (nextCompleted) {
+      const nextBlocks = calendarBlocks.map(block =>
+        block.id === blockId ? updated : block,
+      );
+      void recordGrowthOnComplete(updated, nextBlocks);
+    }
+
+    if (!currentSession) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const block = await upsertCalendarBlock(currentSession, {
+          allDay: Boolean(updated.all_day),
+          color: updated.color ?? '#66705A',
+          id: updated.id,
+          isCompleted: nextCompleted,
+          completedAt: updated.completed_at,
+          note: updated.note,
+          order: updated.order ?? 0,
+          startDate: updated.start_date,
+          title: updated.title,
+        });
+        await upsertLocalCalendarBlock(block, 'synced', ownerId);
+        if (!isCurrentSession(currentSession)) return;
+        setCalendarBlocks(previous =>
+          previous.map(item => (item.id === block.id ? block : item)),
+        );
+      } catch {
+        await upsertLocalCalendarBlock(updated, 'failed', ownerId).catch(() => undefined);
+        if (!isCurrentSession(currentSession)) return;
+        setCalendarBlocks(previous =>
+          previous.map(item =>
+            item.id === blockId ? { ...item, local_sync_status: 'failed' } : item,
           ),
         );
       }
@@ -1973,7 +2181,9 @@ const App = () => {
         return;
       }
       const message =
-        result.message && result.results.length === 0 ? result.message : null;
+        result.results.length === 0
+          ? result.message ?? NETWORK_SEARCH_EMPTY_MESSAGE
+          : null;
       setNetworkError(message);
       setNetworkQueryChunk(result.queryChunk);
       setNetworkResults(result.results);
@@ -1987,13 +2197,9 @@ const App = () => {
       if (networkController.signal.aborted) {
         return;
       }
-      const message = !navigator.onLine
-        ? '네트워크에 연결하면 검색할 수 있어요.'
-        : caught instanceof NetworkRequestError && caught.retryAfterSeconds
-          ? `${caught.message} ${caught.retryAfterSeconds}초 후 다시 시도할 수 있습니다.`
-          : caught instanceof Error
-            ? caught.message
-            : '네트워크 검색에 실패했습니다.';
+      const message = formatNetworkSearchErrorMessage(caught, {
+        isOnline: navigator.onLine,
+      });
       setNetworkError(message);
       patchNetworkSplitEditor(networkRequestId, {
         networkErrorMessage: message,
@@ -2241,7 +2447,7 @@ const App = () => {
           aria-label="Topics"
           className="nav-item"
           delay={300}
-          onClick={() => openViewAsTab('network')}
+          onClick={() => openViewAsTab('topics')}
           placement="right"
           tooltip="Topics"
         >
@@ -2363,6 +2569,14 @@ const App = () => {
                   calendarBlocks={calendarBlocks}
                   onDeleteCalendarBlock={removeCalendarBlock}
                   onSaveCalendarBlock={saveCalendarBlock}
+                  onToggleCalendarBlockCompleted={toggleCalendarBlockCompleted}
+                  calendarTreePanel={{
+                    forest: forestTrees,
+                    onPlant: () => void handlePlantTree(),
+                    tree: growingTree,
+                    userId: treeUserId,
+                    wateringSignal,
+                  }}
                   inboxItems={inboxItems}
                   isInboxLoading={isInboxLoading}
                   onRefreshInbox={refreshInbox}

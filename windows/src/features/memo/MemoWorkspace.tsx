@@ -537,7 +537,7 @@ const MemoWorkspace = ({
       {
         color: '#8b7355',
         id: 'topic-root',
-        label: '무의식',
+        label: 'Topics',
         size: 10,
         x: GRAPH_CENTER_X,
         y: GRAPH_CENTER_Y,
@@ -761,7 +761,7 @@ const MemoWorkspace = ({
               setSidebarMode('network');
             }}
             placement="bottom"
-            tooltip="무의식 지도"
+            tooltip="Topics"
           >
             <Network size={18} />
           </TooltipIconButton>
@@ -973,7 +973,7 @@ const MemoWorkspace = ({
           <div className="topic-map-panel">
             <div className="session-header compact">
               <div>
-                <h2>무의식 지도</h2>
+                <h2>Topics</h2>
                 <p>State A topic discovery</p>
               </div>
               <span>{topicClusters.length}</span>
@@ -994,7 +994,7 @@ const MemoWorkspace = ({
               <>
                 <KnowledgeGraphView
                   activeNodeId={activeTopicId ? `topic:${activeTopicId}` : null}
-                  ariaLabel="무의식 토픽 지식 그래프"
+                  ariaLabel="Topics 지식 그래프"
                   className="topic-graph-shell"
                   edges={topicGraphEdges}
                   nodes={topicGraphNodes}

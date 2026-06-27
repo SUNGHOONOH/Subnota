@@ -1110,7 +1110,7 @@ const MemoWorkspace = ({
               title={
                 canAddSplitPane
                   ? '오른쪽 split 패널 추가'
-                  : 'split 패널은 최대 3개까지 열 수 있습니다'
+                  : 'split 패널은 최대 2개까지 열 수 있습니다'
               }
               type="button"
             >

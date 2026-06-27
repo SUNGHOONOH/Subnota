@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 import { CalendarDays } from '@/components/icons';
@@ -128,7 +128,15 @@ const BriefingWorkspace = ({
         )}
         {inboxItems.map(item => (
           <article className="schedule-approve-card" key={item.id}>
-            <strong className="schedule-approve-title">{item.title}</strong>
+            <div className="schedule-approve-title-row">
+              <strong className="schedule-approve-title">{item.title}</strong>
+              <span className="schedule-approve-ago">
+                {formatDistanceToNow(new Date(item.created_at), {
+                  addSuffix: true,
+                  locale: ko,
+                })}
+              </span>
+            </div>
             <div className="schedule-approve-date">
               <CalendarDays size={14} />
               {formatScheduleDate(item)}

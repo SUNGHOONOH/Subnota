@@ -27,6 +27,8 @@ export interface NetworkSearchResponse {
   results: NetworkSearchResult[];
 }
 
+export const NETWORK_SEARCH_EMPTY_MESSAGE = '비슷한 문장이 아직은 없네요!';
+
 export class NetworkRequestError extends Error {
   retryAfterSeconds: number | null;
   retryable: boolean;
@@ -47,6 +49,39 @@ export class NetworkRequestError extends Error {
     this.status = options.status ?? null;
   }
 }
+
+export const formatNetworkSearchErrorMessage = (
+  error: unknown,
+  options: { isOnline?: boolean } = {},
+) => {
+  if (options.isOnline === false) {
+    return '네트워크에 연결하면 검색할 수 있어요.';
+  }
+
+  if (error instanceof NetworkRequestError) {
+    if (error.retryAfterSeconds) {
+      return `${error.message} ${error.retryAfterSeconds}초 후 다시 시도할 수 있습니다.`;
+    }
+
+    if (error.status === 401 || error.status === 403) {
+      return '네트워크 검색은 로그인 후 사용할 수 있습니다.';
+    }
+
+    return NETWORK_SEARCH_EMPTY_MESSAGE;
+  }
+
+  if (error instanceof Error) {
+    if (error.message.includes('login')) {
+      return '네트워크 검색은 로그인 후 사용할 수 있습니다.';
+    }
+
+    if (error.message.includes('configured')) {
+      return '네트워크 검색 설정이 필요합니다.';
+    }
+  }
+
+  return NETWORK_SEARCH_EMPTY_MESSAGE;
+};
 
 interface BackendNetworkSearchResponse {
   message?: string | null;
@@ -74,6 +109,20 @@ interface BackendNetworkSearchResponse {
 
 const getBackendUrl = () => {
   return (import.meta.env.VITE_MEMO_BACKEND_URL ?? '').trim();
+};
+
+const getAccessToken = async (refresh = false) => {
+  if (refresh) {
+    const {
+      data: { session },
+    } = await supabase.auth.refreshSession();
+    return session?.access_token ?? null;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
 };
 
 export const searchCursorNetwork = async ({
@@ -106,11 +155,9 @@ export const searchCursorNetwork = async ({
     throw new Error('Supabase is not configured.');
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const accessToken = await getAccessToken();
 
-  if (!session?.access_token) {
+  if (!accessToken) {
     throw new Error('Network search requires login.');
   }
 
@@ -123,9 +170,8 @@ export const searchCursorNetwork = async ({
     controller.abort();
   }, timeoutMs);
 
-  let response: Response;
-  try {
-    response = await fetch(
+  const request = (token: string) =>
+    fetch(
       `${backendUrl.replace(/\/$/, '')}/network/search`,
       {
         body: JSON.stringify({
@@ -136,13 +182,23 @@ export const searchCursorNetwork = async ({
           query_text: queryText,
         }),
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         method: 'POST',
         signal: controller.signal,
       },
     );
+
+  let response: Response;
+  try {
+    response = await request(accessToken);
+    if (response.status === 401) {
+      const refreshedToken = await getAccessToken(true);
+      if (refreshedToken && refreshedToken !== accessToken) {
+        response = await request(refreshedToken);
+      }
+    }
   } catch (error) {
     if (controller.signal.aborted) {
       if (didTimeout) {

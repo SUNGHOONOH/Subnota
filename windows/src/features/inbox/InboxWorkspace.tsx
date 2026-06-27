@@ -98,34 +98,30 @@ const InboxWorkspace = ({
 
   return (
     <div className="inbox-workspace">
-      <section className="inbox-capture-panel">
-        <div>
-          <p className="eyebrow">Inbox</p>
-          <h2>보고 있던 링크를 수집함에 저장합니다.</h2>
-          <p>
-            YouTube, Instagram, 공개 웹페이지를 자동으로 구분하고 핵심 요약을
-            준비합니다.
-          </p>
-        </div>
-        <form className="inbox-url-form" onSubmit={submit}>
-          <input
-            onChange={event => setDraft(event.target.value)}
-            placeholder="https://..."
-            type="url"
-            value={draft}
-          />
-          <button disabled={isSaving || !draft.trim()} type="submit">
-            {isSaving ? '저장 중' : '저장'}
-          </button>
-        </form>
-      </section>
+      <form className="inbox-url-form" onSubmit={submit}>
+        <input
+          onChange={event => setDraft(event.target.value)}
+          placeholder="링크 붙여넣기 — YouTube · Instagram · 웹페이지"
+          type="url"
+          value={draft}
+        />
+        <button disabled={isSaving || !draft.trim()} type="submit">
+          {isSaving ? '저장 중' : '저장'}
+        </button>
+        <button
+          aria-label="새로고침"
+          className="inbox-refresh-btn"
+          disabled={isLoading}
+          onClick={onRefresh}
+          title="새로고침"
+          type="button"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </form>
 
       <div className="inbox-list-header">
         <strong>최근 수집함</strong>
-        <button className="ghost-button" disabled={isLoading} onClick={onRefresh} type="button">
-          <RefreshCw size={15} />
-          {isLoading ? '불러오는 중' : '새로고침'}
-        </button>
       </div>
 
       <section className="inbox-grid">
