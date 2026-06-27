@@ -7,8 +7,9 @@ Local-first memo app for quick capture, manual calendar blocks, URL inbox, daily
 Subnota is split by platform:
 
 - **iOS** is the React Native app in `mobile/`, with bottom tabs for `노트`, `캘린더`, `수집함`, and `브리핑`. Notes are edited through an offline Tiptap WebView bundle.
-- **macOS and Windows** are Electron + Tiptap desktop apps (`macos/`, `windows/`) sharing ~95% of their code. They render a nav-rail workspace with a native Tiptap editor (no WebView bridge).
+- **macOS and Windows** are Electron + Tiptap desktop apps (`macos/`, `windows/`) sharing ~95% of their code. They use SQLite (`node:sqlite` in a background worker thread) as local-first storage (replacing the legacy `localStorage`), and render a nav-rail workspace with a native Tiptap editor (no WebView bridge).
 - All clients are local-first: calendar blocks, inbox fallback entries, and memo edits are saved locally first, then synced when Supabase auth is available.
+- **Gamification & Growth**: Desktop clients feature a virtual tree/forest growth-event tracking ledger (based on calendar block completions) synced to Supabase.
 
 The desktop apps are mid-migration from the legacy React Native macOS target (which has been removed from `mobile/macos/`) — see [`ELECTRON_MIGRATION_STATUS.md`](./ELECTRON_MIGRATION_STATUS.md).
 
@@ -48,7 +49,8 @@ The app remains usable without login or network for memo writing, manual calenda
 - Electron 42.4.0 + Electron Forge 7.11.2 (Vite plugin)
 - React 19.2 + Tiptap 3.26.1 (native browser editor, no WebView bridge)
 - Vite 5.4.x, Vitest 3.2.6, TypeScript ~5.5
-- Same Supabase + offline-store data contracts as iOS
+- Local-first storage backed by SQLite (using Node's native `DatabaseSync` in a background worker thread with WAL journaling enabled)
+- Shares a unified Mini Subnota workspace (quick capture floating panel, global shortcuts) across macOS and Windows (browser active-tab capture is macOS-exclusive due to AppleScript dependencies)
 
 **Legacy (removed)**
 
@@ -145,7 +147,7 @@ CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://subnota.c
 LOG_LEVEL=INFO
 ```
 
-Supabase Edge Function `mobile/supabase/.env.local`:
+Supabase Edge Function `supabase/.env.local`:
 
 ```text
 SUPABASE_URL=
@@ -246,23 +248,38 @@ curl -X POST http://localhost:8000/maintenance/topic-discovery/run-dirty-users \
 Current schema migrations:
 
 ```text
-mobile/supabase/migrations/20260519_final_schema.sql
-mobile/supabase/migrations/20260525_topic_memo_edges_patch.sql
-mobile/supabase/migrations/20260528_inbox_sessions.sql
-mobile/supabase/migrations/20260530_inbox_session_embeddings.sql
-mobile/supabase/migrations/20260531_inbox_structured_summaries.sql
-mobile/supabase/migrations/20260602_hnsw_vector_indexes.sql
-mobile/supabase/migrations/20260611_inbox_client_id.sql
-mobile/supabase/migrations/20260611_memo_category.sql
-mobile/supabase/migrations/20260613_inbox_sessions_updated_order.sql
-mobile/supabase/migrations/20260620_topic_memo_embedding_cache.sql
+supabase/migrations/20260519_final_schema.sql
+supabase/migrations/20260525_topic_memo_edges_patch.sql
+supabase/migrations/20260528_inbox_sessions.sql
+supabase/migrations/20260530_inbox_session_embeddings.sql
+supabase/migrations/20260531_inbox_structured_summaries.sql
+supabase/migrations/20260602_hnsw_vector_indexes.sql
+supabase/migrations/20260611_inbox_client_id.sql
+supabase/migrations/20260611_memo_category.sql
+supabase/migrations/20260613_inbox_sessions_updated_order.sql
+supabase/migrations/20260620_topic_memo_embedding_cache.sql
+supabase/migrations/20260621_network_index_consistency.sql
+supabase/migrations/20260622_desktop_reliability.sql
+supabase/migrations/20260623000000_memo_chunk_edges.sql
+supabase/migrations/20260623000100_db_security_and_edge_consistency.sql
+supabase/migrations/20260623000200_rls_performance.sql
+supabase/migrations/20260623000300_drop_ivfflat_indexes.sql
+supabase/migrations/20260623104359_memo_content_anchor_and_cron.sql
+supabase/migrations/20260623110725_topic_dirty_nonempty_only.sql
+supabase/migrations/20260623194520_schedule_inbox_atomic_replace.sql
+supabase/migrations/20260624000000_fk_indexes.sql
+supabase/migrations/20260624000100_memo_tombstones_and_revision.sql
+supabase/migrations/20260624000200_memo_conflict_copy_rpc.sql
+supabase/migrations/20260625000000_calendar_completed_at.sql
+supabase/migrations/20260626000000_growth_events.sql
+supabase/migrations/20260626000100_trees.sql
 ```
 
 The schema defines:
 
 - `profiles`
 - `memos`
-- `calendar_blocks`
+- `calendar_blocks` (includes block completion states and timestamps)
 - `schedule_inbox`
 - `memo_chunks`
 - `chunk_embedding_cache`
@@ -272,6 +289,9 @@ The schema defines:
 - `topic_cluster_memos`
 - `topic_memo_edges`
 - `inbox_sessions`
+- `activity_completions` (gamification completed items, append-only ledger)
+- `daily_completions` (gamification watered days, one record per day)
+- `trees` (gamification forest planted trees, frozen at plant time)
 - inbox summary embeddings
 - `match_memo_chunks` pgvector RPC with memo timestamp metadata
 - HNSW vector indexes for memo and inbox embedding search

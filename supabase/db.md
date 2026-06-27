@@ -27,7 +27,7 @@ Google Secret Manager.
 
 ## Source of truth and migration workflow
 
-Schema source of truth is `mobile/supabase/migrations/`. Production migration
+Schema source of truth is `supabase/migrations/`. Production migration
 history was initialized on 2026-06-23 after earlier migrations had been applied
 manually. Local and remote history currently match through:
 
@@ -39,17 +39,17 @@ can track both. Do not rename an already tracked migration again.
 For future changes:
 
 ```bash
-supabase migration new <descriptive_name> --workdir mobile
+supabase migration new <descriptive_name>
 # edit the generated SQL
-supabase db push --linked --workdir mobile
-supabase migration list --linked --workdir mobile
+supabase db push --linked
+supabase migration list --linked
 ```
 
 Do not paste migration files into the SQL Editor and do not edit production
 without also committing the equivalent migration. Existing migrations are the
 reproducible chain; new production changes belong in a new migration.
 
-The project CLI configuration is `mobile/supabase/config.toml`.
+The project CLI configuration is `supabase/config.toml`.
 
 ## Public tables (16)
 
