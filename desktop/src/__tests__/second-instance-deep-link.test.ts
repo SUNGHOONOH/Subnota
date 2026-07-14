@@ -61,6 +61,20 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('electron-squirrel-startup', () => ({ default: false }));
+vi.mock('../platform/policy', () => ({
+  DESKTOP_PLATFORM_FEATURES: {
+    browserExtensionClipper: false,
+    captureShortcut: true,
+    manualLinkCapture: true,
+    miniSubnota: true,
+    nativeCurrentPageCapture: true,
+    platform: 'macos',
+    recentCapturesInTray: true,
+    trayQuickMemo: true,
+    webClipperDeepLinks: true,
+    webInbox: true,
+  },
+}));
 vi.mock('../auto-updater', () => ({
   checkForNativeUpdate: vi.fn(),
   configureAutoUpdater: vi.fn(),
