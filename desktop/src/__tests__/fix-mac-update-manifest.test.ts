@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-const { normalizeManifest, normalizeZipName } = await import(
-  '../../scripts/fix-mac-update-manifest.mjs'
-);
+// Keep the test on the same pure implementation without importing an .mjs
+// module, which older Windows Vitest runners cannot parse reliably.
+import core from '../../scripts/update-manifest-core.cjs';
+
+const { normalizeManifest, normalizeZipName } = core;
 
 describe('fix mac update manifest', () => {
   it('normalizes GitHub release zip names with spaces', () => {
