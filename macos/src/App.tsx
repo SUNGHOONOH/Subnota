@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Session } from '@supabase/supabase-js';
 import {
+  AppWindow,
   CalendarDays,
   Inbox,
   NotebookText,
   Settings,
-  Sparkles,
   Topics,
 } from '@/components/icons';
 import TooltipIconButton from './components/TooltipIconButton';
@@ -30,8 +30,14 @@ import {
 } from './lib/constants';
 import { createUuid, hashText } from './lib/contentHash';
 import { parseDates } from './lib/dateParser';
-import { MemoChunk } from './lib/memoChunker';
+import {
+  loadPinnedMemoIds,
+  savePinnedMemoIds,
+  togglePinnedMemoId,
+} from './lib/pinnedMemos';
+import { MemoChunk, getCursorContextText } from './lib/memoChunker';
 import { registerReconnectSync } from './lib/reconnectSync';
+import { editorsAfterOpenTab } from './lib/splitPaneTabs';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import {
   AppSettings,
@@ -60,6 +66,7 @@ import {
   InboxSession,
   createInboxSession,
   fetchInboxSessions,
+  setInboxLiked,
 } from './services/backend/inboxService';
 import {
   createLocalMemoRow,
@@ -67,8 +74,17 @@ import {
   getLocalWorkspaceOwner,
   loadLocalActivityCompletions,
   loadLocalCalendarBlocks,
+  getLocalMemo,
   loadLocalDailyCompletions,
+  cacheLocalInboxItem,
+  loadLocalInboxItems,
   loadLocalInboxQueue,
+  loadLocalScheduleInbox,
+  loadLocalTopicMap,
+  removeLocalScheduleInboxItem,
+  replaceLocalInboxCache,
+  replaceLocalScheduleInbox,
+  saveLocalTopicMap,
   loadLocalMemos,
   loadLocalTrees,
   loadVisibleLocalCalendarBlocks,
@@ -81,6 +97,7 @@ import {
   replaceSyncedCalendarBlocks,
   replaceSyncedMemos,
   setLocalWorkspaceOwner,
+  updateLocalMemoSyncedBase,
   upsertLocalActivityCompletion,
   upsertLocalCalendarBlock,
   upsertLocalDailyCompletion,
@@ -111,8 +128,8 @@ import {
   signOut,
   updateScheduleInboxStatus,
   upsertCalendarBlock,
-  upsertMemo,
 } from './services/supabase/data';
+import { pushMemoMerging } from './services/supabase/memoSync';
 import { isSupabaseConfigured, supabase } from './services/supabase/client';
 import {
   blockLocalDate,
@@ -133,7 +150,10 @@ import {
   ScheduleInboxRow,
   TabKey,
   TopicCluster,
+  MemoSimilarityEdge,
+  TopicMemoInboxEdge,
   TopicMemoEdge,
+  TopicInboxMembership,
   TopicMembership,
 } from './types';
 
@@ -282,6 +302,9 @@ const App = () => {
   const [isInboxLoading, setInboxLoading] = useState(false);
   const [isRefreshing, setRefreshing] = useState(false);
   const [memos, setMemos] = useState<MemoRow[]>([]);
+  const [pinnedMemoIds, setPinnedMemoIds] = useState<string[]>(() =>
+    loadPinnedMemoIds(getLocalWorkspaceOwner()),
+  );
   const [memoDraft, setMemoDraft] = useState('');
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [networkQueryChunk, setNetworkQueryChunk] = useState<MemoChunk | null>(
@@ -303,9 +326,14 @@ const App = () => {
   const [selectionStart, setSelectionStart] = useState(0);
   const [topicClusters, setTopicClusters] = useState<TopicCluster[]>([]);
   const [topicEdges, setTopicEdges] = useState<TopicMemoEdge[]>([]);
+  const [topicGlobalEdges, setTopicGlobalEdges] = useState<MemoSimilarityEdge[]>([]);
+  const [topicInboxEdges, setTopicInboxEdges] = useState<TopicMemoInboxEdge[]>([]);
   const [topicMemberships, setTopicMemberships] = useState<TopicMembership[]>(
     [],
   );
+  const [topicInboxMemberships, setTopicInboxMemberships] = useState<
+    TopicInboxMembership[]
+  >([]);
   const [isSplitWorkspaceEnabled, setIsSplitWorkspaceEnabled] = useState(
     restoredWorkspace?.isSplitWorkspaceEnabled ?? true,
   );
@@ -425,15 +453,25 @@ const App = () => {
         }
 
         try {
-          const result = await upsertMemo(currentSession, memo);
-          if (
-            !isCurrentSession(currentSession) ||
-            memoSyncRevisionsRef.current.get(memo.id) !== revision
-          ) {
+          // Resolve the concurrency base at push time from the local DB: the
+          // values captured when this sync was scheduled can already be stale
+          // (an earlier push may have acked while the user kept typing).
+          const localRow = await getLocalMemo(memo.id, currentSession.user.id);
+          const result = await pushMemoMerging(currentSession, {
+            ...memo,
+            baseContent:
+              localRow?.synced_content ??
+              (localRow?.local_sync_status === 'synced' ? localRow.content : null),
+            baseHash: localRow?.synced_content_hash ?? memo.baseHash ?? null,
+          });
+          if (!isCurrentSession(currentSession)) {
             return;
           }
 
           if (result.status === 'deleted') {
+            if (memoSyncRevisionsRef.current.get(memo.id) !== revision) {
+              return;
+            }
             // Deleted on another device (delete-wins): drop it locally.
             await markLocalMemoDeleted(memo.id, 'synced', currentSession.user.id);
             if (memoSyncRevisionsRef.current.get(memo.id) !== revision) {
@@ -446,10 +484,27 @@ const App = () => {
             return;
           }
 
-          // For 'conflict' savedMemo is the server's canonical version; our edit
-          // was preserved server-side as a conflict copy that arrives on the next
-          // fetchMemos.
+          // savedMemo is the server-acked canonical version: ours (updated),
+          // the 3-way merge, or — on a failed merge — the server's row while
+          // our text survives as a conflict copy on the next fetchMemos.
           const savedMemo = result.memo;
+
+          // Always record the acked base, even when a newer local edit already
+          // bumped the revision: discarding the ack leaves a stale base hash
+          // behind and the next push gets misread as a cross-device conflict
+          // (the note-duplication bug).
+          await updateLocalMemoSyncedBase(
+            memo.id,
+            {
+              content: savedMemo.content,
+              hash: savedMemo.synced_content_hash ?? savedMemo.content_hash,
+            },
+            currentSession.user.id,
+          );
+
+          if (memoSyncRevisionsRef.current.get(memo.id) !== revision) {
+            return; // newer local edits own the content; only the base was recorded
+          }
 
           await upsertLocalMemo(
             {
@@ -458,6 +513,7 @@ const App = () => {
               content_updated_at: savedMemo.content_updated_at,
               created_at: savedMemo.created_at,
               id: savedMemo.id,
+              synced_content: savedMemo.content,
               synced_content_hash: savedMemo.synced_content_hash,
               updated_at: savedMemo.updated_at,
             },
@@ -472,7 +528,11 @@ const App = () => {
           }
           setMemos(previous => {
             const exists = previous.some(item => item.id === savedMemo.id);
-            const syncedMemo = { ...savedMemo, local_sync_status: 'synced' as const };
+            const syncedMemo = {
+              ...savedMemo,
+              local_sync_status: 'synced' as const,
+              synced_content: savedMemo.content,
+            };
             const merged = exists
               ? previous.map(item => (item.id === savedMemo.id ? syncedMemo : item))
               : [syncedMemo, ...previous];
@@ -492,14 +552,19 @@ const App = () => {
             memoSyncRevisionsRef.current.get(memo.id) === revision
           ) {
             try {
-	              await upsertLocalMemo(
-	                {
+              // Preserve the last-acked sync base — nulling it here would make
+              // the retry push read as a cross-device conflict.
+              const failedRow = await getLocalMemo(memo.id, currentSession.user.id);
+              await upsertLocalMemo(
+                {
                   category: memo.category,
                   content: memo.content,
                   content_updated_at: memo.contentUpdatedAt,
                   created_at: memo.createdAt,
                   id: memo.id,
-	                },
+                  synced_content: failedRow?.synced_content ?? null,
+                  synced_content_hash: failedRow?.synced_content_hash ?? null,
+                },
                 'failed',
                 currentSession.user.id,
               );
@@ -696,12 +761,11 @@ const App = () => {
     return map;
   }, [splitPanes]);
   const dateMatches = useMemo(() => {
-    const baseTimestamp = activeMemo?.created_at
-      ? new Date(activeMemo.created_at).getTime()
-      : new Date(activeMemoCreatedAt).getTime();
-
-    return parseDates(memoDraft, baseTimestamp);
-  }, [activeMemo?.created_at, activeMemoCreatedAt, memoDraft]);
+    // Base "today", never the memo's created_at: schedule creation parses with
+    // Date.now(), so a created_at base made the preview lag a day behind the
+    // actual schedule on any memo created before today.
+    return parseDates(memoDraft);
+  }, [memoDraft]);
   const selectedText = useMemo(() => {
     if (selectedTextState) {
       return selectedTextState.trim();
@@ -732,27 +796,42 @@ const App = () => {
   }, []);
 
   const applyLocalWorkspace = useCallback(async (ownerId?: string) => {
-    const [localMemos, localBlocks, localInbox, localActivities, localDailies, localTrees] =
-      await Promise.all([
-        loadVisibleLocalMemos(ownerId),
-        loadVisibleLocalCalendarBlocks(ownerId),
-        loadLocalInboxQueue(ownerId),
-        loadLocalActivityCompletions(ownerId),
-        loadLocalDailyCompletions(ownerId),
-        loadLocalTrees(ownerId),
-      ]);
+    const [
+      localMemos,
+      localBlocks,
+      localInbox,
+      localActivities,
+      localDailies,
+      localTrees,
+      localSchedule,
+      localTopicMap,
+    ] = await Promise.all([
+      loadVisibleLocalMemos(ownerId),
+      loadVisibleLocalCalendarBlocks(ownerId),
+      // 캐시 + 대기 큐 — 네트워크 없이도 웹 인박스가 즉시 보인다.
+      loadLocalInboxItems(ownerId),
+      loadLocalActivityCompletions(ownerId),
+      loadLocalDailyCompletions(ownerId),
+      loadLocalTrees(ownerId),
+      // 일정 inbox / Topics 지도도 마지막 서버 결과를 즉시 보여준다.
+      loadLocalScheduleInbox(ownerId),
+      loadLocalTopicMap(ownerId),
+    ]);
 
     setMemos(localMemos);
     setCalendarBlocks(localBlocks);
-    setInboxItems(localInbox);
+    setInboxItems(mergeInboxItems([], localInbox));
     setActivityCompletions(localActivities);
     setDailyCompletions(localDailies);
     setForestTrees([...localTrees].sort((a, b) => a.generation - b.generation));
     setBriefings([]);
-    setScheduleInbox([]);
-    setTopicClusters([]);
-    setTopicEdges([]);
-    setTopicMemberships([]);
+    setScheduleInbox(localSchedule);
+    setTopicClusters(localTopicMap?.clusters ?? []);
+    setTopicEdges(localTopicMap?.edges ?? []);
+    setTopicGlobalEdges(localTopicMap?.globalEdges ?? []);
+    setTopicInboxEdges(localTopicMap?.inboxEdges ?? []);
+    setTopicMemberships(localTopicMap?.memberships ?? []);
+    setTopicInboxMemberships(localTopicMap?.inboxMemberships ?? []);
 
     hydrateActiveMemo(localMemos);
   }, [hydrateActiveMemo]);
@@ -765,6 +844,14 @@ const App = () => {
         await cancelMemoCloudSync(memo.id);
         await archiveMemo(currentSession, memo.id);
         await markLocalMemoDeleted(memo.id, 'synced', ownerId);
+        continue;
+      }
+
+      // A scheduled debounce sync means this memo is being edited right now and
+      // our DB snapshot may already be stale. Pushing it would cancel the fresher
+      // pending sync and write the stale server echo back over the local row
+      // (typed text silently reverts on restart). Let the debounce push instead.
+      if (memoSyncTimersRef.current.has(memo.id)) {
         continue;
       }
 
@@ -792,6 +879,7 @@ const App = () => {
           allDay: Boolean(block.all_day),
           color: block.color ?? '#66705A',
           completedAt: block.completed_at ?? null,
+          endDate: block.end_date,
           id: block.id,
           isCompleted: Boolean(block.is_completed),
           note: block.note,
@@ -809,12 +897,14 @@ const App = () => {
       }
 
       try {
-        await createInboxSession({
+        const created = await createInboxSession({
           clientId: item.clientId,
           selectedText: item.selectedText,
           url: item.originalUrl,
           userNote: item.userNote,
         });
+        // 캐시에 먼저 쓰고 큐에서 뺀다 — 다음 fetch 전에 재시작해도 보인다.
+        await cacheLocalInboxItem(created, ownerId);
         await removeLocalInboxSession(item.clientId, ownerId);
       } catch {
         // Keep the item queued. A later manual refresh or app start can retry.
@@ -868,13 +958,12 @@ const App = () => {
             fetchCalendarBlocks(currentSession),
             fetchScheduleInbox(currentSession),
             fetchBriefings(currentSession),
-            fetchInboxSessions().catch(() => []),
+            // 실패는 null — 빈 목록으로 로컬 캐시 표시를 덮어쓰지 않는다
+            // (부팅 직후 토큰 하이드레이션/백엔드 콜드스타트로 잘 실패한다).
+            fetchInboxSessions().catch(() => null),
           ]);
-        const nextTopicMap = await fetchTopicMap(currentSession).catch(() => ({
-          clusters: [],
-          edges: [],
-          memberships: [],
-        }));
+        // 실패는 null — 빈 지도로 로컬 캐시 표시를 덮어쓰지 않는다.
+        const nextTopicMap = await fetchTopicMap(currentSession).catch(() => null);
 
         if (!isCurrentLoad()) {
           return;
@@ -889,13 +978,22 @@ const App = () => {
         setMemos(mergedMemos);
         setCalendarBlocks(mergedBlocks);
         setScheduleInbox(nextInbox);
+        await replaceLocalScheduleInbox(nextInbox, ownerId);
         setBriefings(nextBriefings);
-        setInboxItems(
-          mergeInboxItems(nextLinkInbox, localInbox),
-        );
-        setTopicClusters(nextTopicMap.clusters);
-        setTopicEdges(nextTopicMap.edges);
-        setTopicMemberships(nextTopicMap.memberships);
+        if (nextLinkInbox) {
+          await replaceLocalInboxCache(nextLinkInbox, ownerId);
+          setInboxItems(mergeInboxItems(nextLinkInbox, localInbox));
+        }
+        if (nextTopicMap) {
+          await saveLocalTopicMap(nextTopicMap, ownerId);
+          setTopicClusters(nextTopicMap.clusters);
+          setTopicEdges(nextTopicMap.edges);
+          setTopicGlobalEdges(nextTopicMap.globalEdges);
+          setTopicInboxEdges(nextTopicMap.inboxEdges);
+          setTopicMemberships(nextTopicMap.memberships);
+          setTopicInboxMemberships(nextTopicMap.inboxMemberships);
+        }
+        // 실패(null) 시: applyLocalWorkspace가 깔아둔 캐시를 그대로 둔다.
 
         // Forest = cloud trees ∪ any trees planted while offline (pushed now).
         const cloudTrees = await fetchTrees(currentSession).catch(() => [] as ForestTree[]);
@@ -941,6 +1039,7 @@ const App = () => {
 
   const restoreWorkspaceForAccount = useCallback((ownerId: string | null) => {
     const restored = loadWorkspaceSession(ownerId);
+    setPinnedMemoIds(loadPinnedMemoIds(ownerId));
     hasHydratedActiveMemoRef.current = false;
     activeMemoIdRef.current = restored?.activeMemoId ?? null;
     setActiveMemoId(restored?.activeMemoId ?? null);
@@ -1064,6 +1163,9 @@ const App = () => {
         isSameSession:
           currentSession?.user.id === nextSession?.user.id &&
           currentSession?.access_token === nextSession?.access_token,
+        isSameUser:
+          Boolean(currentSession && nextSession) &&
+          currentSession?.user.id === nextSession?.user.id,
         recoveryActive: passwordRecoveryActive,
       });
       passwordRecoveryActive = decision.recoveryActive;
@@ -1199,6 +1301,7 @@ const App = () => {
         content_updated_at: contentUpdatedAt,
         created_at: createdAt,
         id,
+        synced_content: existingMemo?.synced_content ?? null,
         synced_content_hash: existingMemo?.synced_content_hash ?? null,
       },
       'pending',
@@ -1369,6 +1472,12 @@ const App = () => {
     }
   };
 
+  const togglePinnedMemo = (memoId: string) => {
+    const next = togglePinnedMemoId(pinnedMemoIds, memoId);
+    setPinnedMemoIds(next);
+    savePinnedMemoIds(session?.user.id ?? null, next);
+  };
+
   const selectTextRange = (start: number, end: number, text?: string) => {
     setSelectionStart(start);
     setSelectionEnd(end);
@@ -1380,6 +1489,7 @@ const App = () => {
   const saveCalendarBlock = async (draft: {
     allDay: boolean;
     color: string;
+    endDate?: string | null;
     id?: string;
     note: string | null;
     order?: number;
@@ -1391,12 +1501,22 @@ const App = () => {
     const id = draft.id ?? createUuid();
     const now = new Date().toISOString();
     const existingBlock = calendarBlocks.find(block => block.id === id);
+    const startMs = new Date(draft.startDate).getTime();
+    const fallbackEndDate = new Date(startMs + 60 * 60 * 1000).toISOString();
+    const candidateEndDate =
+      draft.endDate ?? existingBlock?.end_date ?? fallbackEndDate;
+    const endDate =
+      !draft.allDay && new Date(candidateEndDate).getTime() > startMs
+        ? candidateEndDate
+        : draft.allDay
+          ? null
+          : fallbackEndDate;
     const localBlock: CalendarBlockRow = {
       all_day: draft.allDay,
       all_day_date: draft.allDay ? toLocalCalendarDate(draft.startDate) : null,
       color: draft.color,
       created_at: existingBlock?.created_at ?? now,
-      end_date: null,
+      end_date: endDate,
       id,
       is_completed: existingBlock?.is_completed ?? false,
       completed_at: existingBlock?.completed_at ?? null,
@@ -1425,6 +1545,7 @@ const App = () => {
       try {
         const block = await upsertCalendarBlock(currentSession, {
           ...draft,
+          endDate: localBlock.end_date,
           id,
           isCompleted: existingBlock?.is_completed ?? false,
           completedAt: existingBlock?.completed_at ?? null,
@@ -1569,6 +1690,7 @@ const App = () => {
           id: updated.id,
           isCompleted: nextCompleted,
           completedAt: updated.completed_at,
+          endDate: updated.end_date,
           note: updated.note,
           order: updated.order ?? 0,
           startDate: updated.start_date,
@@ -1671,6 +1793,7 @@ const App = () => {
       title: item.title,
     });
     await updateScheduleInboxStatus(currentSession, item.id, 'accepted');
+    void removeLocalScheduleInboxItem(item.id, currentSession.user.id);
     if (!isCurrentSession(currentSession)) {
       return;
     }
@@ -1684,6 +1807,7 @@ const App = () => {
     }
 
     await updateScheduleInboxStatus(currentSession, item.id, 'dismissed');
+    void removeLocalScheduleInboxItem(item.id, currentSession.user.id);
     if (!isCurrentSession(currentSession)) {
       return;
     }
@@ -1794,6 +1918,11 @@ const App = () => {
   const openViewAsTab = (view: MemoSplitPaneView) => {
     setIsSplitWorkspaceEnabled(true);
     setActiveTab('memo');
+    if (view === 'inbox') {
+      // stale-while-revalidate: 로컬 캐시가 먼저 그려지고, 열 때마다
+      // 백그라운드에서 서버 목록으로 조용히 갱신한다.
+      void refreshInbox();
+    }
     const newEditor = createEditorHelper(view);
 
     if (splitPanes.length === 0) {
@@ -1817,17 +1946,33 @@ const App = () => {
         : splitPanes[splitPanes.length - 1].id;
 
     setSplitPanes(prev =>
-      prev.map(pane =>
-        pane.id === targetId
-          ? {
-              ...pane,
-              ...mirrorEditorPatchHelper(newEditor),
-              activeEditorId: newEditor.id,
-              editors: [...(pane.editors ?? []), newEditor],
-              view: newEditor.view,
-            }
-          : pane,
-      ),
+      prev.map(pane => {
+        if (pane.id !== targetId) {
+          return pane;
+        }
+
+        // Same view already open in this pane → focus its tab instead of
+        // stacking duplicate Topics/캘린더/... tabs on every ribbon click.
+        const existingEditor = (pane.editors ?? []).find(
+          editor => editor.view === view,
+        );
+        if (existingEditor) {
+          return {
+            ...pane,
+            ...mirrorEditorPatchHelper(existingEditor),
+            activeEditorId: existingEditor.id,
+            view: existingEditor.view,
+          };
+        }
+
+        return {
+          ...pane,
+          ...mirrorEditorPatchHelper(newEditor),
+          activeEditorId: newEditor.id,
+          editors: [...(pane.editors ?? []), newEditor],
+          view: newEditor.view,
+        };
+      }),
     );
     setFocusedPaneId(targetId);
   };
@@ -1913,15 +2058,26 @@ const App = () => {
           ? pane.editors
           : [pane];
 
+        // Already open in this pane → focus that tab instead of a duplicate.
+        // The same memo may still be open once in the OTHER pane.
+        const existingEditor = editors.find(
+          editor => editor.view === 'memo' && editor.memoId === memo.id,
+        );
+        if (existingEditor) {
+          return {
+            ...pane,
+            ...mirrorEditorPatchHelper(existingEditor),
+            activeEditorId: existingEditor.id,
+            editors,
+            view: existingEditor.view,
+          };
+        }
+
         return {
           ...pane,
           ...mirrorEditorPatchHelper(nextEditor),
           activeEditorId: nextEditor.id,
-          editors: editors.map(editor =>
-            editor.id === (pane.activeEditorId ?? editors[0].id)
-              ? nextEditor
-              : editor,
-          ),
+          editors: editorsAfterOpenTab(editors, pane.activeEditorId, nextEditor),
           view: nextEditor.view,
         };
       });
@@ -1982,11 +2138,7 @@ const App = () => {
           ...pane,
           ...mirrorEditorPatchHelper(nextEditor),
           activeEditorId: nextEditor.id,
-          editors: editors.map(editor =>
-            editor.id === (pane.activeEditorId ?? editors[0].id)
-              ? nextEditor
-              : editor,
-          ),
+          editors: editorsAfterOpenTab(editors, pane.activeEditorId, nextEditor),
           view: nextEditor.view,
         };
       });
@@ -2144,11 +2296,13 @@ const App = () => {
     networkControllerRef.current?.abort();
     const networkController = new AbortController();
     networkControllerRef.current = networkController;
+    // 폴백은 첫 줄이 아니라 문서 앞머리의 문장 컨텍스트로 — 한 문단짜리
+    // 노트에서 첫 "줄"은 노트 전체가 되어 통짜 블록으로 검색된다.
     const queryText = (
       ambientTarget?.memoId === activeMemoId
         ? ambientTarget.queryText
-        : selectedTextState || memoDraft.split(/\n+/).find(line => line.trim()) || ''
-    ).trim().slice(0, 4000);
+        : selectedTextState || getCursorContextText(memoDraft, 0)
+    ).trim().slice(0, 1000);
     if (!queryText) {
       networkController.abort();
       setNetworkError('검색할 문단을 먼저 선택하거나 작성해 주세요.');
@@ -2245,7 +2399,7 @@ const App = () => {
   const refreshInbox = async () => {
     const currentSession = session;
     if (!currentSession) {
-      setInboxItems(await loadLocalInboxQueue());
+      setInboxItems(mergeInboxItems([], await loadLocalInboxItems()));
       return;
     }
     const ownerId = currentSession.user.id;
@@ -2253,14 +2407,20 @@ const App = () => {
     setInboxLoading(true);
     setError(null);
     try {
-      await syncPendingLocalWorkspace(currentSession);
+      // 큐 스냅샷을 먼저 떠 두고, 대기 항목 재전송은 병렬로 돌린다 —
+      // 밀린 메모/캘린더 푸시가 목록 표시를 막던 직렬 구조를 푼 것.
+      // 재전송으로 큐에서 빠진 항목은 스냅샷으로 계속 표시되고, 서버
+      // 반영분은 다음 새로고침에서 합류한다.
+      const queuedItems = await loadLocalInboxQueue(ownerId);
+      void syncPendingLocalWorkspace(currentSession).catch(error => {
+        console.warn('pending sync skipped (retries on next sync):', error);
+      });
       const nextItems = await fetchInboxSessions();
       if (!isCurrentSession(currentSession)) {
         return;
       }
-      setInboxItems(
-        mergeInboxItems(nextItems, await loadLocalInboxQueue(ownerId)),
-      );
+      await replaceLocalInboxCache(nextItems, ownerId);
+      setInboxItems(mergeInboxItems(nextItems, queuedItems));
     } catch (caught) {
       if (!isCurrentSession(currentSession)) {
         return;
@@ -2301,6 +2461,8 @@ const App = () => {
         clientId: localItem.clientId,
         url,
       });
+      // 캐시에 먼저 쓰고 큐에서 뺀다 — 2.5초 재조회 전에 재시작해도 보인다.
+      await cacheLocalInboxItem(item, ownerId);
       await removeLocalInboxSession(localItem.clientId, ownerId);
       if (!isCurrentSession(currentSession)) {
         return;
@@ -2328,6 +2490,37 @@ const App = () => {
           : '오프라인 큐에 저장했습니다.',
       );
     }
+  };
+
+  // Optimistic like toggle; roll back and surface the error if the write fails.
+  const toggleInboxLike = (id: string, liked: boolean) => {
+    const ownerId = session?.user.id;
+    setInboxItems(previous =>
+      previous.map(item => (item.id === id ? { ...item, liked } : item)),
+    );
+    void setInboxLiked(id, liked).then(
+      async () => {
+        // 로컬 캐시에도 반영 — 다음 fetch 전에 재시작해도 하트가 유지된다.
+        try {
+          const cached = (await loadLocalInboxItems(ownerId)).find(
+            item => item.id === id,
+          );
+          if (cached) {
+            await cacheLocalInboxItem({ ...cached, liked }, ownerId);
+          }
+        } catch {
+          // 캐시 반영 실패는 무시 — 서버가 진실이고 다음 fetch가 맞춘다.
+        }
+      },
+      caught => {
+        setInboxItems(previous =>
+          previous.map(item => (item.id === id ? { ...item, liked: !liked } : item)),
+        );
+        setError(
+          caught instanceof Error ? caught.message : '좋아요를 저장하지 못했습니다.',
+        );
+      },
+    );
   };
 
   const saveInboxUrlRef = useRef(saveInboxUrl);
@@ -2430,7 +2623,7 @@ const App = () => {
           placement="right"
           tooltip="웹 inbox"
         >
-          <Inbox size={22} />
+          <AppWindow size={22} />
         </TooltipIconButton>
         <TooltipIconButton
           aria-label="일정 inbox"
@@ -2441,7 +2634,7 @@ const App = () => {
           placement="right"
           tooltip="일정 inbox"
         >
-          <Sparkles size={22} />
+          <Inbox size={22} />
         </TooltipIconButton>
         <TooltipIconButton
           aria-label="Topics"
@@ -2529,17 +2722,24 @@ const App = () => {
               }}
               onSelectMemoById={selectMemoById}
               onSelectRange={selectTextRange}
+              onTogglePinMemo={togglePinnedMemo}
+              pinnedMemoIds={pinnedMemoIds}
               saveState={saveState}
               selectedText={selectedText}
               title={getMemoTitle(memoDraft)}
               topicClusters={topicClusters}
               topicEdges={topicEdges}
+              topicGlobalEdges={topicGlobalEdges}
+              topicInboxEdges={topicInboxEdges}
+              topicInboxItems={inboxItems}
+              topicInboxMemberships={topicInboxMemberships}
               topicMemberships={topicMemberships}
               workspaceContent={
                 <MemoSplitWorkspace
                   ambientEditorId={ambientTarget?.editorId ?? null}
                   ambientError={ambientError}
                   ambientResult={ambientResult}
+                  isTopicsLoading={isRefreshing && topicClusters.length === 0}
                   onAmbientQuery={(editorId, memoId, queryText) =>
                     setAmbientTarget({ editorId, memoId, queryText })
                   }
@@ -2566,6 +2766,8 @@ const App = () => {
                     }
                   }}
                   onSelectMemoById={selectMemoById}
+                  onTogglePinMemo={togglePinnedMemo}
+                  pinnedMemoIds={pinnedMemoIds}
                   calendarBlocks={calendarBlocks}
                   onDeleteCalendarBlock={removeCalendarBlock}
                   onSaveCalendarBlock={saveCalendarBlock}
@@ -2581,11 +2783,15 @@ const App = () => {
                   isInboxLoading={isInboxLoading}
                   onRefreshInbox={refreshInbox}
                   onSaveInboxUrl={saveInboxUrl}
+                  onToggleInboxLike={toggleInboxLike}
                   briefings={briefings}
                   scheduleInbox={scheduleInbox}
                   onAcceptInbox={acceptInboxItem}
                   onDismissInbox={dismissInboxItem}
                   topicClusters={topicClusters}
+                  topicGlobalEdges={topicGlobalEdges}
+                  topicInboxEdges={topicInboxEdges}
+                  topicInboxMemberships={topicInboxMemberships}
                   topicMemberships={topicMemberships}
                 />
               }

@@ -7,6 +7,9 @@ export interface MemoRow {
   id: string;
   is_archived: boolean | null;
   local_sync_status?: 'failed' | 'pending' | 'pending_delete' | 'synced';
+  // Server content as of the last successful sync/pull — the shared base for
+  // 3-way conflict merges.
+  synced_content?: string | null;
   // Server content_hash as of the last successful sync/pull. Used as the
   // optimistic-concurrency base when pushing edits (see upsert_memo_if_base_hash).
   synced_content_hash?: string | null;
@@ -77,6 +80,20 @@ export interface TopicMembership {
   topicId: string;
 }
 
+// Saved web-inbox summaries attached to a topic centroid (State A decoration).
+export interface TopicInboxMembership {
+  inboxSessionId: string;
+  score: number | null;
+  topicId: string;
+}
+
+export interface TopicMemoInboxEdge {
+  inboxSessionId: string;
+  memoId: string;
+  similarity: number;
+  topicId: string;
+}
+
 export interface TopicMemoEdge {
   similarity: number;
   sourceMemoId: string;
@@ -84,9 +101,20 @@ export interface TopicMemoEdge {
   topicId: string;
 }
 
+export interface MemoSimilarityEdge {
+  similarity: number;
+  sourceMemoId: string;
+  sourceTopicId: string | null;
+  targetMemoId: string;
+  targetTopicId: string | null;
+}
+
 export interface TopicMapData {
   clusters: TopicCluster[];
   edges: TopicMemoEdge[];
+  globalEdges: MemoSimilarityEdge[];
+  inboxEdges: TopicMemoInboxEdge[];
+  inboxMemberships: TopicInboxMembership[];
   memberships: TopicMembership[];
 }
 

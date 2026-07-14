@@ -21,24 +21,24 @@ const block = (over: Partial<CalendarBlockRow>): CalendarBlockRow => ({
 });
 
 describe('sortTodos', () => {
-  it('orders timed (by time) → all-day → completed last', () => {
+  it('orders timed by time, then all-day', () => {
     const t9 = block({ id: 't9', start_date: '2026-06-25T09:00:00.000Z' });
     const t14 = block({ id: 't14', start_date: '2026-06-25T14:00:00.000Z' });
     const allDay = block({ id: 'allday', all_day: true, all_day_date: '2026-06-25' });
     const done = block({ id: 'done', is_completed: true, start_date: '2026-06-25T07:00:00.000Z' });
 
     expect(sortTodos([done, allDay, t14, t9]).map(b => b.id)).toEqual([
+      'done',
       't9',
       't14',
       'allday',
-      'done',
     ]);
   });
 
-  it('keeps completed at the bottom even when it is earlier in the day', () => {
+  it('does not move completed items to the bottom', () => {
     const done = block({ id: 'done', is_completed: true, start_date: '2026-06-25T06:00:00.000Z' });
     const todo = block({ id: 'todo', start_date: '2026-06-25T20:00:00.000Z' });
 
-    expect(sortTodos([done, todo]).map(b => b.id)).toEqual(['todo', 'done']);
+    expect(sortTodos([done, todo]).map(b => b.id)).toEqual(['done', 'todo']);
   });
 });

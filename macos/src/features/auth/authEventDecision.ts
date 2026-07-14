@@ -9,11 +9,13 @@ export const decideAuthEvent = ({
   event,
   hasSession,
   isSameSession,
+  isSameUser = false,
   recoveryActive,
 }: {
   event: AuthChangeEvent;
   hasSession: boolean;
   isSameSession: boolean;
+  isSameUser?: boolean;
   recoveryActive: boolean;
 }): AuthEventDecision => {
   if (event === 'INITIAL_SESSION') {
@@ -44,8 +46,11 @@ export const decideAuthEvent = ({
   }
 
   if (event === 'SIGNED_IN') {
+    // Same user with a rotated access token (focus refresh, or the Mini window
+    // refreshing the shared session) must NOT re-activate: activation resets the
+    // whole workspace (memo draft included) and loses text being typed.
     return {
-      action: isSameSession ? 'ignore' : 'activate',
+      action: isSameSession ? 'ignore' : isSameUser ? 'update' : 'activate',
       recoveryActive: false,
     };
   }

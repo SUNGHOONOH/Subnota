@@ -17,7 +17,8 @@ import { ChevronLeft, ChevronRight, Trash2 } from '@/components/icons';
 
 import { createUuid } from '../../lib/contentHash';
 import { CalendarBlockRow } from '../../types';
-import { getBlockStart } from './calendarUtils';
+import { getBlockStart, offsetToHour } from './calendarUtils';
+import DateScheduleField from '../memo/components/DateScheduleField';
 import DayTodoPanel from './components/DayTodoPanel';
 import ForestModal from '../tree/components/ForestModal';
 import TreeCard from '../tree/components/TreeCard';
@@ -37,6 +38,7 @@ interface CalendarWorkspaceProps {
   onSaveBlock: (draft: {
     allDay: boolean;
     color: string;
+    endDate?: string | null;
     id?: string;
     note: string | null;
     order?: number;
@@ -57,6 +59,8 @@ const HOUR_HEIGHT = 40;
 const MONTH_MAX_CHIPS = 1;
 const DEFAULT_COLOR = '#66705A';
 const HOUR_MS = 60 * 60 * 1000;
+const MIN_EVENT_MINUTES = 30;
+const RESIZE_STEP_MINUTES = 15;
 
 // Soft Apple-like tints: light fill + same-hue text + accent bar.
 const TONE_STYLE: Record<string, { accent: string; bg: string; text: string }> = {
@@ -86,6 +90,9 @@ const formatKoTime = (date: Date) => {
 };
 
 const toLocalInputDate = (date: Date) => format(date, 'yyyy-MM-dd');
+const snapResizeMinutes = (pixelDelta: number) =>
+  Math.round(((pixelDelta / HOUR_HEIGHT) * 60) / RESIZE_STEP_MINUTES) *
+  RESIZE_STEP_MINUTES;
 
 // Lay timed events into side-by-side lanes so overlaps don't stack on top of
 // each other (simple interval-partitioning, good enough for a day's events).
@@ -197,9 +204,17 @@ const CalendarWorkspace = ({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const startDate = new Date(`${selectedDate}T${time || '00:00'}:00`);
+    const previousRange = editingBlock ? getRange(editingBlock) : null;
+    const duration = previousRange
+      ? Math.max(
+          MIN_EVENT_MINUTES * 60_000,
+          previousRange.end.getTime() - previousRange.start.getTime(),
+        )
+      : HOUR_MS;
     onSaveBlock({
       allDay: !time,
       color: editingBlock?.color ?? DEFAULT_COLOR,
+      endDate: time ? new Date(startDate.getTime() + duration).toISOString() : null,
       id: editingBlock?.id ?? createUuid(),
       note: note.trim() || null,
       order: editingBlock?.order ?? 0,
@@ -216,6 +231,91 @@ const CalendarWorkspace = ({
         (a, b) =>
           getBlockStart(a).getTime() - getBlockStart(b).getTime(),
       );
+
+  // Week-view drag-and-drop: native HTML5 drag moves a timed event to the
+  // dropped day+hour. No library, no handle — a click stays a click.
+  const startDrag = (event: React.DragEvent, blockId: string) => {
+    event.dataTransfer.setData('text/plain', blockId);
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const dropOnColumn = (event: React.DragEvent, date: Date) => {
+    event.preventDefault();
+    const block = blocks.find(
+      item => item.id === event.dataTransfer.getData('text/plain'),
+    );
+    if (!block) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const next = new Date(date);
+    next.setHours(offsetToHour(event.clientY - rect.top, HOUR_HEIGHT), 0, 0, 0);
+    const { end, start } = getRange(block);
+    const duration = Math.max(
+      MIN_EVENT_MINUTES * 60_000,
+      end.getTime() - start.getTime(),
+    );
+    onSaveBlock({
+      allDay: !!block.all_day,
+      color: block.color ?? DEFAULT_COLOR,
+      endDate: block.all_day
+        ? null
+        : new Date(next.getTime() + duration).toISOString(),
+      id: block.id,
+      note: block.note,
+      order: block.order ?? 0,
+      startDate: next.toISOString(),
+      title: block.title,
+    });
+  };
+
+  const resizeBlock = (
+    event: React.PointerEvent,
+    block: CalendarBlockRow,
+    edge: 'bottom' | 'top',
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    // Capture the pointer so the synthetic click after pointerup targets this
+    // handle (whose onClick stops propagation) instead of the event <button>.
+    // Without this, shrinking ends the drag inside the button and the click
+    // opens the detail editor; growing ends outside and doesn't.
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+
+    const startY = event.clientY;
+    const { end, start } = getRange(block);
+
+    const finish = (clientY: number) => {
+      const deltaMs = snapResizeMinutes(clientY - startY) * 60_000;
+      const minMs = MIN_EVENT_MINUTES * 60_000;
+      const nextStart =
+        edge === 'top'
+          ? new Date(Math.min(start.getTime() + deltaMs, end.getTime() - minMs))
+          : start;
+      const nextEnd =
+        edge === 'bottom'
+          ? new Date(Math.max(end.getTime() + deltaMs, start.getTime() + minMs))
+          : end;
+
+      onSaveBlock({
+        allDay: false,
+        color: block.color ?? DEFAULT_COLOR,
+        endDate: nextEnd.toISOString(),
+        id: block.id,
+        note: block.note,
+        order: block.order ?? 0,
+        startDate: nextStart.toISOString(),
+        title: block.title,
+      });
+    };
+
+    const onPointerUp = (pointerEvent: PointerEvent) => {
+      window.removeEventListener('pointerup', onPointerUp);
+      finish(pointerEvent.clientY);
+    };
+
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+  };
 
   const renderMonth = () => (
     <div className="cal-month">
@@ -326,7 +426,9 @@ const CalendarWorkspace = ({
                       type="button"
                     >
                       <span className="cal-chip-dot" style={{ background: tone.accent }} />
-                      {block.title}
+                      <span className="cal-allday-event-title" title={block.title}>
+                        {block.title}
+                      </span>
                     </button>
                   );
                 })}
@@ -350,7 +452,12 @@ const CalendarWorkspace = ({
                 dayEvents(date).filter(block => !block.all_day),
               );
               return (
-                <div className="cal-day-col" key={date.toISOString()}>
+                <div
+                  className="cal-day-col"
+                  key={date.toISOString()}
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={event => dropOnColumn(event, date)}
+                >
                   {HOURS.map(hour => (
                     <div
                       className="cal-hour-cell"
@@ -383,8 +490,10 @@ const CalendarWorkspace = ({
                     return (
                       <button
                         className={`cal-event${block.is_completed ? ' completed' : ''}`}
+                        draggable
                         key={block.id}
                         onClick={() => openEditor(date, block)}
+                        onDragStart={event => startDrag(event, block.id)}
                         style={{
                           backgroundColor: tone.bg,
                           borderLeft: `3px solid ${tone.accent}`,
@@ -396,8 +505,22 @@ const CalendarWorkspace = ({
                         }}
                         type="button"
                       >
+                        <span
+                          aria-hidden="true"
+                          className="cal-event-resize top"
+                          draggable={false}
+                          onClick={event => event.stopPropagation()}
+                          onPointerDown={event => resizeBlock(event, block, 'top')}
+                        />
                         <strong>{block.title}</strong>
                         <span>{formatKoTime(start)}</span>
+                        <span
+                          aria-hidden="true"
+                          className="cal-event-resize bottom"
+                          draggable={false}
+                          onClick={event => event.stopPropagation()}
+                          onPointerDown={event => resizeBlock(event, block, 'bottom')}
+                        />
                       </button>
                     );
                   })}
@@ -541,24 +664,14 @@ const CalendarWorkspace = ({
                 value={title}
               />
             </label>
-            <div className="cal-field-row">
-              <label className="cal-field">
-                <span>날짜</span>
-                <input
-                  onChange={event => setSelectedDate(event.target.value)}
-                  type="date"
-                  value={selectedDate}
-                />
-              </label>
-              <label className="cal-field">
-                <span>시간</span>
-                <input
-                  onChange={event => setTime(event.target.value)}
-                  type="time"
-                  value={time}
-                />
-              </label>
-            </div>
+            <DateScheduleField
+              allDay={!time}
+              date={new Date(`${selectedDate}T${time || '00:00'}:00`)}
+              onChange={(date, allDay) => {
+                setSelectedDate(toLocalInputDate(date));
+                setTime(allDay ? '' : format(date, 'HH:mm'));
+              }}
+            />
             <label className="cal-field">
               <span>메모</span>
               <textarea

@@ -28,6 +28,15 @@ export interface NetworkSearchResponse {
 }
 
 export const NETWORK_SEARCH_EMPTY_MESSAGE = '비슷한 문장이 아직은 없네요!';
+export const NETWORK_SEARCH_RETRY_MESSAGE =
+  '네트워크 검색에 실패했습니다. 다시 시도해 주세요.';
+
+export const isNetworkSearchRetryableMessage = (message?: string | null) =>
+  Boolean(
+    message &&
+      (message === NETWORK_SEARCH_RETRY_MESSAGE ||
+        message.includes('초 후 다시 시도')),
+  );
 
 export class NetworkRequestError extends Error {
   retryAfterSeconds: number | null;
@@ -67,7 +76,11 @@ export const formatNetworkSearchErrorMessage = (
       return '네트워크 검색은 로그인 후 사용할 수 있습니다.';
     }
 
-    return NETWORK_SEARCH_EMPTY_MESSAGE;
+    if (error.retryable || error.status === null) {
+      return NETWORK_SEARCH_RETRY_MESSAGE;
+    }
+
+    return error.message || NETWORK_SEARCH_RETRY_MESSAGE;
   }
 
   if (error instanceof Error) {
@@ -80,7 +93,7 @@ export const formatNetworkSearchErrorMessage = (
     }
   }
 
-  return NETWORK_SEARCH_EMPTY_MESSAGE;
+  return NETWORK_SEARCH_RETRY_MESSAGE;
 };
 
 interface BackendNetworkSearchResponse {

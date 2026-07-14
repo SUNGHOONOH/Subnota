@@ -2,7 +2,8 @@ import { seededRandom } from './seededRandom';
 import { ActivityStats, TreeParams, TreeStage } from './treeTypes';
 
 // Single source of growth numbers — no user-tunable config (by design).
-const STAGE = { sprout: 3, seedling: 10, youngTree: 30 } as const;
+// A tree matures in ~2 weeks of completed days (was 30 — felt endless).
+const STAGE = { sprout: 2, seedling: 5, youngTree: 14 } as const;
 const CAP = { height: 112, trunk: 14, root: 10, branches: 12 } as const;
 
 export const getTreeStage = (stats: ActivityStats): TreeStage => {
@@ -28,12 +29,12 @@ export const deriveTreeParams = (stats: ActivityStats, treeSeed: string): TreePa
   const rng = seededRandom(treeSeed);
   return {
     stage: getTreeStage(stats),
-    height: Math.min(8 + stats.completedDays * 3, CAP.height),
-    trunkThickness: Math.min(2 + stats.streakDays * 0.5, CAP.trunk),
-    rootDepth: Math.min(1 + stats.streakDays * 0.4, CAP.root),
+    height: Math.min(8 + stats.completedDays * 7, CAP.height),
+    trunkThickness: Math.min(2 + stats.streakDays, CAP.trunk),
+    rootDepth: Math.min(1 + stats.streakDays * 0.8, CAP.root),
     branchCount: Math.min(stats.activeDays, CAP.branches),
     branchSpread: 0.5 + rng() * 0.4,
-    leafDensity: Math.min(1, stats.totalCompleted / 40),
+    leafDensity: Math.min(1, stats.totalCompleted / 20),
     vitality: Math.min(1, stats.recentActivity / 10),
   };
 };

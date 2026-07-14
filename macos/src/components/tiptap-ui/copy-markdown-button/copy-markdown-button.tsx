@@ -5,8 +5,8 @@ import type { Editor } from "@tiptap/react"
 
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
 import { ClipboardCopyIcon } from "@/components/tiptap-icons/clipboard-copy-icon"
 import { CheckIcon } from "@/components/tiptap-icons/check-icon"
 

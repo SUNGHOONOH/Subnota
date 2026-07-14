@@ -10,13 +10,7 @@ import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 import { HeadingIcon } from "@/components/tiptap-icons/heading-icon"
 
 // --- Tiptap UI ---
-import {
-  headingIcons,
-  type Level,
-  isHeadingActive,
-  canToggle,
-  shouldShowButton,
-} from "@/components/tiptap-ui/heading-button"
+import { headingIcons, type Level, isHeadingActive, canToggle, shouldShowButton } from "@/components/tiptap-ui/heading-button/use-heading"
 
 /**
  * Configuration for the heading dropdown menu functionality

@@ -14,25 +14,17 @@ import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 import { TrashIcon } from "@/components/tiptap-icons/trash-icon"
 
 // --- Tiptap UI ---
-import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover"
-import { useLinkPopover } from "@/components/tiptap-ui/link-popover"
+import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover/use-link-popover"
+import { useLinkPopover } from "@/components/tiptap-ui/link-popover/use-link-popover"
 
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/tiptap-ui-primitive/popover"
-import { Separator } from "@/components/tiptap-ui-primitive/separator"
-import {
-  Card,
-  CardBody,
-  CardItemGroup,
-} from "@/components/tiptap-ui-primitive/card"
-import { Input } from "@/components/tiptap-ui-primitive/input"
-import { ButtonGroup } from "@/components/tiptap-ui-primitive/button-group"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/tiptap-ui-primitive/popover/popover"
+import { Separator } from "@/components/tiptap-ui-primitive/separator/separator"
+import { Card, CardBody, CardItemGroup } from "@/components/tiptap-ui-primitive/card/card"
+import { Input } from "@/components/tiptap-ui-primitive/input/input"
+import { ButtonGroup } from "@/components/tiptap-ui-primitive/button-group/button-group"
 import { OPEN_LINK_EVENT } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 
 import "./link-popover.scss"

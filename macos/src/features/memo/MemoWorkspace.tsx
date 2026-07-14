@@ -2,20 +2,26 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Badge, Menu } from '@mantine/core';
+import { Menu } from '@mantine/core';
 import {
   CalendarPlus,
+  CheckCircle2,
   ChevronRight,
   Columns2,
   ExternalLink,
   Folder,
   FolderOpen,
+  FolderSolid,
   Network,
   NotebookText,
-  PanelLeftClose,
+  NotebookTextSolid,
+  Pin,
+  PinSolid,
   Plus,
   Search,
+  SearchSolid,
   StickyNote,
+  StickyNoteSolid,
   Trash2,
   X,
 } from '@/components/icons';
@@ -36,20 +42,29 @@ import {
 import { DateMatch, formatRelativeDisplayDate } from '../../lib/dateParser';
 import { formatMemoDate } from '../../lib/date';
 import { MemoChunk } from '../../lib/memoChunker';
+import { getSections } from '../../lib/memoSections';
 import { splitMemoCategories } from '../../lib/memoCategory';
 import { buildMemoSearchIndex, syncMemoSearchIndex } from '../../lib/memoSearch';
-import { NetworkSearchResult } from '../../services/backend/networkService';
+import {
+  NetworkSearchResult,
+  isNetworkSearchRetryableMessage,
+} from '../../services/backend/networkService';
 import {
   MemoRow,
   MemoSaveState,
+  MemoSimilarityEdge,
   TopicCluster,
+  TopicInboxMembership,
+  TopicMemoInboxEdge,
   TopicMemoEdge,
   TopicMembership,
 } from '../../types';
+import { InboxSession } from '../../services/backend/inboxService';
 import KnowledgeGraphView, {
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
 } from './components/KnowledgeGraphView';
+import { LINK_NODE_ICON, NOTE_NODE_ICON } from './components/knowledgeGraph';
 
 interface MemoWorkspaceProps {
   activeMemoId: string | null;
@@ -80,12 +95,18 @@ interface MemoWorkspaceProps {
   onSelectMemo: (memo: MemoRow) => void;
   onSelectMemoById: (memoId: string) => void;
   onSelectRange: (start: number, end: number, text?: string) => void;
+  onTogglePinMemo?: (memoId: string) => void;
   openMemoPaneNumbers?: Record<string, number>;
+  pinnedMemoIds?: string[];
   saveState: MemoSaveState;
   selectedText: string;
   title: string;
   topicClusters: TopicCluster[];
   topicEdges: TopicMemoEdge[];
+  topicGlobalEdges: MemoSimilarityEdge[];
+  topicInboxItems?: InboxSession[];
+  topicInboxEdges?: TopicMemoInboxEdge[];
+  topicInboxMemberships?: TopicInboxMembership[];
   topicMemberships: TopicMembership[];
   workspaceContent?: ReactNode;
 }
@@ -94,10 +115,16 @@ interface TopicNode {
   cluster: TopicCluster;
   count: number;
   isActiveLinked: boolean;
+  memoRows: TopicMemoRow[];
   opacity: number;
   radius: number;
   x: number;
   y: number;
+}
+
+interface TopicMemoRow {
+  memo: MemoRow;
+  score: number;
 }
 
 interface NetworkDetail {
@@ -114,9 +141,35 @@ const GRAPH_WIDTH = 320;
 const GRAPH_HEIGHT = 260;
 const GRAPH_CENTER_X = GRAPH_WIDTH / 2;
 const GRAPH_CENTER_Y = GRAPH_HEIGHT / 2;
+const TOPIC_GRAPH_MEMO_NODE_LIMIT = 32;
+// ponytail: 2 bridges per cluster pair keeps islands readable; raise if the
+// map ever feels too disconnected.
+const TOPIC_BRIDGE_EDGE_LIMIT = 2;
+const TOPIC_COLORS = [
+  '#6f7a61',
+  '#a75c4a',
+  '#5d6a73',
+  '#8b7355',
+  '#7f6aa3',
+  '#4f8a78',
+  '#b17655',
+  '#657a9a',
+] as const;
 
 const clamp = (value: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, value));
+};
+
+const getTopicColor = (topicId: string | null | undefined) => {
+  if (!topicId) {
+    return '#9b8a76';
+  }
+
+  let hash = 0;
+  for (let index = 0; index < topicId.length; index += 1) {
+    hash = (hash * 31 + topicId.charCodeAt(index)) >>> 0;
+  }
+  return TOPIC_COLORS[hash % TOPIC_COLORS.length];
 };
 
 const getMemoTitle = (memo: MemoRow) => {
@@ -152,46 +205,14 @@ const MemoSyncBadge = ({ memo }: { memo: MemoRow }) => {
       ? '클라우드 동기화 실패'
       : '로컬 저장됨';
   return (
-    <span aria-label={label} className="memo-sync-badge" title={label}>
+    <span
+      aria-label={label}
+      className={`memo-sync-badge ${isFailed ? 'failed' : 'ok'}`}
+      title={label}
+    >
       {isSynced ? '☁︎' : isFailed ? '!' : '✓'}
     </span>
   );
-};
-
-const getSections = (memos: MemoRow[]) => {
-  const now = Date.now();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const sections = [
-    { data: [] as MemoRow[], title: '최근 메모' },
-    { data: [] as MemoRow[], title: '오늘' },
-    { data: [] as MemoRow[], title: '이전 7일' },
-    { data: [] as MemoRow[], title: '이전 30일' },
-    { data: [] as MemoRow[], title: '오래된 메모' },
-  ];
-
-  memos.forEach(memo => {
-    const updatedAt = new Date(memo.updated_at).getTime();
-    const ageDays = Math.floor((now - updatedAt) / 86400000);
-
-    if (sections[0].data.length < 3) {
-      sections[0].data.push(memo);
-      return;
-    }
-
-    if (updatedAt >= today.getTime()) {
-      sections[1].data.push(memo);
-    } else if (ageDays <= 7) {
-      sections[2].data.push(memo);
-    } else if (ageDays <= 30) {
-      sections[3].data.push(memo);
-    } else {
-      sections[4].data.push(memo);
-    }
-  });
-
-  return sections.filter(section => section.data.length > 0);
 };
 
 const getTopicCutoff = (filterKey: TopicTimeFilterKey) => {
@@ -225,11 +246,15 @@ const buildTopicNodes = ({
     const topicMemberships = memberships.filter(
       membership => membership.topicId === cluster.id,
     );
-    const topicMemos = topicMemberships
-      .map(membership => memoById.get(membership.memoId))
-      .filter((memo): memo is MemoRow => Boolean(memo));
-    const filteredMemos = cutoff
-      ? topicMemos.filter(memo => {
+    const topicRows = topicMemberships
+      .map(membership => {
+        const memo = memoById.get(membership.memoId);
+        return memo ? { memo, score: membership.score ?? 0.5 } : null;
+      })
+      .filter((row): row is TopicMemoRow => Boolean(row))
+      .sort((a, b) => b.score - a.score);
+    const filteredRows = cutoff
+      ? topicRows.filter(({ memo }) => {
           const timestamp = Math.max(
             new Date(memo.updated_at).getTime(),
             new Date(memo.created_at).getTime(),
@@ -237,17 +262,21 @@ const buildTopicNodes = ({
 
           return timestamp >= cutoff;
         })
-      : topicMemos;
+      : topicRows;
     const isActiveLinked = Boolean(
       activeMemoId &&
         topicMemberships.some(membership => membership.memoId === activeMemoId),
     );
+    const visibleRows =
+      filteredRows.length > 0
+        ? filteredRows
+        : topicRows.filter(({ memo }) => memo.id === activeMemoId);
 
-    if (filteredMemos.length === 0 && !isActiveLinked) {
+    if (visibleRows.length === 0 && !isActiveLinked) {
       return;
     }
 
-    const newestTimestamp = topicMemos.reduce((latest, memo) => {
+    const newestTimestamp = topicRows.reduce((latest, { memo }) => {
       return Math.max(
         latest,
         new Date(memo.updated_at).getTime(),
@@ -266,7 +295,7 @@ const buildTopicNodes = ({
       TOPIC_NODE_MIN_OPACITY,
       TOPIC_NODE_MAX_OPACITY,
     );
-    const count = Math.max(filteredMemos.length, isActiveLinked ? 1 : 0);
+    const count = Math.max(visibleRows.length, isActiveLinked ? 1 : 0);
     const radius = clamp(
       TOPIC_NODE_MIN_RADIUS + count * 2 + (cluster.confidence ?? 0) * 2,
       TOPIC_NODE_MIN_RADIUS,
@@ -279,6 +308,7 @@ const buildTopicNodes = ({
       cluster,
       count,
       isActiveLinked,
+      memoRows: visibleRows,
       opacity,
       radius,
       x: GRAPH_CENTER_X + Math.cos(angle) * orbit,
@@ -311,7 +341,7 @@ const getTopicMemoRows = ({
 
       return memo ? { memo, score: membership.score ?? 0.5 } : null;
     })
-    .filter((item): item is { memo: MemoRow; score: number } => Boolean(item))
+    .filter((item): item is TopicMemoRow => Boolean(item))
     .sort((a, b) => b.score - a.score);
 };
 
@@ -433,12 +463,18 @@ const MemoWorkspace = ({
   onSelectMemo,
   onSelectMemoById,
   onSelectRange,
+  onTogglePinMemo,
   openMemoPaneNumbers,
+  pinnedMemoIds = [],
   saveState,
   selectedText,
   title,
   topicClusters,
+  topicInboxItems = [],
+  topicInboxEdges = [],
+  topicInboxMemberships = [],
   topicEdges,
+  topicGlobalEdges,
   topicMemberships,
   workspaceContent,
 }: MemoWorkspaceProps) => {
@@ -449,6 +485,7 @@ const MemoWorkspace = ({
   const [networkDetail, setNetworkDetail] = useState<NetworkDetail | null>(null);
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedTopicMemoId, setSelectedTopicMemoId] = useState<string | null>(null);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('time');
   const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(
     () => new Set(),
@@ -483,25 +520,35 @@ const MemoWorkspace = ({
     activeTopicId && sidebarMode !== 'mini'
       ? sidebarMemos.filter(memo => activeTopicMemoIds.has(memo.id))
       : sidebarMemos;
-  const sections = getSections(visibleMemos);
+  const sections = getSections(visibleMemos, pinnedMemoIds);
   // Topic clusters (State A) rendered as collapsible folders in the session
   // rail. Reuses getTopicMemoRows so a folder lists the same member memos the
   // topic detail view would, sorted by membership score then folder size.
-  const topicFolders = useMemo(
-    () =>
-      topicClusters
-        .map(cluster => ({
-          cluster,
-          rows: getTopicMemoRows({
-            memberships: topicMemberships,
-            memos: normalMemos,
-            topicId: cluster.id,
-          }),
-        }))
-        .filter(folder => folder.rows.length > 0)
-        .sort((a, b) => b.rows.length - a.rows.length),
-    [normalMemos, topicClusters, topicMemberships],
-  );
+  const topicFolders = useMemo(() => {
+    const inboxById = new Map(topicInboxItems.map(item => [item.id, item]));
+    return topicClusters
+      .map(cluster => ({
+        cluster,
+        rows: getTopicMemoRows({
+          memberships: topicMemberships,
+          memos: normalMemos,
+          topicId: cluster.id,
+        }),
+        // Saved web-inbox summaries attached to this topic (State A decoration).
+        linkRows: topicInboxMemberships
+          .filter(membership => membership.topicId === cluster.id)
+          .map(membership => ({
+            item: inboxById.get(membership.inboxSessionId),
+            score: membership.score ?? 0,
+          }))
+          .filter((row): row is { item: InboxSession; score: number } =>
+            Boolean(row.item),
+          )
+          .sort((a, b) => b.score - a.score),
+      }))
+      .filter(folder => folder.rows.length > 0 || folder.linkRows.length > 0)
+      .sort((a, b) => b.rows.length - a.rows.length);
+  }, [normalMemos, topicClusters, topicInboxItems, topicInboxMemberships, topicMemberships]);
   const memoById = useMemo(
     () => new Map(memos.map(memo => [memo.id, memo])),
     [memos],
@@ -537,38 +584,218 @@ const MemoWorkspace = ({
       }),
     [activeMemoId, normalMemos, topicClusters, topicFilterKey, topicMemberships],
   );
-  const topicGraphNodes = useMemo<KnowledgeGraphNode[]>(
-    () => [
-      {
-        color: '#8b7355',
-        id: 'topic-root',
-        label: 'Topics',
-        size: 10,
-        x: GRAPH_CENTER_X,
-        y: GRAPH_CENTER_Y,
-      },
-      ...topicNodes.map(node => ({
-        color: node.isActiveLinked ? '#236b45' : '#5c4d3c',
-        id: `topic:${node.cluster.id}`,
+  const topicGraphNodes = useMemo<KnowledgeGraphNode[]>(() => {
+    const nodes: KnowledgeGraphNode[] = [];
+    const inboxById = new Map(topicInboxItems.map(item => [item.id, item]));
+
+    topicNodes.forEach(node => {
+      const topicId = `topic:${node.cluster.id}`;
+      const isActiveTopic = node.cluster.id === activeTopicId;
+
+      nodes.push({
+        color: node.isActiveLinked ? '#236b45' : getTopicColor(node.cluster.id),
+        forceLabel: true,
+        id: topicId,
+        kind: 'topic',
         label: node.cluster.label,
-        muted: node.opacity < 0.55,
-        size: clamp(node.radius / 2, 6, 14),
+        muted: Boolean(activeTopicId && !isActiveTopic) || node.opacity < 0.55,
+        size: clamp(node.radius / 2 + (isActiveTopic ? 2 : 0), 8, 16),
+        topicId: node.cluster.id,
         x: node.x,
         y: node.y,
-      })),
-    ],
-    [topicNodes],
-  );
-  const topicGraphEdges = useMemo<KnowledgeGraphEdge[]>(
-    () =>
-      topicNodes.map(node => ({
-        id: `topic-root-${node.cluster.id}`,
-        source: 'topic-root',
-        target: `topic:${node.cluster.id}`,
-        weight: node.opacity,
-      })),
-    [topicNodes],
-  );
+      });
+
+      const memoRows =
+        activeTopicId && !isActiveTopic
+          ? []
+          : node.memoRows.slice(0, TOPIC_GRAPH_MEMO_NODE_LIMIT);
+      const memoOrbit = node.radius + 28;
+      const total = Math.max(memoRows.length, 1);
+
+      memoRows.forEach(({ memo, score }, index) => {
+        const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
+
+        nodes.push({
+          color: memo.id === activeMemoId ? '#236b45' : getTopicColor(node.cluster.id),
+          forceLabel: memo.id === activeMemoId || memo.id === selectedTopicMemoId,
+          id: `memo:${memo.id}`,
+          image: NOTE_NODE_ICON,
+          kind: 'memo',
+          label: truncate(getMemoTitle(memo), 13),
+          memoId: memo.id,
+          muted: !isActiveTopic && score < 0.5,
+          size: clamp(4.5 + score * 4 + (memo.id === activeMemoId ? 2 : 0), 5, 10),
+          topicId: node.cluster.id,
+          x: node.x + Math.cos(angle) * memoOrbit,
+          y: node.y + Math.sin(angle) * memoOrbit,
+        });
+      });
+
+      const inboxRows =
+        activeTopicId && !isActiveTopic
+          ? []
+          : topicInboxMemberships
+              .filter(membership => membership.topicId === node.cluster.id)
+              .map(membership => ({
+                item: inboxById.get(membership.inboxSessionId),
+                score: membership.score ?? 0,
+              }))
+              .filter((row): row is { item: InboxSession; score: number } =>
+                Boolean(row.item),
+              )
+              .sort((a, b) => b.score - a.score)
+              .slice(0, TOPIC_GRAPH_MEMO_NODE_LIMIT);
+      const inboxOrbit = node.radius + 42;
+      const inboxTotal = Math.max(inboxRows.length, 1);
+
+      inboxRows.forEach(({ item, score }, index) => {
+        const angle = (Math.PI * 2 * index) / inboxTotal - Math.PI / 2 + Math.PI / 7;
+
+        nodes.push({
+          color: getTopicColor(node.cluster.id),
+          id: `inbox:${item.id}`,
+          image: LINK_NODE_ICON,
+          kind: 'inbox',
+          label: truncate(item.title ?? item.domain ?? '저장한 링크', 13),
+          muted: !isActiveTopic && score < 0.5,
+          size: clamp(4.5 + score * 4, 5, 9),
+          topicId: node.cluster.id,
+          x: node.x + Math.cos(angle) * inboxOrbit,
+          y: node.y + Math.sin(angle) * inboxOrbit,
+        });
+      });
+    });
+
+    return nodes;
+  }, [
+    activeMemoId,
+    activeTopicId,
+    selectedTopicMemoId,
+    topicInboxItems,
+    topicInboxMemberships,
+    topicNodes,
+  ]);
+  const topicGraphEdges = useMemo<KnowledgeGraphEdge[]>(() => {
+    const edges: KnowledgeGraphEdge[] = [];
+    const topicInboxScore = new Map(
+      topicInboxMemberships.map(membership => [
+        `${membership.topicId}:${membership.inboxSessionId}`,
+        membership.score ?? 0,
+      ]),
+    );
+
+    topicNodes.forEach(node => {
+      const topicId = `topic:${node.cluster.id}`;
+      const isActiveTopic = node.cluster.id === activeTopicId;
+
+      node.memoRows
+        .slice(0, activeTopicId && !isActiveTopic ? 0 : TOPIC_GRAPH_MEMO_NODE_LIMIT)
+        .forEach(({ memo, score }) => {
+          edges.push({
+            id: `topic-${node.cluster.id}-memo-${memo.id}`,
+            source: topicId,
+            target: `memo:${memo.id}`,
+            weight: clamp(score, 0.25, 1) * (isActiveTopic ? 0.7 : 0.25),
+          });
+        });
+
+      topicInboxMemberships
+        .filter(membership => membership.topicId === node.cluster.id)
+        .forEach(membership => {
+          const score = membership.score ?? 0.5;
+          edges.push({
+            id: `topic-${node.cluster.id}-inbox-${membership.inboxSessionId}`,
+            source: topicId,
+            target: `inbox:${membership.inboxSessionId}`,
+            weight: clamp(score, 0.25, 1) * (isActiveTopic ? 0.7 : 0.25),
+          });
+        });
+    });
+
+    if (activeTopicId) {
+      topicEdges
+        .filter(edge => edge.topicId === activeTopicId)
+        .forEach((edge, index) => {
+          edges.push({
+            color: getTopicColor(activeTopicId),
+            id: `topic-focus-edge-${edge.sourceMemoId}-${edge.targetMemoId}-${index}`,
+            source: `memo:${edge.sourceMemoId}`,
+            target: `memo:${edge.targetMemoId}`,
+            weight: edge.similarity,
+          });
+        });
+    } else {
+      // Intra-topic edges all render; cross-topic pairs keep only their
+      // strongest few bridges so inter-cluster links read as bridges, not
+      // spaghetti, and the layout keeps clusters as separate islands.
+      const bridgesByTopicPair = new Map<string, MemoSimilarityEdge[]>();
+
+      topicGlobalEdges.forEach((edge, index) => {
+        const isIntraTopic =
+          Boolean(edge.sourceTopicId) && edge.sourceTopicId === edge.targetTopicId;
+
+        if (isIntraTopic) {
+          edges.push({
+            color: getTopicColor(edge.sourceTopicId),
+            id: `global-memo-edge-${edge.sourceMemoId}-${edge.targetMemoId}-${index}`,
+            source: `memo:${edge.sourceMemoId}`,
+            target: `memo:${edge.targetMemoId}`,
+            weight: edge.similarity,
+          });
+          return;
+        }
+
+        const pairKey = [edge.sourceTopicId ?? '', edge.targetTopicId ?? '']
+          .sort()
+          .join('>');
+        const bridges = bridgesByTopicPair.get(pairKey) ?? [];
+        bridges.push(edge);
+        bridgesByTopicPair.set(pairKey, bridges);
+      });
+
+      bridgesByTopicPair.forEach(bridges => {
+        bridges
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, TOPIC_BRIDGE_EDGE_LIMIT)
+          .forEach((edge, index) => {
+            edges.push({
+              color: '#c8beb0',
+              id: `global-bridge-edge-${edge.sourceMemoId}-${edge.targetMemoId}-${index}`,
+              // Bridges stay visible but hairline-thin so the long lines
+              // between clusters don't turn the map into spaghetti.
+              size: 0.35 + edge.similarity * 0.45,
+              source: `memo:${edge.sourceMemoId}`,
+              target: `memo:${edge.targetMemoId}`,
+              weight: edge.similarity,
+            });
+          });
+      });
+    }
+
+    topicInboxEdges
+      .filter(edge => !activeTopicId || edge.topicId === activeTopicId)
+      .forEach((edge, index) => {
+        const membershipScore =
+          topicInboxScore.get(`${edge.topicId}:${edge.inboxSessionId}`) ?? 0.5;
+        edges.push({
+          color: getTopicColor(edge.topicId),
+          id: `memo-inbox-edge-${edge.memoId}-${edge.inboxSessionId}-${index}`,
+          size: 0.35 + edge.similarity * 0.45,
+          source: `memo:${edge.memoId}`,
+          target: `inbox:${edge.inboxSessionId}`,
+          weight: Math.max(edge.similarity, membershipScore),
+        });
+      });
+
+    return edges;
+  }, [
+    activeTopicId,
+    topicEdges,
+    topicGlobalEdges,
+    topicInboxEdges,
+    topicInboxMemberships,
+    topicNodes,
+  ]);
   const networkGraphNodes = useMemo<KnowledgeGraphNode[]>(() => {
     if (!networkQueryChunk || networkResults.length === 0) {
       return [];
@@ -594,6 +821,7 @@ const MemoWorkspace = ({
       nodes.push({
         color: result.sourceKind === 'inbox' ? '#6d7185' : '#7f8a6f',
         id: `network:${result.chunkId}`,
+        image: result.sourceKind === 'inbox' ? LINK_NODE_ICON : NOTE_NODE_ICON,
         label: `${Math.round(similarity * 100)}%`,
         size: clamp(5 + similarity * 9, 6, 14),
         x: Math.cos(angle) * distance,
@@ -730,10 +958,29 @@ const MemoWorkspace = ({
     setNetworkDetail({ queryChunk, result });
   };
 
-  const openTopicDetail = (topicId: string) => {
-    setSelectedTopicId(topicId);
-    setTopicDetailMode('quick');
+  const showTopicFolder = (topicId: string, memoId?: string) => {
+    if (isSessionCollapsed) {
+      onToggleSession();
+    }
+    setSidebarMode('folders');
+    setActiveTopicId(topicId);
+    setSelectedTopicMemoId(memoId ?? null);
+    setExpandedTopicIds(previous => new Set(previous).add(topicId));
   };
+
+  useEffect(() => {
+    const handleShowTopicFolder = (event: Event) => {
+      const detail = (event as CustomEvent<{ memoId?: string; topicId?: string }>).detail;
+      if (detail?.topicId) {
+        showTopicFolder(detail.topicId, detail.memoId);
+      }
+    };
+
+    window.addEventListener('subnota:show-topic-folder', handleShowTopicFolder);
+    return () => {
+      window.removeEventListener('subnota:show-topic-folder', handleShowTopicFolder);
+    };
+  });
 
   const toggleTopicFolder = (topicId: string) =>
     setExpandedTopicIds(previous => {
@@ -745,6 +992,21 @@ const MemoWorkspace = ({
       }
       return next;
     });
+
+  const saveStateLabel =
+    saveState === 'saving-local'
+      ? '로컬 저장 중'
+      : saveState === 'syncing'
+        ? '클라우드 동기화 중'
+        : saveState === 'failed'
+          ? '로컬에 저장됨 · 동기화 실패'
+          : saveState === 'local-failed'
+            ? '로컬 저장 실패'
+            : saveState === 'local'
+              ? '로컬에 저장됨'
+              : saveState === 'synced'
+                ? '클라우드에 동기화됨'
+                : '저장됨';
 
   return (
     <div className="memo-layout">
@@ -762,7 +1024,11 @@ const MemoWorkspace = ({
             placement="bottom"
             tooltip="메모"
           >
-            <NotebookText size={18} />
+            {sidebarMode === 'time' ? (
+              <NotebookTextSolid size={18} />
+            ) : (
+              <NotebookText size={18} />
+            )}
           </TooltipIconButton>
           <TooltipIconButton
             className={sidebarMode === 'mini' ? 'active' : ''}
@@ -773,7 +1039,11 @@ const MemoWorkspace = ({
             placement="bottom"
             tooltip="미니"
           >
-            <StickyNote size={18} />
+            {sidebarMode === 'mini' ? (
+              <StickyNoteSolid size={18} />
+            ) : (
+              <StickyNote size={18} />
+            )}
           </TooltipIconButton>
           <TooltipIconButton
             className={sidebarMode === 'search' ? 'active' : ''}
@@ -781,7 +1051,11 @@ const MemoWorkspace = ({
             placement="bottom"
             tooltip="검색"
           >
-            <Search size={18} />
+            {sidebarMode === 'search' ? (
+              <SearchSolid size={18} />
+            ) : (
+              <Search size={18} />
+            )}
           </TooltipIconButton>
           <TooltipIconButton
             className={sidebarMode === 'folders' ? 'active' : ''}
@@ -792,14 +1066,11 @@ const MemoWorkspace = ({
             placement="bottom"
             tooltip="토픽 폴더"
           >
-            <Folder size={18} />
-          </TooltipIconButton>
-          <TooltipIconButton
-            onClick={onToggleSession}
-            placement="bottom"
-            tooltip="사이드바 접기"
-          >
-            <PanelLeftClose size={18} />
+            {sidebarMode === 'folders' ? (
+              <FolderSolid size={18} />
+            ) : (
+              <Folder size={18} />
+            )}
           </TooltipIconButton>
         </div>
 
@@ -894,17 +1165,11 @@ const MemoWorkspace = ({
                       </span>
                       <MemoSyncBadge memo={memo} />
                       {openMemoPaneNumbers?.[memo.id] && (
-                        <Badge
-                          circle
+                        <CheckCircle2
+                          aria-label="패널에서 열림"
                           className="memo-pane-badge"
-                          color="teal"
-                          component="span"
-                          size="sm"
-                          title={`패널 ${openMemoPaneNumbers[memo.id]}에서 열림`}
-                          variant="filled"
-                        >
-                          {openMemoPaneNumbers[memo.id]}
-                        </Badge>
+                          size={15}
+                        />
                       )}
                     </button>
                   ))}
@@ -938,7 +1203,7 @@ const MemoWorkspace = ({
                   저녁 batch가 topic_clusters를 만들면 여기에 폴더가 표시됩니다.
                 </p>
               ) : (
-                topicFolders.map(({ cluster, rows }) => {
+                topicFolders.map(({ cluster, rows, linkRows }) => {
                   const isExpanded = expandedTopicIds.has(cluster.id);
 
                   return (
@@ -960,19 +1225,24 @@ const MemoWorkspace = ({
                         <span className="topic-folder-label">
                           {cluster.label}
                         </span>
-                        <em className="topic-folder-count">{rows.length}</em>
+                        <em className="topic-folder-count">
+                          {rows.length + linkRows.length}
+                        </em>
                       </button>
                       {isExpanded && (
                         <div className="topic-folder-memos">
                           {rows.map(({ memo }) => (
                             <button
                               className={
-                                memo.id === activeMemoId
+                                memo.id === activeMemoId || memo.id === selectedTopicMemoId
                                   ? 'memo-row active'
                                   : 'memo-row'
                               }
                               key={memo.id}
-                              onClick={() => onSelectMemo(memo)}
+                              onClick={() => {
+                                setSelectedTopicMemoId(memo.id);
+                                onSelectMemo(memo);
+                              }}
                               onContextMenu={event => {
                                 event.preventDefault();
                                 setMemoMenu({
@@ -989,6 +1259,31 @@ const MemoWorkspace = ({
                                 {getMemoPreview(memo)}
                               </span>
                               <MemoSyncBadge memo={memo} />
+                            </button>
+                          ))}
+                          {linkRows.map(({ item }) => (
+                            <button
+                              className="memo-row topic-folder-link-row"
+                              key={item.id}
+                              onClick={() => {
+                                window.dispatchEvent(
+                                  new CustomEvent('subnota:open-inbox-source', {
+                                    detail: { inboxSessionId: item.id },
+                                  }),
+                                );
+                              }}
+                              type="button"
+                            >
+                              <strong>
+                                <ExternalLink size={12} />{' '}
+                                {item.title ?? item.domain ?? '저장한 링크'}
+                              </strong>
+                              <span>
+                                {item.summaryOneLiner ??
+                                  item.summary ??
+                                  item.canonicalUrl ??
+                                  ''}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -1027,10 +1322,32 @@ const MemoWorkspace = ({
                   ariaLabel="토픽 지식 그래프"
                   className="topic-graph-shell"
                   edges={topicGraphEdges}
+                  layout="force"
                   nodes={topicGraphNodes}
                   onSelectNode={nodeId => {
                     if (nodeId.startsWith('topic:')) {
-                      openTopicDetail(nodeId.slice('topic:'.length));
+                      showTopicFolder(nodeId.slice('topic:'.length));
+                      return;
+                    }
+
+                    if (nodeId.startsWith('memo:')) {
+                      const memoId = nodeId.slice('memo:'.length);
+                      const topicId =
+                        topicMemberships.find(membership => membership.memoId === memoId)
+                          ?.topicId ?? null;
+
+                      if (topicId) {
+                        showTopicFolder(topicId, memoId);
+                      }
+                      return;
+                    }
+
+                    if (nodeId.startsWith('inbox:')) {
+                      window.dispatchEvent(
+                        new CustomEvent('subnota:open-inbox-source', {
+                          detail: { inboxSessionId: nodeId.slice('inbox:'.length) },
+                        }),
+                      );
                     }
                   }}
                 />
@@ -1038,7 +1355,7 @@ const MemoWorkspace = ({
                   {topicNodes.map(node => (
                     <button
                       key={node.cluster.id}
-                      onClick={() => openTopicDetail(node.cluster.id)}
+                      onClick={() => showTopicFolder(node.cluster.id)}
                       type="button"
                     >
                       <span>{node.cluster.label}</span>
@@ -1062,26 +1379,17 @@ const MemoWorkspace = ({
         <div className="editor-toolbar">
           <div>
             <p className="eyebrow">
-              <span className="save-state-icon" aria-hidden="true">
+              <span
+                aria-label={saveStateLabel}
+                className="save-state-icon"
+                title={saveStateLabel}
+              >
                 {saveState === 'synced' || saveState === 'syncing' || saveState === 'failed'
                   ? '☁︎'
                   : saveState === 'local-failed'
                     ? '!'
                     : '✓'}
               </span>
-              {saveState === 'saving-local'
-                ? '로컬 저장 중'
-                : saveState === 'syncing'
-                  ? '클라우드 동기화 중'
-                : saveState === 'failed'
-                  ? '로컬 저장됨 · 동기화 실패'
-                  : saveState === 'local-failed'
-                    ? '로컬 저장 실패'
-                  : saveState === 'local'
-                    ? '로컬 저장됨'
-                    : saveState === 'synced'
-                      ? '클라우드 동기화됨'
-                      : '저장됨'}
             </p>
             <h2>{title}</h2>
           </div>
@@ -1142,7 +1450,7 @@ const MemoWorkspace = ({
         </div>
         <div className="editor-assist-row">
           <button
-            className="quick-date-chip"
+            className="quick-date-chip date-picker-chip"
             onClick={() => setDatePickerOpen(value => !value)}
             type="button"
           >
@@ -1151,11 +1459,6 @@ const MemoWorkspace = ({
           {firstDateMatch && (
             <span className="date-detect-chip">
               {firstDateMatch.text} → {formatRelativeDisplayDate(firstDateMatch.date)}
-            </span>
-          )}
-          {selectedText.trim() && (
-            <span className="selected-text-chip">
-              선택됨: {truncate(selectedText, 30)}
             </span>
           )}
           {ambientResult && (
@@ -1171,15 +1474,19 @@ const MemoWorkspace = ({
           {ambientError && (
             <span className="ambient-inline-error">
               {ambientError}
-              <button onClick={onRetryAmbient} type="button">다시 시도</button>
+              {isNetworkSearchRetryableMessage(ambientError) && (
+                <button onClick={onRetryAmbient} type="button">다시 시도</button>
+              )}
             </span>
           )}
         </div>
         {isDatePickerOpen && (
-          <DateSchedulePopover
-            onApplyDate={applyPickedDate}
-            onClose={() => setDatePickerOpen(false)}
-          />
+          <div className="date-schedule-floating">
+            <DateSchedulePopover
+              onApplyDate={applyPickedDate}
+              onClose={() => setDatePickerOpen(false)}
+            />
+          </div>
         )}
         {(networkQueryChunk || networkError || networkResults.length > 0) && (
           <section className="network-panel network-immersive">
@@ -1208,9 +1515,11 @@ const MemoWorkspace = ({
             {networkError && (
               <div className="network-inline-error">
                 <p className="form-error">{networkError}</p>
-                <button className="quick-date-chip" onClick={onOpenNetwork} type="button">
-                  다시 시도
-                </button>
+                {isNetworkSearchRetryableMessage(networkError) && (
+                  <button className="quick-date-chip" onClick={onOpenNetwork} type="button">
+                    다시 시도
+                  </button>
+                )}
               </div>
             )}
 
@@ -1350,6 +1659,7 @@ const MemoWorkspace = ({
                   ariaLabel={`${selectedTopic.label} 토픽 관계 그래프`}
                   className="topic-relation-view"
                   edges={relationGraphEdges}
+                  layout="force"
                   nodes={relationGraphNodes}
                   onSelectNode={nodeId => {
                     if (!nodeId.startsWith('memo:')) {
@@ -1467,6 +1777,24 @@ const MemoWorkspace = ({
             />
           </Menu.Target>
           <Menu.Dropdown>
+            {onTogglePinMemo && (
+              <Menu.Item
+                leftSection={
+                  pinnedMemoIds.includes(memoMenu.id) ? (
+                    <PinSolid size={16} />
+                  ) : (
+                    <Pin size={16} />
+                  )
+                }
+                onClick={() => {
+                  const target = memoMenu.id;
+                  setMemoMenu(null);
+                  onTogglePinMemo(target);
+                }}
+              >
+                {pinnedMemoIds.includes(memoMenu.id) ? '고정 해제' : '고정'}
+              </Menu.Item>
+            )}
             <Menu.Item
               color="red"
               leftSection={<Trash2 size={16} />}

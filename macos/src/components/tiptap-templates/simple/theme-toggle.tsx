@@ -1,4 +1,4 @@
-import { Button } from "@/components/tiptap-ui-primitive/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
 
 // --- Icons ---
 import { MoonStarIcon } from "@/components/tiptap-icons/moon-star-icon"

@@ -1,3 +1,7 @@
+// 초기 릴리스에서는 다크 모드를 전면 비활성화한다(UI 불일치 정리 전까지).
+// 복원: 이 값을 true로 바꾸고 MemoSplitWorkspace 상단바에 ThemeToggle을 되돌린다.
+export const DARK_MODE_ENABLED = false;
+
 export const AMBIENT_IDLE_DELAY_MS = 3000;
 export const AMBIENT_COOLDOWN_MS = 60000;
 export const AMBIENT_MAX_RESULT_COUNT = 1;

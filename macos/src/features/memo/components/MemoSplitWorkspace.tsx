@@ -15,17 +15,32 @@ import {
   ExternalLink,
   Network,
   PanelLeft,
+  PanelLeftClose,
+  Pin,
+  PinSolid,
   Plus,
   X,
 } from '@/components/icons';
+import { useClickOutside } from '@mantine/hooks';
 import TooltipIconButton from '../../../components/TooltipIconButton';
-import { ThemeToggle } from '../../../components/tiptap-templates/simple/theme-toggle';
-import { MemoRow, CalendarBlockRow, BriefingRow, ScheduleInboxRow, TopicCluster, TopicMembership } from '../../../types';
-import { MemoChunk } from '../../../lib/memoChunker';
+import {
+  MemoRow,
+  CalendarBlockRow,
+  BriefingRow,
+  MemoSimilarityEdge,
+  ScheduleInboxRow,
+  TopicCluster,
+  TopicInboxMembership,
+  TopicMemoInboxEdge,
+  TopicMembership,
+} from '../../../types';
+import { InboxSession } from '../../../services/backend/inboxService';
+import { MemoChunk, getCursorContextText } from '../../../lib/memoChunker';
 import {
   NETWORK_SEARCH_EMPTY_MESSAGE,
   NetworkSearchResult,
   formatNetworkSearchErrorMessage,
+  isNetworkSearchRetryableMessage,
   searchCursorNetwork,
 } from '../../../services/backend/networkService';
 import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
@@ -37,12 +52,23 @@ import CalendarWorkspace, { CalendarTreePanel } from '../../calendar/CalendarWor
 import BriefingWorkspace from '../../briefing/BriefingWorkspace';
 import InboxWorkspace from '../../inbox/InboxWorkspace';
 import { getMemoCategory } from '../../../lib/memoCategory';
+import {
+  editorsAfterOpenSource,
+  editorsAfterOpenTab,
+} from '../../../lib/splitPaneTabs';
 import { parseDates } from '../../../lib/dateParser';
 import DateSchedulePopover from './DateSchedulePopover';
+import SourceDetailPane from './SourceDetailPane';
 import KnowledgeGraphView, {
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
 } from './KnowledgeGraphView';
+import {
+  capCrossTopicBridges,
+  capIntraTopicEdges,
+  LINK_NODE_ICON,
+  NOTE_NODE_ICON,
+} from './knowledgeGraph';
 
 export type MemoSplitPaneView =
   | 'memo'
@@ -88,7 +114,7 @@ const VIEW_LABELS: Record<MemoSplitPaneView, string> = {
   inbox: '웹 inbox',
   memo: '노트',
   network: '네트워크 검색',
-  source: '링크',
+  source: '웹 요약',
   topics: 'Topics',
 };
 
@@ -102,6 +128,27 @@ const MENU_VIEWS: MemoSplitPaneView[] = [
 // Drag floor only — keeps a pane grabbable. Auto-layout (window narrowing) has no
 // floor (CSS min-width:0), so content panes clip rather than forcing a scrollbar.
 const SPLIT_PANE_MIN_WIDTH_PX = 240;
+const TOPIC_GRAPH_MEMO_NODE_LIMIT = 32;
+// Cross-topic pairs keep only their strongest bridges (same as the rail map).
+const TOPIC_BRIDGE_EDGE_LIMIT = 2;
+// Intra-topic edges: per-memo KNN union + similarity floor. Backend ships
+// top-8/0.38 which renders as a clique; our edge data sits at p50≈0.44 with
+// real matches ≥0.7, so 3/0.45 keeps the strong skeleton only.
+const TOPIC_INTRA_EDGE_TOP_K = 3;
+const TOPIC_INTRA_EDGE_MIN_SIMILARITY = 0.45;
+// Distinct hues so clusters read as different color groups. First three match
+// the topics-network reference mock (violet-blue / green / orange-red);
+// assigned by cluster index in buildSplitTopicGraph.
+const TOPIC_COLORS = [
+  '#8f8ee0',
+  '#5cb84d',
+  '#d1502c',
+  '#b8892b',
+  '#4aa5a5',
+  '#c04f7a',
+  '#3d7dbf',
+  '#7b6240',
+];
 
 const createEditorId = () =>
   `editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -172,6 +219,24 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, value));
 };
 
+const getGraphMemoTitle = (memo: MemoRow, limit = 13) => {
+  const title =
+    memo.content
+      .split('\n')
+      .map(line => line.trim())
+      .find(Boolean) ?? '제목 없는 노트';
+
+  return title.length > limit ? `${title.slice(0, limit).trimEnd()}...` : title;
+};
+
+const showTopicFolderFromGraph = (topicId: string, memoId?: string) => {
+  window.dispatchEvent(
+    new CustomEvent('subnota:show-topic-folder', {
+      detail: { memoId, topicId },
+    }),
+  );
+};
+
 const buildSplitKnnGraph = (
   results: NetworkSearchResult[],
   getLabel: (result: NetworkSearchResult) => string,
@@ -201,6 +266,7 @@ const buildSplitKnnGraph = (
     nodes.push({
       color: result.sourceKind === 'inbox' ? '#6d7185' : '#cc785c',
       id: nodeId,
+      image: result.sourceKind === 'inbox' ? LINK_NODE_ICON : NOTE_NODE_ICON,
       label: getLabel(result),
       size: clamp(7 + similarity * 9, 8, 17),
       x: Math.cos(angle) * distance,
@@ -236,18 +302,63 @@ const getResultTitle = (result: NetworkSearchResult, memos: MemoRow[]) => {
 const formatResultDate = (timestamp: number | null) =>
   timestamp ? format(new Date(timestamp), 'M월 d일') : '';
 
+const getGraphInboxTitle = (item: InboxSession, limit = 13) => {
+  const title = item.title ?? item.domain ?? '저장한 링크';
+  return title.length > limit ? `${title.slice(0, limit).trimEnd()}...` : title;
+};
+
+// Shape a saved inbox summary like a network result so the shared source view
+// (renderSourceBody / openSourceInPane) can display it.
+const inboxSessionToSourceResult = (item: InboxSession): NetworkSearchResult => ({
+  chunkId: `inbox-${item.id}`,
+  chunkText: item.summaryOneLiner ?? item.summary ?? item.description ?? '',
+  createdAt: item.createdAt ? Date.parse(item.createdAt) : null,
+  endIndex: 0,
+  inboxSessionId: item.id,
+  memoContent: null,
+  memoCreatedAt: null,
+  memoId: null,
+  memoUpdatedAt: null,
+  similarity: 0,
+  sourceKind: 'inbox',
+  sourceLabel: item.channelTitle ?? item.domain,
+  sourceType: item.sourceType,
+  sourceUrl: item.canonicalUrl ?? item.originalUrl,
+  startIndex: 0,
+  thumbnailUrl: item.thumbnailUrl,
+  title: item.title,
+});
+
 const buildSplitTopicGraph = (
   clusters: TopicCluster[],
   memberships: TopicMembership[],
+  globalEdges: MemoSimilarityEdge[],
+  memos: MemoRow[],
   activeMemoId: string | null,
+  focusedTopicId: string | null,
+  inboxMemberships: TopicInboxMembership[] = [],
+  inboxEdges: TopicMemoInboxEdge[] = [],
+  inboxItems: InboxSession[] = [],
 ) => {
+  const memoById = new Map(memos.map(memo => [memo.id, memo]));
+  const inboxItemById = new Map(inboxItems.map(item => [item.id, item]));
   const nodes: KnowledgeGraphNode[] = [];
   const edges: KnowledgeGraphEdge[] = [];
+  // Filter ONLY on an explicit topic focus. Falling back to the active memo's
+  // topic silently dropped every other cluster's memo-memo edges (the panel
+  // Topics view looked like bare hub-spoke stars while the rail view didn't).
+  const activeTopicId = focusedTopicId ?? null;
   const total = Math.max(clusters.length, 1);
+  // Push clusters onto a wider ring as their count grows so they don't overlap.
+  const topicRing = 1.4 + total * 0.18;
+  // Per-cluster color by index → the first 8 clusters are always distinct.
+  const topicColor = new Map(
+    clusters.map((cluster, index) => [cluster.id, TOPIC_COLORS[index % TOPIC_COLORS.length]]),
+  );
+  const colorOf = (id: string | null | undefined) => (id && topicColor.get(id)) || TOPIC_COLORS[0];
 
   clusters.forEach((cluster, index) => {
     const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
-    const ring = 0.58 + (index % 3) * 0.22;
     const topicMemberships = memberships.filter(item => item.topicId === cluster.id);
     const isActiveLinked = Boolean(
       activeMemoId && topicMemberships.some(item => item.memoId === activeMemoId),
@@ -256,14 +367,132 @@ const buildSplitTopicGraph = (
     const nodeId = `topic:${cluster.id}`;
 
     nodes.push({
-      color: isActiveLinked ? '#236b45' : '#5c4d3c',
+      color: isActiveLinked ? '#236b45' : colorOf(cluster.id),
+      forceLabel: true,
       id: nodeId,
+      kind: 'topic',
       label: cluster.label,
-      size: clamp(5.5 + count * 0.55 + (cluster.confidence ?? 0) * 3, 6, 13),
-      x: Math.cos(angle) * ring,
-      y: Math.sin(angle) * ring,
+      // Hub size grows with cluster weight, but capped like the rail map —
+      // 24 turned the active hub (+3 from the reducer) into a black hole.
+      size: clamp(9 + count * 0.9 + (cluster.confidence ?? 0) * 3, 10, 16),
+      topicId: cluster.id,
+      x: Math.cos(angle) * topicRing,
+      y: Math.sin(angle) * topicRing,
     });
+
+    topicMemberships
+      .map(membership => ({
+        memo: memoById.get(membership.memoId),
+        score: membership.score ?? 0.5,
+      }))
+      .filter((row): row is { memo: MemoRow; score: number } => Boolean(row.memo))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, TOPIC_GRAPH_MEMO_NODE_LIMIT)
+      .forEach(({ memo, score }, memoIndex, memoRows) => {
+        const memoAngle = (Math.PI * 2 * memoIndex) / Math.max(memoRows.length, 1);
+        // Orbit grows with the node count so a busy cluster fans out into a
+        // readable ring instead of piling into one dense disk.
+        const memoOrbit = 0.18 + memoRows.length * 0.02;
+        const memoNodeId = `memo:${memo.id}`;
+
+        nodes.push({
+          color: memo.id === activeMemoId ? '#236b45' : colorOf(cluster.id),
+          // No forced labels: real data has many same-title memos, so Sigma's
+          // density culling + hover reveal keeps the map readable (rail policy).
+          id: memoNodeId,
+          image: NOTE_NODE_ICON,
+          kind: 'memo',
+          label: getGraphMemoTitle(memo),
+          memoId: memo.id,
+          size: clamp(4.5 + score * 4 + (memo.id === activeMemoId ? 2 : 0), 5, 10),
+          topicId: cluster.id,
+          x: Math.cos(angle) * topicRing + Math.cos(memoAngle) * memoOrbit,
+          y: Math.sin(angle) * topicRing + Math.sin(memoAngle) * memoOrbit,
+        });
+        edges.push({
+          id: `${nodeId}-${memoNodeId}`,
+          source: nodeId,
+          target: memoNodeId,
+          weight: clamp(score, 0.25, 1) * 0.55,
+        });
+      });
+
+    // Saved web-inbox summaries attached to this topic — link-icon leaves on
+    // a hub spoke; the force layout settles them next to the memo members.
+    inboxMemberships
+      .filter(membership => membership.topicId === cluster.id)
+      .map(membership => ({
+        item: inboxItemById.get(membership.inboxSessionId),
+        score: membership.score ?? 0.5,
+      }))
+      .filter((row): row is { item: InboxSession; score: number } =>
+        Boolean(row.item),
+      )
+      .forEach(({ item, score }, inboxIndex, rows) => {
+        const inboxAngle =
+          (Math.PI * 2 * inboxIndex) / Math.max(rows.length, 1) + Math.PI / 5;
+        const inboxNodeId = `inbox:${item.id}`;
+
+        nodes.push({
+          color: colorOf(cluster.id),
+          id: inboxNodeId,
+          image: LINK_NODE_ICON,
+          label: getGraphInboxTitle(item),
+          size: clamp(4.5 + score * 4, 5, 9),
+          topicId: cluster.id,
+          x: Math.cos(angle) * topicRing + Math.cos(inboxAngle) * 0.3,
+          y: Math.sin(angle) * topicRing + Math.sin(inboxAngle) * 0.3,
+        });
+        edges.push({
+          id: `${nodeId}-${inboxNodeId}`,
+          source: nodeId,
+          target: inboxNodeId,
+          weight: clamp(score, 0.25, 1) * 0.55,
+        });
+      });
   });
+
+  const simplifiedGlobalEdges = capIntraTopicEdges(
+    globalEdges,
+    TOPIC_INTRA_EDGE_TOP_K,
+    TOPIC_INTRA_EDGE_MIN_SIMILARITY,
+  );
+  const visibleGlobalEdges = activeTopicId
+    ? simplifiedGlobalEdges.filter(
+        edge =>
+          edge.sourceTopicId === activeTopicId &&
+          edge.targetTopicId === activeTopicId,
+      )
+    : capCrossTopicBridges(simplifiedGlobalEdges, TOPIC_BRIDGE_EDGE_LIMIT);
+
+  visibleGlobalEdges
+    .forEach((edge, index) => {
+      const isIntraTopic =
+        Boolean(edge.sourceTopicId) && edge.sourceTopicId === edge.targetTopicId;
+      edges.push({
+        color: isIntraTopic ? colorOf(edge.sourceTopicId) : '#c8beb0',
+        id: `split-global-memo-edge-${edge.sourceMemoId}-${edge.targetMemoId}-${index}`,
+        // Cross-topic edges stay visible but hairline-thin so the long lines
+        // between clusters don't turn the map into spaghetti.
+        size: isIntraTopic ? undefined : 0.35 + edge.similarity * 0.45,
+        source: `memo:${edge.sourceMemoId}`,
+        target: `memo:${edge.targetMemoId}`,
+        weight: edge.similarity,
+      });
+    });
+
+  inboxEdges
+    .filter(edge => !activeTopicId || edge.topicId === activeTopicId)
+    .forEach((edge, index) => {
+      edges.push({
+        color: colorOf(edge.topicId),
+        id: `split-memo-inbox-edge-${edge.memoId}-${edge.inboxSessionId}-${index}`,
+        size: 0.35 + edge.similarity * 0.45,
+        source: `memo:${edge.memoId}`,
+        target: `inbox:${edge.inboxSessionId}`,
+        weight: edge.similarity,
+      });
+    });
 
   return { edges, nodes };
 };
@@ -313,6 +542,7 @@ interface MemoSplitWorkspaceProps {
   isInboxLoading: boolean;
   onRefreshInbox: () => void;
   onSaveInboxUrl: (url: string) => Promise<void>;
+  onToggleInboxLike: (id: string, liked: boolean) => void;
 
   // 브리핑 연동
   briefings: BriefingRow[];
@@ -321,8 +551,16 @@ interface MemoSplitWorkspaceProps {
   onDismissInbox: (item: ScheduleInboxRow) => void;
 
   // Topics 지도 데이터
+  isTopicsLoading?: boolean;
   topicClusters: TopicCluster[];
+  topicInboxEdges?: TopicMemoInboxEdge[];
+  topicInboxMemberships?: TopicInboxMembership[];
+  topicGlobalEdges: MemoSimilarityEdge[];
   topicMemberships: TopicMembership[];
+
+  // 메모 고정
+  onTogglePinMemo?: (memoId: string) => void;
+  pinnedMemoIds?: string[];
 }
 
 const MemoSplitWorkspace = ({
@@ -356,12 +594,19 @@ const MemoSplitWorkspace = ({
   isInboxLoading,
   onRefreshInbox,
   onSaveInboxUrl,
+  onToggleInboxLike,
   briefings,
   scheduleInbox,
   onAcceptInbox,
   onDismissInbox,
+  isTopicsLoading = false,
   topicClusters,
+  topicInboxEdges = [],
+  topicInboxMemberships = [],
+  topicGlobalEdges,
   topicMemberships,
+  onTogglePinMemo,
+  pinnedMemoIds = [],
 }: MemoSplitWorkspaceProps) => {
   const [insertTextRequests, setInsertTextRequests] = useState<
     Record<string, { id: string; text: string }>
@@ -370,6 +615,15 @@ const MemoSplitWorkspace = ({
     string | null
   >(null);
   const [openMenuPaneId, setOpenMenuPaneId] = useState<string | null>(null);
+  // 스택 탭 드롭다운 외부 클릭 시 닫기. 토글 버튼이 있는 actions 줄은 제외해
+  // "닫힘 → onClick 재오픈" 레이스를 막는다 (한 번에 하나만 열리므로 ref 한 쌍).
+  const [menuDropdownEl, setMenuDropdownEl] = useState<HTMLDivElement | null>(null);
+  const [menuActionsEl, setMenuActionsEl] = useState<HTMLDivElement | null>(null);
+  useClickOutside(() => setOpenMenuPaneId(null), null, [
+    menuDropdownEl,
+    menuActionsEl,
+  ]);
+  const [focusedTopicId, setFocusedTopicId] = useState<string | null>(null);
   const [activeEditorInstanceId, setActiveEditorInstanceId] = useState<string | null>(
     null,
   );
@@ -383,6 +637,16 @@ const MemoSplitWorkspace = ({
   const networkControllersRef = useRef<Map<string, AbortController>>(new Map());
   const panesRef = useRef(panes);
   const paneIdsRef = useRef(panes.map(pane => pane.id).join('|'));
+
+  useEffect(() => {
+    const handleShowTopicFolder = (event: Event) => {
+      const detail = (event as CustomEvent<{ topicId?: string }>).detail;
+      setFocusedTopicId(detail?.topicId ?? null);
+    };
+
+    window.addEventListener('subnota:show-topic-folder', handleShowTopicFolder);
+    return () => window.removeEventListener('subnota:show-topic-folder', handleShowTopicFolder);
+  }, []);
 
   useEffect(() => {
     panesRef.current = panes;
@@ -532,23 +796,78 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
+  const upsertEditorById = useCallback(
+    (
+      paneId: string,
+      editor: MemoSplitEditorState,
+      patch: Partial<MemoSplitEditorState>,
+      activate: boolean,
+    ) => {
+      const pane = panesRef.current.find(candidate => candidate.id === paneId);
+      if (!pane) {
+        return;
+      }
+
+      const editors = getPaneEditors(pane);
+      const nextEditor: MemoSplitEditorState = { ...editor, ...patch };
+      const hasEditor = editors.some(candidate => candidate.id === editor.id);
+      const nextEditors = hasEditor
+        ? editors.map(candidate =>
+            candidate.id === editor.id ? nextEditor : candidate,
+          )
+        : [...editors, nextEditor];
+      const activeEditorId = activate
+        ? nextEditor.id
+        : pane.activeEditorId ?? nextEditor.id;
+      const nextActiveEditor =
+        nextEditors.find(candidate => candidate.id === activeEditorId) ??
+        nextEditor;
+
+      onChangePane(paneId, {
+        ...mirrorEditorPatch(nextActiveEditor),
+        activeEditorId: nextActiveEditor.id,
+        editors: nextEditors,
+      });
+    },
+    [onChangePane],
+  );
+
   const runEditorNetworkSearch = useCallback(
     async (pane: MemoSplitPaneState, editor: MemoSplitEditorState) => {
       const candidate = editorInstances[pane.id];
       const liveEditor = candidate && !candidate.isDestroyed ? candidate : null;
       const selection = liveEditor?.state.selection.$from;
-      const paragraph = selection?.parent.textContent ?? editor.ambientQueryText ?? '';
-      const start = selection
-        ? Math.max(0, Math.min(selection.parentOffset, paragraph.length) - 2000)
-        : 0;
-      const queryText = paragraph.slice(start, start + 4000).trim();
+      const savedQueryText = editor.networkQueryChunk?.text?.trim() ?? '';
+      const shouldReuseSavedQuery = editor.view === 'network' && Boolean(savedQueryText);
+      const paragraph = shouldReuseSavedQuery
+        ? savedQueryText
+        : selection?.parent.textContent ?? editor.ambientQueryText ?? '';
+      // 앰비언트 검색과 동일하게 커서 문장 ±1로 쿼리한다. 문단 전체를 보내면
+      // 한 문단짜리 노트가 통째로 한 블록으로 임베딩/표시되고(백엔드는 ~3문장
+      // 청크를 인덱싱), 유사도도 떨어진다.
+      const queryText = (shouldReuseSavedQuery
+        ? paragraph
+        : selection
+        ? getCursorContextText(
+            paragraph,
+            Math.min(selection.parentOffset, paragraph.length),
+          )
+        : paragraph
+      )
+        .slice(0, 1000)
+        .trim();
+      const targetEditor =
+        editor.view === 'network'
+          ? editor
+          : createEditor('network', { memoId: editor.memoId });
+
       if (!queryText) {
-        patchEditorById(pane.id, editor.id, {
+        upsertEditorById(pane.id, targetEditor, {
           networkErrorMessage: '검색할 문단을 먼저 선택하거나 작성해 주세요.',
           networkIsLoading: false,
           networkResults: [],
           view: 'network',
-        });
+        }, true);
         return;
       }
 
@@ -562,18 +881,18 @@ const MemoSplitWorkspace = ({
         start: 0,
         text: queryText,
       };
-      networkControllersRef.current.get(editor.id)?.abort();
+      networkControllersRef.current.get(targetEditor.id)?.abort();
       const controller = new AbortController();
-      networkControllersRef.current.set(editor.id, controller);
+      networkControllersRef.current.set(targetEditor.id, controller);
 
-      patchEditorById(pane.id, editor.id, {
+      upsertEditorById(pane.id, targetEditor, {
         networkErrorMessage: null,
         networkIsLoading: true,
         networkQueryChunk: queryChunk,
         networkRequestId,
         networkResults: [],
         view: 'network',
-      });
+      }, true);
 
       try {
         const response = await searchCursorNetwork({
@@ -584,10 +903,10 @@ const MemoSplitWorkspace = ({
           signal: controller.signal,
         });
 
-        if (networkControllersRef.current.get(editor.id) !== controller) {
+        if (networkControllersRef.current.get(targetEditor.id) !== controller) {
           return;
         }
-        patchEditorById(pane.id, editor.id, {
+        upsertEditorById(pane.id, targetEditor, {
           networkErrorMessage:
             response.results.length === 0
               ? response.message ?? NETWORK_SEARCH_EMPTY_MESSAGE
@@ -597,15 +916,15 @@ const MemoSplitWorkspace = ({
           networkRequestId,
           networkResults: response.results,
           view: 'network',
-        });
+        }, false);
       } catch (error) {
         if (
           controller.signal.aborted ||
-          networkControllersRef.current.get(editor.id) !== controller
+          networkControllersRef.current.get(targetEditor.id) !== controller
         ) {
           return;
         }
-        patchEditorById(pane.id, editor.id, {
+        upsertEditorById(pane.id, targetEditor, {
           networkErrorMessage: formatNetworkSearchErrorMessage(error, {
             isOnline: navigator.onLine,
           }),
@@ -613,14 +932,14 @@ const MemoSplitWorkspace = ({
           networkRequestId,
           networkResults: [],
           view: 'network',
-        });
+        }, false);
       } finally {
-        if (networkControllersRef.current.get(editor.id) === controller) {
-          networkControllersRef.current.delete(editor.id);
+        if (networkControllersRef.current.get(targetEditor.id) === controller) {
+          networkControllersRef.current.delete(targetEditor.id);
         }
       }
     },
-    [editorInstances, patchEditorById],
+    [editorInstances, upsertEditorById],
   );
 
   const handleAddEditor = useCallback(
@@ -757,27 +1076,75 @@ const MemoSplitWorkspace = ({
   const openMemoInPane = useCallback(
     (paneId: string, memo: MemoRow) => {
       const pane = panes.find(candidate => candidate.id === paneId);
+      const nextEditors = pane ? getPaneEditors(pane) : [];
+
+      onSelectMemoById(memo.id);
+
+      // Already open in this pane → focus that tab instead of a duplicate.
+      const existingEditor = nextEditors.find(
+        editor => editor.view === 'memo' && editor.memoId === memo.id,
+      );
+      if (existingEditor) {
+        onChangePane(paneId, {
+          ...mirrorEditorPatch(existingEditor),
+          activeEditorId: existingEditor.id,
+          editors: nextEditors,
+        });
+        return;
+      }
+
       const nextEditor = createEditor('memo', {
         highlight: null,
         memoId: memo.id,
         mode: 'existing',
       });
-      const nextEditors = pane ? getPaneEditors(pane) : [];
-
-      onSelectMemoById(memo.id);
       onChangePane(paneId, {
         ...mirrorEditorPatch(nextEditor),
         activeEditorId: nextEditor.id,
-        editors:
-          pane && nextEditors.length > 0
-            ? nextEditors.map(editor =>
-                editor.id === getActiveEditor(pane).id ? nextEditor : editor,
-              )
-            : [nextEditor],
+        editors: editorsAfterOpenTab(
+          nextEditors,
+          pane ? getActiveEditor(pane).id : undefined,
+          nextEditor,
+        ),
       });
     },
     [onChangePane, onSelectMemoById, panes],
   );
+
+  const openSourceInPane = useCallback(
+    (pane: MemoSplitPaneState, result: NetworkSearchResult) => {
+      // 항상 새 탭으로 열고(활성 탭을 덮어쓰지 않음), 같은 수집 항목이 이미
+      // 열려 있으면 그 탭을 포커스한다.
+      const { activeEditor, editors } = editorsAfterOpenSource(
+        getPaneEditors(pane),
+        createEditor('source', { sourceResult: result }),
+      );
+      onChangePane(pane.id, {
+        ...mirrorEditorPatch(activeEditor),
+        activeEditorId: activeEditor.id,
+        editors,
+      });
+    },
+    [onChangePane],
+  );
+
+  // 토픽 폴더(사이드바)의 링크 행 클릭 → 해당 요약을 소스 탭으로 연다.
+  useEffect(() => {
+    const handleOpenInboxSource = (event: Event) => {
+      const detail = (event as CustomEvent<{ inboxSessionId?: string }>).detail;
+      const item = (inboxItems as InboxSession[]).find(
+        candidate => candidate.id === detail?.inboxSessionId,
+      );
+      const pane = focusedPane ?? panes[0];
+      if (item && pane) {
+        openSourceInPane(pane, inboxSessionToSourceResult(item));
+      }
+    };
+
+    window.addEventListener('subnota:open-inbox-source', handleOpenInboxSource);
+    return () =>
+      window.removeEventListener('subnota:open-inbox-source', handleOpenInboxSource);
+  }, [focusedPane, inboxItems, openSourceInPane, panes]);
 
   const handleChangeMemoText = (
     pane: MemoSplitPaneState,
@@ -922,6 +1289,17 @@ const MemoSplitWorkspace = ({
       );
     }
 
+    // 저장된 수집 항목을 찾으면 전체 요약 상세(키워드/썸네일/요약·상세 토글)를
+    // 보여준다. 못 찾으면(과거 세션의 탭, 메모 청크) 기존 축약 뷰로 폴백.
+    const inboxItem = result.inboxSessionId
+      ? (inboxItems as InboxSession[]).find(
+          candidate => candidate.id === result.inboxSessionId,
+        )
+      : null;
+    if (inboxItem) {
+      return <SourceDetailPane item={inboxItem} />;
+    }
+
     return (
       <div className="source-pane-content">
         <span className="source-kind">{getSourceLabel(result)}</span>
@@ -963,7 +1341,6 @@ const MemoSplitWorkspace = ({
     if (editor.view === 'briefing') {
       return (
         <BriefingWorkspace
-          briefings={briefings}
           inboxItems={scheduleInbox}
           onAcceptInbox={onAcceptInbox}
           onDismissInbox={onDismissInbox}
@@ -976,8 +1353,12 @@ const MemoSplitWorkspace = ({
         <InboxWorkspace
           inboxItems={inboxItems}
           isLoading={isInboxLoading}
+          onOpenDetail={item =>
+            openSourceInPane(pane, inboxSessionToSourceResult(item))
+          }
           onRefresh={onRefreshInbox}
           onSaveUrl={onSaveInboxUrl}
+          onToggleLike={onToggleInboxLike}
         />
       );
     }
@@ -1009,10 +1390,7 @@ const MemoSplitWorkspace = ({
             onSelectMemoById(target.id);
             openMemoInPane(pane.id, target);
           } else if (result.sourceKind === 'inbox') {
-            patchEditorById(pane.id, editor.id, {
-              sourceResult: result,
-              view: 'source',
-            });
+            openSourceInPane(pane, result);
           }
         };
 
@@ -1029,13 +1407,15 @@ const MemoSplitWorkspace = ({
               {editor.networkErrorMessage && (
                 <div className="network-inline-error net-inline-error">
                   <p className="form-error">{editor.networkErrorMessage}</p>
-                  <button
-                    className="quick-date-chip"
-                    onClick={() => void runEditorNetworkSearch(pane, editor)}
-                    type="button"
-                  >
-                    다시 시도
-                  </button>
+                  {isNetworkSearchRetryableMessage(editor.networkErrorMessage) && (
+                    <button
+                      className="quick-date-chip"
+                      onClick={() => void runEditorNetworkSearch(pane, editor)}
+                      type="button"
+                    >
+                      다시 시도
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1108,8 +1488,19 @@ const MemoSplitWorkspace = ({
       // `network` fallback preserves previously persisted State A tabs.
       if (topicClusters.length > 0) {
         const activeTopicId =
+          focusedTopicId ??
           topicMemberships.find(membership => membership.memoId === editor.memoId)?.topicId ?? null;
-        const graph = buildSplitTopicGraph(topicClusters, topicMemberships, editor.memoId);
+        const graph = buildSplitTopicGraph(
+          topicClusters,
+          topicMemberships,
+          topicGlobalEdges,
+          memos,
+          editor.memoId,
+          focusedTopicId,
+          topicInboxMemberships,
+          topicInboxEdges,
+          inboxItems as InboxSession[],
+        );
 
         return (
           <div className="split-global-network split-topics-stage">
@@ -1119,22 +1510,53 @@ const MemoSplitWorkspace = ({
               ariaLabel="토픽 지식 그래프"
               className="split-knowledge-graph"
               edges={graph.edges}
+              layout="force"
               nodes={graph.nodes}
               onSelectNode={nodeId => {
-                if (!nodeId.startsWith('topic:')) {
+                if (nodeId.startsWith('topic:')) {
+                  const topicId = nodeId.slice('topic:'.length);
+                  if (focusedTopicId === topicId) {
+                    // Second click on the focused hub returns to the full map.
+                    setFocusedTopicId(null);
+                  } else {
+                    showTopicFolderFromGraph(topicId);
+                  }
                   return;
                 }
 
-                const topicId = nodeId.slice('topic:'.length);
-                const memId = topicMemberships.find(m => m.topicId === topicId)?.memoId;
-                const target = memId ? memos.find(m => m.id === memId) : null;
+                if (nodeId.startsWith('inbox:')) {
+                  const sessionId = nodeId.slice('inbox:'.length);
+                  const item = (inboxItems as InboxSession[]).find(
+                    candidate => candidate.id === sessionId,
+                  );
+                  if (item) {
+                    openSourceInPane(pane, inboxSessionToSourceResult(item));
+                  }
+                  return;
+                }
 
-                if (target) {
-                  onSelectMemoById(target.id);
-                  openMemoInPane(pane.id, target);
+                if (nodeId.startsWith('memo:')) {
+                  const memoId = nodeId.slice('memo:'.length);
+                  const topicId =
+                    topicMemberships.find(membership => membership.memoId === memoId)?.topicId ??
+                    null;
+
+                  if (topicId) {
+                    showTopicFolderFromGraph(topicId, memoId);
+                  }
                 }
               }}
             />
+          </div>
+        );
+      }
+
+      // Clusters not here yet but a fetch is in flight → loading, not fallback.
+      if (isTopicsLoading) {
+        return (
+          <div className="split-global-network split-topics-stage">
+            <div className="split-topics-stage-title">Topics</div>
+            <p className="loading-text">Topics 계산 결과를 불러오는 중...</p>
           </div>
         );
       }
@@ -1188,27 +1610,36 @@ const MemoSplitWorkspace = ({
       editor.mode === 'existing'
         ? editor.draftText ?? memo?.content ?? ''
         : editor.draftText ?? '';
-    const firstDateMatch = parseDates(
-      value,
-      memo?.created_at ? new Date(memo.created_at).getTime() : Date.now(),
-    )[0] ?? null;
+    // Same base as schedule creation (Date.now) — a created_at base made the
+    // recognition bar disagree with the schedule actually created.
+    const firstDateMatch = parseDates(value)[0] ?? null;
     const selectedText = editor.selectedText?.trim() ?? '';
+    const syncLabel =
+      memo?.local_sync_status === 'synced'
+        ? '클라우드에 동기화됨'
+        : memo?.local_sync_status === 'failed'
+          ? '로컬에 저장됨 · 동기화 실패'
+          : '로컬에 저장됨';
 
     return (
       <div className="split-memo-pane-body">
         {renderHighlight(pane, editor, value)}
         <div className="split-editor-assist-row">
           {memo && (
-            <span className="selected-text-chip save-status-chip">
+            <span
+              aria-label={syncLabel}
+              className="selected-text-chip save-status-chip"
+              title={syncLabel}
+            >
               {memo.local_sync_status === 'synced'
-                ? '☁︎ 클라우드 동기화됨'
+                ? '☁︎'
                 : memo.local_sync_status === 'failed'
-                  ? '! 로컬 저장됨 · 동기화 실패'
-                  : '✓ 로컬 저장됨'}
+                  ? '!'
+                  : '✓'}
             </span>
           )}
           <button
-            className="quick-date-chip"
+            className="quick-date-chip date-picker-chip"
             onClick={() =>
               setOpenDatePickerEditorId(current =>
                 current === editor.id ? null : editor.id,
@@ -1219,21 +1650,17 @@ const MemoSplitWorkspace = ({
             날짜 선택
           </button>
           <TooltipIconButton
-            className="ghost-button"
+            className="ghost-button schedule-register-chip"
             disabled={!selectedText}
             onClick={() => registerEditorSchedule(editor)}
             tooltip="일정 등록"
           >
             <CalendarPlus size={16} />
+            <span>일정 등록</span>
           </TooltipIconButton>
           {firstDateMatch && (
             <span className="date-detect-chip">
               {firstDateMatch.text} : {format(firstDateMatch.date, 'yyyy.MM.dd')}
-            </span>
-          )}
-          {selectedText && (
-            <span className="selected-text-chip">
-              선택됨: {selectedText.length > 30 ? `${selectedText.slice(0, 30)}...` : selectedText}
             </span>
           )}
           {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
@@ -1246,10 +1673,7 @@ const MemoSplitWorkspace = ({
                 if (target) {
                   openMemoInPane(pane.id, target);
                 } else if (ambientResult.sourceKind === 'inbox') {
-                  patchEditorById(pane.id, editor.id, {
-                    sourceResult: ambientResult,
-                    view: 'source',
-                  });
+                  openSourceInPane(pane, ambientResult);
                 }
               }}
               type="button"
@@ -1261,15 +1685,19 @@ const MemoSplitWorkspace = ({
           {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientError && (
             <span className="ambient-inline-error">
               {ambientError}
-              <button onClick={onRetryAmbient} type="button">다시 시도</button>
+              {isNetworkSearchRetryableMessage(ambientError) && (
+                <button onClick={onRetryAmbient} type="button">다시 시도</button>
+              )}
             </span>
           )}
         </div>
         {openDatePickerEditorId === editor.id && (
-          <DateSchedulePopover
-            onApplyDate={(date, allDay) => applyEditorDate(editor, date, allDay)}
-            onClose={() => setOpenDatePickerEditorId(null)}
-          />
+          <div className="date-schedule-floating split-date-schedule-floating">
+            <DateSchedulePopover
+              onApplyDate={(date, allDay) => applyEditorDate(editor, date, allDay)}
+              onClose={() => setOpenDatePickerEditorId(null)}
+            />
+          </div>
         )}
         <SimpleEditor
           hideToolbar
@@ -1318,13 +1746,17 @@ const MemoSplitWorkspace = ({
   return (
     <div className="split-workspace-shell">
       <div className="split-workspace-commandbar">
-        {onToggleSession && isSessionCollapsed && (
+        {onToggleSession && (
           <TooltipIconButton
             className="split-command-button session-toggle-button"
             onClick={onToggleSession}
-            tooltip="사이드바 열기"
+            tooltip={isSessionCollapsed ? '사이드바 열기' : '사이드바 접기'}
           >
-            <PanelLeft size={18} />
+            {isSessionCollapsed ? (
+              <PanelLeft size={18} />
+            ) : (
+              <PanelLeftClose size={18} />
+            )}
           </TooltipIconButton>
         )}
         {activeToolbarEditor ? (
@@ -1339,8 +1771,10 @@ const MemoSplitWorkspace = ({
         ) : (
           <div className="simple-editor-toolbar-host is-disabled" />
         )}
+        <div className="split-workspace-drag-spacer" />
         <div className="split-workspace-actions" aria-label="레거시 상단 기능">
-          <ThemeToggle className="split-command-button" />
+          {/* 초기 릴리스: 다크 모드 토글 제거(설정에서만 노출). 복원 시
+              ThemeToggle을 다시 import해 이 자리에 되돌리면 된다. */}
           <TooltipIconButton
             className="split-command-button"
             disabled={!canUseMemoActions || !focusedPane || !focusedEditor}
@@ -1353,17 +1787,27 @@ const MemoSplitWorkspace = ({
           >
             <Network size={16} />
           </TooltipIconButton>
+          {/* The pane header already has a split-add button; this slot used to
+              duplicate it. It now pins/unpins the focused memo instead. */}
           <TooltipIconButton
             className="split-command-button"
-            disabled={!canAddPane}
-            onClick={onAddPane}
+            disabled={!focusedEditor?.memoId}
+            onClick={() => {
+              if (focusedEditor?.memoId) {
+                onTogglePinMemo?.(focusedEditor.memoId);
+              }
+            }}
             tooltip={
-              canAddPane
-                ? 'split 패널 추가'
-                : 'split 패널은 최대 2개까지 열 수 있습니다'
+              focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
+                ? '메모 고정 해제'
+                : '메모 고정'
             }
           >
-            <Columns2 size={18} />
+            {focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId) ? (
+              <PinSolid size={17} />
+            ) : (
+              <Pin size={17} />
+            )}
           </TooltipIconButton>
         </div>
       </div>
@@ -1428,7 +1872,10 @@ const MemoSplitWorkspace = ({
                   </TooltipIconButton>
                 </div>
               </div>
-              <div className="split-pane-actions">
+              <div
+                className="split-pane-actions"
+                ref={isMenuOpen ? setMenuActionsEl : undefined}
+              >
                 <TooltipIconButton
                   onClick={onAddPane}
                   className="split-action-btn"
@@ -1468,7 +1915,7 @@ const MemoSplitWorkspace = ({
                 </TooltipIconButton>
               </div>
               {isMenuOpen && (
-                <div className="split-pane-menu-dropdown">
+                <div className="split-pane-menu-dropdown" ref={setMenuDropdownEl}>
                   <div className="split-menu-title-row">스택 탭</div>
                   <button
                     className="split-menu-item split-menu-item-muted"

@@ -7,20 +7,14 @@ import { ChevronDownIcon } from "@/components/tiptap-icons/chevron-down-icon"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
-import { HeadingButton } from "@/components/tiptap-ui/heading-button"
-import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu"
-import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
+import { HeadingButton } from "@/components/tiptap-ui/heading-button/heading-button"
+import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu/use-heading-dropdown-menu"
+import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu/use-heading-dropdown-menu"
 
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuGroup,
-} from "@/components/tiptap-ui-primitive/dropdown-menu"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup } from "@/components/tiptap-ui-primitive/dropdown-menu/dropdown-menu"
 
 export interface HeadingDropdownMenuProps
   extends Omit<ButtonProps, "type">, UseHeadingDropdownMenuConfig {

@@ -2,8 +2,8 @@
 
 import { forwardRef, useCallback, useState, useRef } from "react"
 
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
 import { FilePathIcon } from "@/components/tiptap-icons/file-path-icon"
 import { CheckIcon } from "@/components/tiptap-icons/check-icon"
 import { copyFilePathToClipboard } from "@/lib/copy-file-path"

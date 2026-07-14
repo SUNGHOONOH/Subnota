@@ -79,7 +79,6 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isTyping, setTyping] = useState(false);
   const [oauthPending, setOauthPending] = useState(false);
 
   const trimmedEmail = email.trim();
@@ -250,7 +249,7 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
   if (view === 'reset') {
     return (
       <main className="desktop-auth-container two-col">
-        <AuthCharacterAside isTyping password={password} showPassword={showPassword} />
+        <AuthCharacterAside />
         <section className="desktop-auth-panel">
           <motion.div
             className="desktop-auth-card"
@@ -283,7 +282,7 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
   if (view === 'signupOtp') {
     return (
       <main className="desktop-auth-container two-col">
-        <AuthCharacterAside isTyping={false} password={password} showPassword={showPassword} />
+        <AuthCharacterAside />
         <section className="desktop-auth-panel">
           <motion.div
             className="desktop-auth-card"
@@ -317,7 +316,7 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
 
   return (
     <main className="desktop-auth-container two-col">
-      <AuthCharacterAside isTyping={isTyping} password={password} showPassword={showPassword} />
+      <AuthCharacterAside />
 
       <section className="desktop-auth-panel">
         <motion.div
@@ -347,12 +346,15 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
               Google 계정으로 로그인
             </button>
 
-            <button type="button" className="oauth-custom-btn kakao" onClick={() => startOAuth('kakao')} disabled={isSubmitting || oauthPending}>
-              <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                <path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.707 4.8 4.27 6.054-.277.946-.997 3.425-1.144 3.945-.184.646.216.638.455.48 1.883-1.248 3.018-2.008 4.225-2.81 1.077.29 2.222.446 3.414.446 4.97 0 9-3.185 9-7.115C21 6.185 16.97 3 12 3z" />
-              </svg>
-              카카오로 로그인
-            </button>
+            {/*
+              ponytail: Kakao OAuth still works; restore this button when Kakao login is needed again.
+              <button type="button" className="oauth-custom-btn kakao" onClick={() => startOAuth('kakao')} disabled={isSubmitting || oauthPending}>
+                <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                  <path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.707 4.8 4.27 6.054-.277.946-.997 3.425-1.144 3.945-.184.646.216.638.455.48 1.883-1.248 3.018-2.008 4.225-2.81 1.077.29 2.222.446 3.414.446 4.97 0 9-3.185 9-7.115C21 6.185 16.97 3 12 3z" />
+                </svg>
+                카카오로 로그인
+              </button>
+            */}
 
             {oauthPending && (
               <div className="oauth-pending">
@@ -375,8 +377,6 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
                 id="email-input"
                 autoComplete="email"
                 onChange={event => setEmail(event.target.value)}
-                onFocus={() => setTyping(true)}
-                onBlur={() => setTyping(false)}
                 placeholder="name@example.com"
                 type="email"
                 value={email}
@@ -403,8 +403,6 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
                   autoComplete={isSignUp ? 'new-password' : 'current-password'}
                   minLength={isSignUp ? 8 : 6}
                   onChange={event => setPassword(event.target.value)}
-                  onFocus={() => setTyping(true)}
-                  onBlur={() => setTyping(false)}
                   placeholder={isSignUp ? '8자 이상 입력' : '비밀번호 입력'}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
@@ -475,21 +473,13 @@ const AuthScreen = ({ initialError = null }: AuthScreenProps) => {
   );
 };
 
-const AuthCharacterAside = ({
-  isTyping,
-  password,
-  showPassword,
-}: {
-  isTyping: boolean;
-  password: string;
-  showPassword: boolean;
-}) => (
+const AuthCharacterAside = () => (
   <aside className="auth-character-panel">
     <div className="auth-character-brand">
       <span className="auth-character-logo">Subnota</span>
     </div>
     <div className="auth-character-stage">
-      <AuthCharacters isTyping={isTyping} password={password} showPassword={showPassword} />
+      <AuthCharacters />
     </div>
     <p className="auth-character-tagline">생각의 결을 잇는 메모</p>
   </aside>

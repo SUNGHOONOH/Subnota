@@ -17,6 +17,8 @@ export interface InboxSession {
   domain: string | null;
   duration: string | null;
   id: string;
+  keywords: string[];
+  liked: boolean;
   originalUrl: string | null;
   publishedAt: string | null;
   selectedText: string | null;
@@ -40,6 +42,8 @@ interface InboxSessionRow {
   description: string | null;
   domain: string | null;
   id: string;
+  keywords?: string[] | null;
+  liked?: boolean | null;
   original_url: string | null;
   selected_text: string | null;
   source_type: InboxSourceType;
@@ -156,6 +160,17 @@ export const createInboxSession = async ({
   return mapInboxSession(payload.item);
 };
 
+// Like/favorite toggle goes through the backend: inbox_sessions has no client
+// RLS policy (client grants were revoked in the 2026-06-23 security migration),
+// so a direct Supabase update silently fails. The backend scopes the row by the
+// user id derived from the bearer token.
+export const setInboxLiked = async (id: string, liked: boolean) => {
+  await requestBackend(`/inbox/sessions/${encodeURIComponent(id)}/liked`, {
+    body: JSON.stringify({ liked }),
+    method: 'PATCH',
+  });
+};
+
 const mapInboxSession = (row: InboxSessionRow): InboxSession => ({
   canonicalUrl: row.canonical_url,
   channelTitle: row.metadata?.channel_title ?? row.metadata?.author_name ?? null,
@@ -165,6 +180,8 @@ const mapInboxSession = (row: InboxSessionRow): InboxSession => ({
   domain: row.domain,
   duration: row.metadata?.duration ?? null,
   id: row.id,
+  keywords: row.keywords ?? [],
+  liked: row.liked ?? false,
   originalUrl: row.original_url,
   publishedAt: row.metadata?.published_at ?? null,
   selectedText: row.selected_text,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { desktopColorTokens } from '../../lib/colorTokens';
 
 interface PasswordConfirmInputProps {
   passwordToMatch: string;
@@ -9,10 +10,10 @@ interface PasswordConfirmInputProps {
   placeholder?: string;
 }
 
-const GREEN = 'rgba(47, 125, 87, 0.22)';
-const RED = 'rgba(204, 92, 76, 0.22)';
-const CORAL = '#CC785C';
-const HAIRLINE = '#E6DFD8';
+const GREEN = desktopColorTokens.success.feedback;
+const RED = desktopColorTokens.danger.feedback;
+const CORAL = desktopColorTokens.brand.primary;
+const HAIRLINE = desktopColorTokens.surface.hairline;
 
 // Confirm-password field, single box. The native input text is hidden and we
 // render our own row of characters over it: each typed character is wrapped in

@@ -30,58 +30,58 @@
   --legacy-weight-bold: 600;
   --legacy-weight-heavy: 650;
   --legacy-weight-black: 700;
-  --legacy-bg-design-canvas: #faf9f5;
-  --legacy-bg-design-soft: #f5f0e8;
-  --legacy-bg-design-card: #efe9de;
-  --legacy-bg-app: #f5f4f0;
-  --legacy-bg-canvas: #faf6f0;
-  --legacy-bg-surface: #fcfaf7;
-  --legacy-bg-toolbar: #fafaf8;
-  --legacy-bg-paper: #ffffff;
-  --legacy-bg-muted: #f5efe5;
-  --legacy-bg-active: #ede6d8;
-  --legacy-bg-active-soft: #ebe5d9;
-  --legacy-bg-source: #fffdf8;
-  --legacy-bg-code: #1f1e1b;
-  --legacy-bg-hover: rgba(252, 250, 247, 0.72);
-  --legacy-bg-pressed: #e5e0d6;
-  --legacy-bg-overlay: rgba(44, 37, 32, 0.24);
-  --legacy-border: #e5ddd0;
-  --legacy-border-soft: #e6e1da;
-  --legacy-border-strong: #e1d8ca;
-  --legacy-border-muted: #dcd7cf;
-  --legacy-border-warm: #d8cebc;
-  --legacy-border-card: #dacdbb;
-  --legacy-border-design: #e8e0d2;
-  --legacy-border-design-soft: #ebe6df;
-  --legacy-border-subtle: rgba(20, 20, 19, 0.05);
-  --legacy-border-wash: rgba(92, 77, 60, 0.08);
-  --legacy-ink: #2c2520;
-  --legacy-ink-strong: #1d1d1f;
-  --legacy-ink-design: #141413;
-  --legacy-ink-soft: #3b332b;
-  --legacy-muted: #9c8e7c;
-  --legacy-muted-2: #a09180;
-  --legacy-muted-design: #6c6a64;
-  --legacy-muted-soft: #8e8b82;
-  --legacy-muted-tab: #766c61;
-  --legacy-muted-control: #786b5f;
-  --legacy-muted-icon: #8a8175;
-  --legacy-accent: #8b7355;
-  --legacy-accent-dark: #5c4d3c;
-  --legacy-accent-soft: #f0ebdf;
-  --legacy-accent-border: #d8cebc;
-  --legacy-coral-50: #fdf4f0;
-  --legacy-coral-100: #f8e4da;
-  --legacy-coral-200: #f0cbb8;
-  --legacy-coral-300: #e4a98e;
-  --legacy-coral-400: #d9916f;
-  --legacy-coral-500: #cc785c;
-  --legacy-coral-600: #a9583e;
-  --legacy-coral-700: #8f4a33;
-  --legacy-coral-800: #6e3826;
-  --legacy-coral-900: #4d2819;
-  --legacy-coral-950: #331a10;
+  --legacy-bg-design-canvas: var(--app-color-bg);
+  --legacy-bg-design-soft: var(--app-color-bg-design-soft);
+  --legacy-bg-design-card: var(--app-color-bg-design-card);
+  --legacy-bg-app: var(--app-color-bg);
+  --legacy-bg-canvas: var(--app-color-bg-canvas);
+  --legacy-bg-surface: var(--app-color-bg-surface);
+  --legacy-bg-toolbar: var(--app-color-bg-toolbar);
+  --legacy-bg-paper: var(--app-color-bg-paper);
+  --legacy-bg-muted: var(--app-color-bg-muted);
+  --legacy-bg-active: var(--app-color-bg-active);
+  --legacy-bg-active-soft: var(--app-color-bg-active-soft);
+  --legacy-bg-source: var(--app-color-bg-source);
+  --legacy-bg-code: var(--app-color-bg-code);
+  --legacy-bg-hover: var(--app-color-bg-hover);
+  --legacy-bg-pressed: var(--app-color-bg-pressed);
+  --legacy-bg-overlay: var(--app-color-bg-overlay);
+  --legacy-border: var(--app-color-border);
+  --legacy-border-soft: var(--app-color-border-soft);
+  --legacy-border-strong: var(--app-color-border-strong);
+  --legacy-border-muted: var(--app-color-border-muted);
+  --legacy-border-warm: var(--app-color-border-warm);
+  --legacy-border-card: var(--app-color-border-card);
+  --legacy-border-design: var(--app-color-border-design);
+  --legacy-border-design-soft: var(--app-color-border-design-soft);
+  --legacy-border-subtle: var(--app-color-border-subtle);
+  --legacy-border-wash: var(--app-color-border-wash);
+  --legacy-ink: var(--app-color-text);
+  --legacy-ink-strong: var(--app-color-text-strong);
+  --legacy-ink-design: var(--app-color-text-design);
+  --legacy-ink-soft: var(--app-color-text-soft);
+  --legacy-muted: var(--app-color-muted);
+  --legacy-muted-2: var(--app-color-muted-2);
+  --legacy-muted-design: var(--app-color-muted-design);
+  --legacy-muted-soft: var(--app-color-muted-soft);
+  --legacy-muted-tab: var(--app-color-muted-tab);
+  --legacy-muted-control: var(--app-color-muted-control);
+  --legacy-muted-icon: var(--app-color-muted-icon);
+  --legacy-accent: var(--app-color-accent);
+  --legacy-accent-dark: var(--app-color-accent-dark);
+  --legacy-accent-soft: var(--app-color-accent-soft);
+  --legacy-accent-border: var(--app-color-accent-border);
+  --legacy-coral-50: var(--app-color-brand-50);
+  --legacy-coral-100: var(--app-color-brand-100);
+  --legacy-coral-200: var(--app-color-brand-200);
+  --legacy-coral-300: var(--app-color-brand-300);
+  --legacy-coral-400: var(--app-color-brand-400);
+  --legacy-coral-500: var(--app-color-brand-500);
+  --legacy-coral-600: var(--app-color-brand-600);
+  --legacy-coral-700: var(--app-color-brand-700);
+  --legacy-coral-800: var(--app-color-brand-800);
+  --legacy-coral-900: var(--app-color-brand-900);
+  --legacy-coral-950: var(--app-color-brand-950);
   --legacy-olive: #66705a;
   --legacy-olive-dark: #3d5a3d;
   --legacy-olive-shadow: #1f2d1f;
@@ -96,9 +96,9 @@
   --legacy-tone-steel: #5d6a73;
   --legacy-tone-sand: #eba47e;
   --legacy-tone-gold: #e8d754;
-  --legacy-danger: #b5453a;
-  --legacy-danger-soft: #fdf4f0;
-  --legacy-danger-border: #f0cbb8;
+  --legacy-danger: var(--app-color-danger);
+  --legacy-danger-soft: var(--app-color-danger-soft);
+  --legacy-danger-border: var(--app-color-danger-border);
   --legacy-success: #236b45;
   --legacy-success-soft: #eaf6ed;
   --legacy-success-border: #bbddc5;
@@ -125,6 +125,8 @@
   --legacy-size-toolbar-button: 28px;
   --legacy-size-pane-button: 24px;
   --legacy-size-tab-height: 25px;
+  --subnota-chrome-bg: var(--app-color-chrome-bg);
+  --subnota-chrome-border: var(--app-color-chrome-border);
   --legacy-space-1: 2px;
   --legacy-space-2: 4px;
   --legacy-space-3: 6px;
@@ -159,19 +161,19 @@
   --tt-sidebar-bg-color: var(--legacy-bg-muted);
   --tt-scrollbar-color: rgba(44, 37, 32, 0.18);
   --tt-cursor-color: var(--legacy-coral-500);
-  --tt-selection-color: rgba(204, 120, 92, 0.2);
+  --tt-selection-color: var(--app-color-selection);
   --tt-card-bg-color: var(--legacy-bg-surface);
   --tt-card-border-color: rgba(44, 37, 32, 0.08);
-  --tt-brand-color-50: #f6f0e8;
-  --tt-brand-color-100: #ede6d8;
-  --tt-brand-color-200: #d8cebc;
-  --tt-brand-color-300: #c3b49b;
-  --tt-brand-color-400: #a89576;
-  --tt-brand-color-500: var(--legacy-accent);
-  --tt-brand-color-600: var(--legacy-accent-dark);
-  --tt-brand-color-700: #4f4234;
-  --tt-brand-color-800: #3a3028;
-  --tt-brand-color-900: var(--legacy-ink);
+  --tt-brand-color-50: var(--legacy-coral-50);
+  --tt-brand-color-100: var(--legacy-coral-100);
+  --tt-brand-color-200: var(--legacy-coral-200);
+  --tt-brand-color-300: var(--legacy-coral-300);
+  --tt-brand-color-400: var(--legacy-coral-400);
+  --tt-brand-color-500: var(--legacy-coral-500);
+  --tt-brand-color-600: var(--legacy-coral-600);
+  --tt-brand-color-700: var(--legacy-coral-700);
+  --tt-brand-color-800: var(--legacy-coral-800);
+  --tt-brand-color-900: var(--legacy-coral-900);
   color: var(--legacy-ink);
   background: var(--legacy-bg-app);
   font-family: var(--legacy-font-ui);
@@ -189,54 +191,59 @@
 html.dark {
   color-scheme: dark;
 
-  --legacy-bg-design-canvas: #1a1917;
-  --legacy-bg-design-soft: #201f1c;
-  --legacy-bg-design-card: #252320;
-  --legacy-bg-app: #161513;
-  --legacy-bg-canvas: #1b1a17;
-  --legacy-bg-surface: #1f1e1b;
-  --legacy-bg-toolbar: #1b1a18;
-  --legacy-bg-paper: #1f1e1b;
-  --legacy-bg-muted: #232220;
-  --legacy-bg-active: #322f29;
-  --legacy-bg-active-soft: #2a2824;
-  --legacy-bg-source: #1d1c19;
-  --legacy-bg-code: #14130f;
-  --legacy-bg-hover: rgba(250, 249, 245, 0.06);
-  --legacy-bg-pressed: #35322c;
-  --legacy-bg-overlay: rgba(0, 0, 0, 0.5);
+  --legacy-bg-design-canvas: var(--app-color-bg);
+  --legacy-bg-design-soft: var(--app-color-bg-design-soft);
+  --legacy-bg-design-card: var(--app-color-bg-design-card);
+  --legacy-bg-app: var(--app-color-bg);
+  --legacy-bg-canvas: var(--app-color-bg-canvas);
+  --legacy-bg-surface: var(--app-color-bg-surface);
+  --legacy-bg-toolbar: var(--app-color-bg-toolbar);
+  --legacy-bg-paper: var(--app-color-bg-paper);
+  --legacy-bg-muted: var(--app-color-bg-muted);
+  --legacy-bg-active: var(--app-color-bg-active);
+  --legacy-bg-active-soft: var(--app-color-bg-active-soft);
+  --legacy-bg-source: var(--app-color-bg-source);
+  --legacy-bg-code: var(--app-color-bg-code);
+  --legacy-bg-hover: var(--app-color-bg-hover);
+  --legacy-bg-pressed: var(--app-color-bg-pressed);
+  --legacy-bg-overlay: var(--app-color-bg-overlay);
 
-  --legacy-border: rgba(250, 249, 245, 0.12);
-  --legacy-border-soft: rgba(250, 249, 245, 0.08);
-  --legacy-border-strong: rgba(250, 249, 245, 0.16);
-  --legacy-border-muted: rgba(250, 249, 245, 0.1);
-  --legacy-border-warm: rgba(250, 249, 245, 0.14);
-  --legacy-border-card: rgba(250, 249, 245, 0.1);
-  --legacy-border-design: rgba(250, 249, 245, 0.1);
-  --legacy-border-design-soft: rgba(250, 249, 245, 0.07);
-  --legacy-border-subtle: rgba(250, 249, 245, 0.06);
-  --legacy-border-wash: rgba(250, 249, 245, 0.06);
+  --legacy-border: var(--app-color-border);
+  --legacy-border-soft: var(--app-color-border-soft);
+  --legacy-border-strong: var(--app-color-border-strong);
+  --legacy-border-muted: var(--app-color-border-muted);
+  --legacy-border-warm: var(--app-color-border-warm);
+  --legacy-border-card: var(--app-color-border-card);
+  --legacy-border-design: var(--app-color-border-design);
+  --legacy-border-design-soft: var(--app-color-border-design-soft);
+  --legacy-border-subtle: var(--app-color-border-subtle);
+  --legacy-border-wash: var(--app-color-border-wash);
 
-  --legacy-ink: #ece7dd;
-  --legacy-ink-strong: #faf9f5;
-  --legacy-ink-design: #faf9f5;
-  --legacy-ink-soft: #c9c3b8;
+  /* Merged toolbar + session rail — without these the chrome stays light while
+     the tiptap icons flip to dark-mode (light) colors → invisible icons. */
+  --subnota-chrome-bg: var(--app-color-chrome-bg);
+  --subnota-chrome-border: var(--app-color-chrome-border);
 
-  --legacy-muted: #9a948a;
-  --legacy-muted-2: #9a948a;
-  --legacy-muted-design: #908d85;
-  --legacy-muted-soft: #8e8b82;
-  --legacy-muted-tab: #a09d96;
-  --legacy-muted-control: #a09d96;
-  --legacy-muted-icon: #908d85;
+  --legacy-ink: var(--app-color-text);
+  --legacy-ink-strong: var(--app-color-text-strong);
+  --legacy-ink-design: var(--app-color-text-design);
+  --legacy-ink-soft: var(--app-color-text-soft);
 
-  --legacy-accent: #b89b78;
-  --legacy-accent-dark: #c4ab88;
-  --legacy-accent-soft: #2c2820;
-  --legacy-accent-border: rgba(184, 155, 120, 0.4);
+  --legacy-muted: var(--app-color-muted);
+  --legacy-muted-2: var(--app-color-muted-2);
+  --legacy-muted-design: var(--app-color-muted-design);
+  --legacy-muted-soft: var(--app-color-muted-soft);
+  --legacy-muted-tab: var(--app-color-muted-tab);
+  --legacy-muted-control: var(--app-color-muted-control);
+  --legacy-muted-icon: var(--app-color-muted-icon);
 
-  --legacy-coral-50: #2a1a14;
-  --legacy-coral-100: #3a241b;
+  --legacy-accent: var(--app-color-accent);
+  --legacy-accent-dark: var(--app-color-accent-dark);
+  --legacy-accent-soft: var(--app-color-accent-soft);
+  --legacy-accent-border: var(--app-color-accent-border);
+
+  --legacy-coral-50: var(--app-color-brand-50);
+  --legacy-coral-100: var(--app-color-brand-100);
 
   --legacy-olive-soft: #1a241a;
   --legacy-olive-border: rgba(102, 112, 90, 0.42);
@@ -244,9 +251,9 @@ html.dark {
   --legacy-olive-paper: #1b1f1a;
   --legacy-olive-muted: #2a332a;
 
-  --legacy-danger: #e07a6f;
-  --legacy-danger-soft: #2e1c18;
-  --legacy-danger-border: rgba(181, 69, 58, 0.42);
+  --legacy-danger: var(--app-color-danger);
+  --legacy-danger-soft: var(--app-color-danger-soft);
+  --legacy-danger-border: var(--app-color-danger-border);
   --legacy-success: #4caf7d;
   --legacy-success-soft: #16261c;
   --legacy-success-border: rgba(35, 107, 69, 0.42);
@@ -274,6 +281,21 @@ html.dark {
    which would over-brighten on the dark surface. Soften them in dark mode. */
 html.dark .memo-row:hover {
   background: rgba(250, 249, 245, 0.05);
+}
+
+/* Hardcoded white surfaces below pair with token ink (light in dark mode), so
+   without these overrides they render light-on-light and become unreadable. */
+html.dark .forest-modal {
+  background: var(--legacy-bg-surface);
+}
+
+html.dark .network-sentence-card {
+  background: rgba(31, 30, 27, 0.9);
+  border-color: var(--legacy-border);
+}
+
+html.dark .split-pane-menu-dropdown {
+  background: rgba(37, 35, 32, 0.95);
 }
 
 * {
@@ -316,19 +338,32 @@ code {
   display: grid;
   grid-template-columns: var(--legacy-size-nav-rail) minmax(0, 1fr);
   height: 100vh;
+  padding-top: var(--legacy-size-commandbar);
 }
 
 /* Obsidian-style thin icon-only ribbon. */
-/* Temporary: strip accent colors from the left rail + sidebar until the new
-   palette is decided. Reverse by removing this single scoped override block. */
 .nav-rail,
 .session-rail {
-  --legacy-accent: #8c8c88;
-  --legacy-accent-dark: #5f5f5b;
-  --legacy-bg-active: #e7e7e4;
-  --legacy-bg-active-soft: #ededeb;
-  --legacy-bg-muted: #ececea;
-  --legacy-olive: #9a9a96;
+  --legacy-accent: var(--app-color-muted-control);
+  --legacy-accent-dark: var(--app-color-text-soft);
+  --legacy-bg-active: var(--app-color-brand-100);
+  --legacy-bg-active-soft: var(--app-color-brand-50);
+  --legacy-bg-muted: var(--app-color-bg-muted);
+  --legacy-olive: var(--app-color-muted);
+}
+
+/* The neutral values above are light-mode literals scoped on the element, so
+   they beat the html.dark token flip — in dark mode the rail/sidebar kept
+   white active/hover boxes with light ink on them (invisible icons, washed-out
+   selected memo rows). Re-scope dark equivalents at higher specificity. */
+html.dark .nav-rail,
+html.dark .session-rail {
+  --legacy-accent: #a6a39b;
+  --legacy-accent-dark: #b5b2aa;
+  --legacy-bg-active: #35322c;
+  --legacy-bg-active-soft: #2a2824;
+  --legacy-bg-muted: #1b1a18;
+  --legacy-olive: #8f8f8a;
 }
 
 .nav-rail {
@@ -364,7 +399,7 @@ code {
   }
 
   &:hover:not(:disabled):not([aria-disabled="true"]) {
-    background: var(--legacy-bg-active);
+    background: var(--app-color-bg-pressed);
     color: var(--legacy-ink);
   }
 
@@ -376,8 +411,8 @@ code {
 }
 
 .nav-item.active {
-  background: var(--legacy-bg-active);
-  color: var(--legacy-ink);
+  background: transparent;
+  color: var(--legacy-accent-dark);
 }
 
 .nav-spacer {
@@ -543,8 +578,8 @@ code {
 }
 
 .session-rail-inner {
-  background: #f0f0ef;
-  border-right: 1px solid var(--legacy-border);
+  background: var(--subnota-chrome-bg);
+  border-right: 1px solid var(--subnota-chrome-border);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -860,27 +895,26 @@ code {
 }
 
 .memo-row:hover {
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(92, 77, 60, 0.07);
+  background: var(--app-color-brand-50);
+  box-shadow: 0 0 0 1px var(--app-color-border-wash);
 }
 
-/* Indicates which split pane (1/2/3) a memo is currently open in. The chip
-   itself is a Mantine <Badge>; we only own its placement inside the row. */
+/* Marks a memo that is currently open in a split pane (active indicator). */
 .memo-pane-badge {
   position: absolute;
   right: 9px;
-  top: 8px;
-  font-variant-numeric: tabular-nums;
+  top: 9px;
+  color: var(--legacy-muted);
   pointer-events: none;
 }
 
 .memo-row.active {
-  background: var(--legacy-bg-active);
+  background: var(--app-color-brand-100);
   box-shadow: none;
 }
 
 .memo-row.active::before {
-  background: var(--legacy-accent);
+  background: var(--app-color-action-primary);
 }
 
 .memo-row:active {
@@ -906,6 +940,10 @@ code {
   right: 10px;
 }
 
+.memo-row .memo-sync-badge.failed {
+  color: var(--app-color-danger);
+}
+
 .memo-row strong {
   font-size: var(--legacy-font-size-md);
   font-weight: var(--legacy-weight-heavy);
@@ -924,6 +962,7 @@ code {
   min-height: 0;
   overflow: hidden;
   padding: 16px 22px 22px;
+  position: relative;
 }
 
 .editor-toolbar {
@@ -990,6 +1029,10 @@ code {
     padding: 3px 8px;
   }
 
+  .schedule-register-chip {
+    gap: 5px;
+  }
+
   .date-detect-chip,
   .selected-text-chip {
     font-size: 11px;
@@ -1002,46 +1045,101 @@ code {
   }
 }
 
+// Minimal date/time picker surface. Uses the shared action color.
 .date-schedule-popover {
-  background: var(--legacy-olive);
-  border-radius: var(--legacy-radius-card);
-  box-shadow: 0 12px 32px rgba(44, 37, 32, 0.18);
-  color: var(--legacy-bg-paper);
+  --ds-accent: var(--app-color-action-primary);
+  --ds-accent-hover: var(--app-color-action-primary-hover);
+  --ds-accent-soft: var(--app-color-brand-100);
+  --ds-accent-ring: var(--app-color-focus-ring);
+  background: var(--legacy-bg-paper);
+  border: 1px solid var(--legacy-border-soft);
+  border-radius: 20px;
+  box-shadow: 0 18px 48px rgba(20, 20, 19, 0.18);
+  color: var(--legacy-ink);
   margin: 10px auto 0;
-  padding: 16px;
+  padding: 18px 18px 16px;
   width: min(340px, calc(100% - 28px));
+}
+
+.date-schedule-floating {
+  bottom: 70px;
+  left: 50%;
+  max-width: calc(100% - 44px);
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(340px, calc(100% - 44px));
+  z-index: 50;
+}
+
+.date-schedule-floating .date-schedule-popover {
+  margin: 0;
+  width: 100%;
+}
+
+.split-date-schedule-floating {
+  bottom: 38px;
+  max-width: calc(100% - 20px);
+  width: min(340px, calc(100% - 20px));
 }
 
 .date-schedule-header {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-.date-schedule-header div {
-  display: grid;
-  justify-items: center;
+.date-schedule-title {
+  align-items: center;
+  color: var(--legacy-ink);
+  display: flex;
+  gap: 4px;
 }
 
-.date-schedule-header strong {
-  font-size: 32px;
-  line-height: var(--legacy-line-tight);
+.date-schedule-title strong {
+  font-size: 17px;
+  font-weight: var(--legacy-weight-black);
 }
 
-.date-schedule-header span,
-.date-schedule-weekdays span,
-.date-schedule-time-row span {
-  color: rgba(255, 255, 255, 0.78);
-  font-size: var(--legacy-font-size-sm);
-  font-weight: var(--legacy-weight-bold);
+.date-schedule-year-select {
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  border-radius: 8px;
+  color: var(--ds-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--legacy-weight-heavy);
+  height: 28px;
+  outline: none;
+  padding: 0 8px;
 }
 
-.date-schedule-header .icon-button,
-.date-schedule-time-row .icon-button {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+.date-schedule-year-select:focus {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 3px var(--ds-accent-ring);
+}
+
+.date-schedule-nav {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.date-schedule-nav .icon-button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ds-accent);
+  height: 30px;
+  width: 30px;
+}
+
+.date-schedule-nav .icon-button:hover {
+  background: var(--ds-accent-soft);
+}
+
+.date-schedule-nav .date-schedule-close {
+  color: color-mix(in srgb, var(--legacy-ink) 45%, transparent);
 }
 
 .date-schedule-weekdays,
@@ -1051,53 +1149,137 @@ code {
 }
 
 .date-schedule-weekdays {
-  margin-bottom: 7px;
+  margin-bottom: 6px;
 }
 
 .date-schedule-weekdays span {
+  color: color-mix(in srgb, var(--legacy-ink) 45%, transparent);
+  font-size: 11px;
+  font-weight: var(--legacy-weight-bold);
+  letter-spacing: 0.04em;
   text-align: center;
 }
 
+.date-schedule-grid {
+  gap: 2px 0;
+}
+
 .date-schedule-day {
+  align-items: center;
+  aspect-ratio: 1;
   background: transparent;
   border: 0;
-  border-radius: var(--legacy-radius-row);
-  color: var(--legacy-bg-paper);
-  font-size: 14px;
-  font-weight: var(--legacy-weight-heavy);
-  height: 34px;
+  border-radius: 999px;
+  color: var(--legacy-ink);
+  display: flex;
+  font-size: 15px;
+  font-weight: var(--legacy-weight-bold);
+  justify-content: center;
+  margin: 0 auto;
+  width: 36px;
 }
 
-.date-schedule-day:hover,
+.date-schedule-day.empty {
+  pointer-events: none;
+}
+
 .date-schedule-day.today {
-  background: rgba(255, 255, 255, 0.16);
+  color: var(--ds-accent);
+  font-weight: var(--legacy-weight-black);
 }
 
-.date-schedule-day.muted {
-  opacity: 0.34;
+button.date-schedule-day {
+  cursor: pointer;
+}
+
+button.date-schedule-day:hover,
+.date-schedule-day.selected {
+  background: var(--ds-accent);
+  color: #ffffff;
+}
+
+button.date-schedule-day:hover {
+  background: var(--ds-accent-hover);
 }
 
 .date-schedule-time-row {
   align-items: center;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: auto 48px auto 48px auto;
-  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.date-schedule-time-row input {
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: var(--legacy-radius-filter);
-  color: var(--legacy-bg-paper);
+.date-schedule-time-row span {
+  color: var(--legacy-ink);
+  font-size: 15px;
+  font-weight: var(--legacy-weight-black);
+  margin-right: auto;
+}
+
+.date-schedule-time-selects {
+  display: flex;
+  gap: 6px;
+}
+
+.date-schedule-time-select,
+.date-schedule-minute-input {
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  border-radius: 9px;
+  color: var(--legacy-ink);
+  font-size: 15px;
   font-weight: var(--legacy-weight-heavy);
-  height: 36px;
+  height: 32px;
   outline: none;
   text-align: center;
+  width: 56px;
 }
 
-.date-schedule-time-row input::placeholder {
-  color: rgba(255, 255, 255, 0.56);
+.date-schedule-time-select:focus,
+.date-schedule-minute-input:focus {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 3px var(--ds-accent-ring);
+}
+
+.date-schedule-time-select:disabled {
+  color: color-mix(in srgb, var(--legacy-ink) 38%, transparent);
+  opacity: 1;
+}
+
+.date-schedule-meridiem {
+  background: var(--ds-accent-soft);
+  border-radius: 9px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.date-schedule-meridiem button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--legacy-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: var(--legacy-weight-heavy);
+  height: 28px;
+  width: 40px;
+}
+
+.date-schedule-meridiem button.active {
+  background: var(--ds-accent);
+  box-shadow: 0 2px 8px var(--app-color-brand-glow);
+  color: #ffffff;
+}
+
+html.dark .date-schedule-popover {
+  border-color: var(--legacy-border-strong);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+html.dark .date-schedule-meridiem button.active {
+  background: var(--ds-accent);
+  box-shadow: none;
 }
 
 .quick-date-chip,
@@ -1116,6 +1298,17 @@ code {
   background: var(--legacy-date-blue-bg);
   border: 1px solid var(--legacy-date-blue-border);
   color: var(--legacy-date-blue);
+}
+
+.date-picker-chip {
+  background: var(--app-color-brand-100);
+  border-color: var(--app-color-action-primary);
+  color: var(--app-color-action-primary);
+}
+
+.date-picker-chip:hover {
+  background: var(--app-color-action-primary);
+  color: var(--app-color-action-primary-text);
 }
 
 .date-detect-chip {
@@ -1585,43 +1778,44 @@ code {
   }
 
   .secondary-button {
-    background: var(--legacy-bg-paper);
-    border: 1px solid #d8dce2;
-    color: #3c3f46;
+    background: var(--app-color-action-secondary-bg);
+    border: 1px solid var(--app-color-action-secondary-border);
+    color: var(--app-color-action-secondary-text);
   }
 
   .secondary-button:not(:disabled):hover {
-    background: #f1f3f6;
+    background: var(--app-color-action-secondary-hover);
     box-shadow: none;
   }
 
   .primary-button {
-    background: #1d1d1f;
-    border: 1px solid #1d1d1f;
-    color: #ffffff;
+    background: var(--app-color-action-primary);
+    border: 1px solid var(--app-color-action-primary);
+    color: var(--app-color-action-primary-text);
   }
 
   .primary-button:not(:disabled):hover {
-    background: #313135;
+    background: var(--app-color-action-primary-hover);
+    border-color: var(--app-color-action-primary-hover);
     box-shadow: none;
   }
 
   .icon-button {
-    background: var(--legacy-bg-paper);
-    border: 1px solid #e6e8ec;
-    color: #3c3f46;
+    background: var(--app-color-action-secondary-bg);
+    border: 1px solid var(--app-color-action-secondary-border);
+    color: var(--app-color-action-secondary-text);
     height: 32px;
     width: 32px;
   }
 
   .icon-button:not(:disabled):hover {
-    background: #f1f3f6;
+    background: var(--app-color-action-secondary-hover);
     box-shadow: none;
   }
 
   .icon-button.danger {
-    border-color: #f0d2cc;
-    color: #e0533d;
+    border-color: var(--app-color-danger-border);
+    color: var(--app-color-danger);
   }
 }
 
@@ -2005,7 +2199,7 @@ code {
 /* Selected day + completed-event affordances. */
 .cal-month-cell.selected,
 .cal-col-head.selected {
-  box-shadow: inset 0 0 0 2px rgba(102, 112, 90, 0.55);
+  box-shadow: inset 0 0 0 2px var(--app-color-action-primary);
 }
 
 .cal-chip.completed,
@@ -2049,17 +2243,21 @@ code {
 }
 
 .cal-todo-add {
-  width: 24px;
-  height: 24px;
+  align-items: center;
+  background: var(--app-color-action-primary);
   border: none;
   border-radius: 6px;
-  background: #f0f0ef;
+  color: var(--app-color-action-primary-text);
   cursor: pointer;
+  display: inline-flex;
   font-size: 16px;
+  height: 24px;
+  justify-content: center;
   line-height: 1;
+  width: 24px;
 }
 
-.cal-todo-add:hover { background: #e6e6e4; }
+.cal-todo-add:hover { background: var(--app-color-action-primary-hover); }
 
 .cal-todo-empty {
   padding: 8px 2px;
@@ -2084,7 +2282,7 @@ code {
   border-radius: 6px;
 }
 
-.cal-todo-item:hover { background: #f6f6f5; }
+.cal-todo-item:hover { background: var(--app-color-brand-100); }
 .cal-todo-item.completed { opacity: 0.55; }
 .cal-todo-item.completed .cal-todo-text { text-decoration: line-through; }
 
@@ -2095,18 +2293,18 @@ code {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1.5px solid #c7c7c2;
+  border: 1.5px solid var(--app-color-action-secondary-border);
   border-radius: 5px;
   background: transparent;
-  color: #4b5741;
+  color: var(--app-color-action-primary);
   cursor: pointer;
   font-size: 12px;
 }
 
 .cal-todo-item.completed .cal-todo-check {
-  border-color: #66705a;
-  background: #66705a;
-  color: #fff;
+  border-color: var(--app-color-action-primary);
+  background: var(--app-color-action-primary);
+  color: var(--app-color-action-primary-text);
 }
 
 .cal-todo-title {
@@ -2245,26 +2443,33 @@ code {
   line-height: 1;
 }
 
-.forest-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  gap: 12px;
+/* Trees scattered on a field (deterministic positions from each tree's seed)
+   instead of the old rigid card grid. */
+.forest-field {
+  background: linear-gradient(#f6f3ea 0%, #ece6d4 60%, #ded5bc 100%);
+  border-radius: 12px;
+  flex-shrink: 0;
+  height: 340px;
+  overflow: hidden;
+  position: relative;
 }
 
-.forest-tree-card {
+.forest-field-tree {
+  align-items: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid #ececec;
-  border-radius: 10px;
+  gap: 2px;
   image-rendering: pixelated;
+  position: absolute;
+  /* left/top mark the trunk base, so trees "stand" on their spot. */
+  transform: translate(-50%, -100%);
 }
 
-.forest-tree-card.growing { border-style: dashed; }
+html.dark .forest-field {
+  background: linear-gradient(#26251f 0%, #201f1a 60%, #1a1915 100%);
+}
+
 .forest-tree-date { font-size: 11px; font-weight: 600; }
-.forest-tree-meta { color: #8a8a85; font-size: 10px; }
 .forest-modal-note { margin: 0; color: #8a8a85; font-size: 12px; text-align: center; }
 
 .cal-header {
@@ -2346,7 +2551,7 @@ code {
 }
 
 .cal-nav-icon:hover,
-.cal-today:hover { background: #e6e6e4; }
+.cal-today:hover { background: var(--app-color-brand-100); }
 
 /* ── Month view ── */
 .cal-month {
@@ -2538,7 +2743,9 @@ code {
   border-bottom: 1px solid #e0e0e0;
   border-top: 1px solid #ececec;
   display: grid;
+  max-height: 62px;
   min-height: 28px;
+  overflow: hidden;
 }
 
 .cal-time-gutter-head.all {
@@ -2556,18 +2763,34 @@ code {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
   padding: 2px;
 }
 
 .cal-allday-event {
+  align-items: center;
   border: 0;
   border-radius: 5px;
   cursor: pointer;
+  display: flex;
   font-size: 11.5px;
   font-weight: 600;
+  gap: 4px;
+  line-height: 16px;
+  max-height: 20px;
+  min-width: 0;
   overflow: hidden;
   padding: 2px 6px;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-allday-event-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2643,6 +2866,21 @@ code {
   strong { font-size: 12px; font-weight: 600; }
   span { font-size: 11px; opacity: 0.75; }
 }
+
+.cal-event-resize {
+  cursor: ns-resize;
+  height: 7px;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  z-index: 1;
+}
+
+.cal-event-resize.top { top: 0; }
+.cal-event-resize.bottom { bottom: 0; }
+
+.cal-event:hover .cal-event-resize { opacity: 1; }
 
 /* Compact width: keep header on one line; in week view the side panel collapses
    into a drawer. Threshold is intentionally small so the inline sidebar persists
@@ -2737,10 +2975,10 @@ code {
 /* ── Calendar event modal (cool / clean) ── */
 .cal-modal {
   background: var(--legacy-bg-paper);
-  border: 1px solid #e6e8ec;
+  border: 1px solid var(--legacy-border-soft);
   border-radius: 16px;
   box-shadow: 0 24px 64px rgba(20, 22, 28, 0.22);
-  color: #1d1d1f;
+  color: var(--legacy-ink);
   display: flex;
   flex-direction: column;
   gap: 13px;
@@ -2764,9 +3002,9 @@ code {
 .cal-modal-delete {
   align-items: center;
   background: var(--legacy-bg-paper);
-  border: 1px solid #f0d2cc;
+  border: 1px solid var(--app-color-danger-border);
   border-radius: 8px;
-  color: #e0533d;
+  color: var(--app-color-danger);
   cursor: pointer;
   display: inline-flex;
   height: 32px;
@@ -2775,7 +3013,7 @@ code {
 }
 
 .cal-modal-delete:hover {
-  background: #fdf1ee;
+  background: var(--app-color-danger-soft);
 }
 
 .cal-field {
@@ -2791,10 +3029,10 @@ code {
 
   input,
   textarea {
-    background: #f5f6f8;
-    border: 1px solid #e6e8ec;
+    background: var(--legacy-bg-muted);
+    border: 1px solid var(--legacy-border-soft);
     border-radius: 9px;
-    color: #1d1d1f;
+    color: var(--legacy-ink);
     font-family: inherit;
     font-size: 14px;
     outline: none;
@@ -2805,19 +3043,14 @@ code {
   input:focus,
   textarea:focus {
     background: var(--legacy-bg-paper);
-    border-color: #c2c8d2;
+    border-color: var(--app-color-action-primary);
+    box-shadow: 0 0 0 3px var(--app-color-focus-ring);
   }
 
   textarea {
     min-height: 72px;
     resize: vertical;
   }
-}
-
-.cal-field-row {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr 1fr;
 }
 
 .cal-field-hint {
@@ -2844,29 +3077,29 @@ code {
 }
 
 .cal-btn.ghost {
-  background: var(--legacy-bg-paper);
-  border: 1px solid #d8dce2;
-  color: #3c3f46;
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  color: var(--app-color-action-secondary-text);
 }
 
 .cal-btn.ghost:hover {
-  background: #f1f3f6;
+  background: var(--app-color-action-secondary-hover);
 }
 
 .cal-btn.primary {
-  background: #1d1d1f;
-  border: 1px solid #1d1d1f;
-  color: #ffffff;
+  background: var(--app-color-action-primary);
+  border: 1px solid var(--app-color-action-primary);
+  color: var(--app-color-action-primary-text);
 }
 
 .cal-btn.primary:hover {
-  background: #313135;
+  background: var(--app-color-action-primary-hover);
+  border-color: var(--app-color-action-primary-hover);
 }
 
 .week-card,
 .month-card,
-.latest-briefing-card,
-.inbox-card {
+.latest-briefing-card {
   background: var(--legacy-bg-paper);
   border: 1px solid #e6e8ec;
   border-radius: 12px;
@@ -3661,54 +3894,18 @@ code {
 }
 
 .schedule-approve-actions .approve-btn {
-  background: #1d1d1f;
-  color: #fff;
+  background: var(--app-color-action-primary);
+  color: var(--app-color-action-primary-text);
 }
 
 .schedule-approve-actions .edit-btn,
 .schedule-approve-actions .reject-btn {
-  background: #f1f0ee;
-  color: #5b5b58;
+  background: var(--app-color-action-secondary-hover);
+  color: var(--app-color-action-secondary-text);
 }
 
 .schedule-approve-picker {
   margin-top: 12px;
-}
-
-.inbox-card {
-  align-items: center;
-  color: inherit;
-  display: flex;
-  justify-content: space-between;
-  padding: 16px;
-  text-align: left;
-}
-
-.inbox-card.filled {
-  background: #f7f8fa;
-}
-
-.inbox-card strong,
-.inbox-card span {
-  display: block;
-}
-
-.inbox-card strong {
-  font-size: 15px;
-}
-
-.inbox-card span {
-  color: #9c8e7c;
-  font-size: 12px;
-  font-weight: 600;
-  margin-top: 4px;
-}
-
-.inbox-card em {
-  color: #3c3f46;
-  font-size: 20px;
-  font-style: normal;
-  font-weight: 700;
 }
 
 .modal-backdrop {
@@ -3741,6 +3938,104 @@ code {
 
 .compact-sheet {
   max-width: 460px;
+}
+
+.compact-sheet label {
+  color: var(--legacy-ink);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.compact-sheet label input {
+  background: var(--legacy-bg-paper);
+  border: 1px solid var(--legacy-border);
+  border-radius: 12px;
+  color: var(--legacy-ink);
+  font-size: 14px;
+  min-height: 44px;
+  padding: 10px 14px;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.compact-sheet label input:focus {
+  border-color: var(--legacy-accent);
+  box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.14);
+  outline: none;
+}
+
+.sheet-field {
+  margin-bottom: 12px;
+}
+
+.date-schedule-field {
+  position: relative;
+}
+
+.date-schedule-field-label {
+  color: var(--legacy-ink);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.date-schedule-field-trigger {
+  align-items: center;
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  border-radius: 12px;
+  color: var(--legacy-ink);
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.date-schedule-field-trigger:hover,
+.date-schedule-field-trigger:focus-visible {
+  border-color: var(--app-color-action-primary);
+  box-shadow: 0 0 0 3px var(--app-color-focus-ring);
+  outline: none;
+}
+
+.date-schedule-field-trigger svg {
+  color: var(--app-color-action-primary);
+  flex-shrink: 0;
+}
+
+.date-schedule-field-popover {
+  left: 0;
+  position: absolute;
+  width: min(340px, 100%);
+  z-index: 40;
+}
+
+.date-schedule-field-popover.bottom {
+  top: calc(100% + 6px);
+}
+
+.date-schedule-field-popover.top {
+  bottom: calc(100% + 6px);
+}
+
+.date-schedule-field-popover .date-schedule-popover {
+  margin: 0;
+  width: 100%;
+}
+
+.compact-sheet .empty-text {
+  font-size: 13px;
+  margin: 2px 0 6px;
 }
 
 .sheet-handle {
@@ -4161,66 +4456,11 @@ code {
   padding: 18px 22px;
 }
 
-.inbox-url-form {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  max-width: 720px;
-  width: 100%;
-}
-
-.inbox-url-form input {
-  background: #f5f6f8;
-  border: 1px solid #e6e8ec;
-  border-radius: 8px;
-  color: #1d1d1f;
-  flex: 1;
-  font: inherit;
-  font-size: 13px;
-  min-width: 0;
-  padding: 7px 12px;
-}
-
-.inbox-url-form input:focus {
-  background: var(--legacy-bg-paper);
-  border-color: #c2c8d2;
-  outline: none;
-}
-
-.inbox-url-form button {
-  background: #1d1d1f;
-  border: 1px solid #1d1d1f;
-  border-radius: 8px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 500;
-  min-height: 32px;
-  padding: 0 14px;
-}
-
-.inbox-url-form button:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-/* Refresh moved into the form row as a compact icon button (design screen 3). */
-.inbox-url-form .inbox-refresh-btn {
-  align-items: center;
-  background: var(--legacy-bg-paper);
-  border: 1px solid #e6e8ec;
-  color: #6b6760;
-  display: inline-flex;
-  flex: none;
-  height: 32px;
-  justify-content: center;
-  min-height: 0;
-  padding: 0;
-  width: 32px;
-}
-
 .inbox-list-header {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: space-between;
 }
 
@@ -4229,37 +4469,40 @@ code {
   font-size: 14px;
 }
 
+.inbox-list-header .inbox-search-input {
+  width: 170px;
+}
+
+/* 카드 폭은 Mantine BadgeCard 데모 비율(~350px)에 맞춰 캡을 둔다 —
+   1fr로 늘어나면 버튼/타이포가 부풀어 보인다. */
 .inbox-workspace .inbox-grid {
   align-content: start;
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(272px, 348px));
+  justify-content: start;
+  /* ponytail: 카드 전체 균일 축소 노브 — 상대 비율은 그대로 두고 크기만
+     줄인다. (zoom은 Chromium 전용이지만 이 앱은 Electron 전용) */
+  zoom: 0.85;
 }
 
-.inbox-workspace .inbox-card {
-  align-items: stretch;
-  background: var(--legacy-bg-paper);
-  border: 1px solid #ebebe8;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.05);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  overflow: hidden;
-  padding: 0;
-}
-
-.inbox-workspace .inbox-card:focus-visible {
-  outline: 3px solid rgba(139, 100, 39, 0.28);
-  outline-offset: 2px;
+/* ⋯ 메뉴 안의 링크 저장 폼 */
+.inbox-new-form {
+  padding: 2px 10px 8px;
 }
 
 .inbox-workspace .inbox-thumbnail {
   background: #f7f6f4;
-  height: 134px;
+  height: 160px;
   overflow: hidden;
   position: relative;
+}
+
+.inbox-workspace .inbox-domain-favicon {
+  border-radius: 3px;
+  flex: none;
+  height: 13px;
+  width: 13px;
 }
 
 .inbox-workspace .inbox-thumbnail.empty {
@@ -4297,187 +4540,14 @@ code {
   right: 8px;
 }
 
-.inbox-workspace .inbox-card-body {
-  display: flex;
-  flex-direction: column;
-  padding: 10px 12px 14px;
-}
-
-.inbox-workspace .inbox-card-title-row {
-  align-items: center;
-  display: flex;
-  gap: 7px;
-  min-width: 0;
-}
-
-.inbox-workspace .inbox-card-title-row strong {
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inbox-workspace .inbox-card-title-row .inbox-favicon {
-  align-items: center;
-  border-radius: 4px;
-  display: inline-flex;
-  flex: none;
-  height: 16px;
-  justify-content: center;
-  margin: 0;
-  width: 16px;
-}
-
-.inbox-workspace .inbox-favicon.youtube {
-  background: #ff0000;
-}
-
-.inbox-workspace .inbox-favicon.instagram {
-  background: linear-gradient(135deg, #feda75, #d62976 50%, #962fbf);
-}
-
-.inbox-workspace .inbox-favicon.image {
-  background: #111418;
-}
-
-.inbox-workspace .inbox-favicon.url {
-  background: #e8e6e1;
-}
-
-.inbox-workspace .inbox-domain {
-  color: #9b9890;
-  font-size: 12.5px;
-  margin: 7px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inbox-workspace .inbox-one-liner {
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: #5c4d3c;
-  display: -webkit-box;
-  font-size: 12.5px;
-  line-height: 1.5;
-  margin: 7px 0 0;
-  overflow: hidden;
-}
-
-.inbox-pending {
-  color: #8c857b;
-  font-size: 13px;
-  margin: 8px 0 0;
-}
-
-.inbox-card a {
-  align-items: center;
-  color: #5c4d3c;
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 700;
-  gap: 6px;
-  margin-top: auto;
-  text-decoration: none;
-}
-
-.inbox-detail-backdrop {
-  align-items: center;
-  background: rgba(31, 29, 26, 0.36);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  padding: 24px;
-  position: fixed;
-  z-index: 50;
-}
-
-.inbox-detail-panel {
-  background: var(--legacy-bg-paper);
-  border: 1px solid #e6e8ec;
-  border-radius: 14px;
-  box-shadow: 0 24px 80px rgba(31, 29, 26, 0.18);
-  max-height: min(760px, 88vh);
-  max-width: 680px;
-  overflow: auto;
-  padding: 20px;
-  width: 100%;
-}
-
-.inbox-detail-panel header {
-  align-items: flex-start;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
-}
-
-.inbox-detail-panel header span {
-  background: #eef1f5;
-  border-radius: 999px;
-  color: #5b616d;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 10px;
-}
-
-.inbox-detail-panel h3 {
-  color: #1d1d1f;
-  font-size: 18px;
-  line-height: 1.35;
-  margin: 12px 0 0;
-}
-
-.inbox-detail-panel header p {
-  color: #8c857b;
-  font-size: 13px;
-  margin: 8px 0 0;
-}
-
-.inbox-detail-panel button {
-  background: var(--legacy-bg-paper);
-  border: 1px solid #d8dce2;
-  border-radius: 8px;
-  color: #3c3f46;
-  font-size: 13px;
-  font-weight: 500;
-  min-height: 32px;
-  padding: 0 12px;
-}
-
-.inbox-detail-panel button:hover {
-  background: #f1f3f6;
-}
-
-.inbox-detail-panel pre {
-  color: #3c3f46;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.65;
-  margin: 18px 0;
-  white-space: pre-wrap;
-}
-
-.inbox-detail-panel > a {
-  align-items: center;
-  background: #1d1d1f;
-  border-radius: 8px;
-  color: #ffffff;
-  display: inline-flex;
-  font-size: 14px;
-  font-weight: 500;
-  gap: 6px;
-  justify-content: center;
-  min-height: 38px;
-  padding: 0 16px;
-  text-decoration: none;
+/* 카드 하단의 좋아요 하트 — BadgeCard 패턴처럼 아이콘만 붉은 색. */
+.inbox-workspace .inbox-like {
+  color: var(--mantine-color-red-6);
 }
 
 .empty-panel {
   background: var(--legacy-bg-paper);
-  border: 1px dashed #d8dce2;
+  border: 1px dashed var(--app-color-action-secondary-border);
   border-radius: 12px;
   color: #8b909b;
   grid-column: 1 / -1;
@@ -4486,7 +4556,7 @@ code {
 }
 
 .empty-panel strong {
-  color: #1d1d1f;
+  color: var(--legacy-ink);
   display: block;
   margin-bottom: 8px;
 }
@@ -4516,25 +4586,26 @@ code {
 
   .secondary-button,
   .ghost-button {
-    background: var(--legacy-bg-paper);
-    border: 1px solid #d8dce2;
-    color: #3c3f46;
+    background: var(--app-color-action-secondary-bg);
+    border: 1px solid var(--app-color-action-secondary-border);
+    color: var(--app-color-action-secondary-text);
   }
 
   .secondary-button:not(:disabled):hover,
   .ghost-button:not(:disabled):hover {
-    background: #f1f3f6;
+    background: var(--app-color-action-secondary-hover);
     box-shadow: none;
   }
 
   .primary-button {
-    background: #1d1d1f;
-    border: 1px solid #1d1d1f;
-    color: #ffffff;
+    background: var(--app-color-action-primary);
+    border: 1px solid var(--app-color-action-primary);
+    color: var(--app-color-action-primary-text);
   }
 
   .primary-button:not(:disabled):hover {
-    background: #313135;
+    background: var(--app-color-action-primary-hover);
+    border-color: var(--app-color-action-primary-hover);
     box-shadow: none;
   }
 }
@@ -4741,13 +4812,44 @@ code {
 
 .split-workspace-commandbar {
   align-items: center;
-  background: var(--legacy-bg-toolbar);
-  border-bottom: 1px solid var(--legacy-border);
+  background: var(--subnota-chrome-bg);
+  border-bottom: 1px solid var(--subnota-chrome-border);
   display: flex;
   gap: 6px;
   justify-content: space-between;
+  left: 0;
   min-height: var(--legacy-size-commandbar);
-  padding: 0 7px 0 0;
+  padding: 0 7px 0 78px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 30;
+  -webkit-app-region: drag;
+}
+
+/* Only the actual controls block window-drag; every other pixel of the merged
+   titlebar (toolbar gaps, separators, empty space) drags the window. */
+.split-workspace-commandbar button,
+.split-workspace-commandbar input,
+.split-workspace-commandbar [data-radix-popper-content-wrapper] {
+  -webkit-app-region: no-drag;
+}
+
+/* The toolbar host is a scroll container, which drops the commandbar's drag
+   region across its whole width — most of the titlebar felt "stiff". Declare
+   the inner toolbar (not the scrolling host) draggable again; the button
+   no-drag rule above keeps every control clickable, and gaps/separators drag. */
+.split-workspace-commandbar .tiptap-toolbar {
+  -webkit-app-region: drag;
+}
+
+/* The toolbar host is a scroll container, which swallows window-drag; this
+   plain flexible spacer is the reliable grab area for the merged titlebar. */
+.split-workspace-drag-spacer {
+  align-self: stretch;
+  flex: 1;
+  min-width: 20px;
+  -webkit-app-region: drag;
 }
 
 .split-workspace-actions {
@@ -4763,9 +4865,11 @@ code {
 }
 
 .simple-editor-toolbar-host {
-  background: var(--legacy-bg-toolbar);
+  background: transparent;
   border-bottom: 0;
-  flex: 1;
+  /* Take only the toolbar's width (shrink+scroll when narrow) so the drag
+     spacer can fill the rest of the bar instead of a dead scroll zone. */
+  flex: 0 1 auto;
   min-height: var(--legacy-size-commandbar);
   min-width: 0;
   overflow-x: auto;
@@ -5281,16 +5385,13 @@ code {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  position: relative;
 
   // Editor fills the pane; the assist row (order: 5) drops to the bottom.
   .simple-editor-wrapper {
     flex: 1;
     min-height: 0;
     order: 2;
-  }
-
-  .date-schedule-popover {
-    order: 6;
   }
 }
 
@@ -5362,19 +5463,114 @@ code {
     border-radius: var(--legacy-radius-row);
     padding: 14px;
     margin-top: 16px;
-    
+
     h5 {
       margin-top: 0;
       margin-bottom: 6px;
       font-size: var(--legacy-font-size-sm);
       color: var(--legacy-muted-design);
     }
-    
+
     p {
       margin: 0;
       font-size: var(--legacy-font-size-md);
       line-height: 1.5;
       color: var(--legacy-ink-design);
+    }
+  }
+}
+
+/* 웹 요약 탭(수집함 자세히 / Topics·Network 링크 노드 공용) — 리더 스타일
+   단일 컬럼. 박스 카드 대신 타이포 위계로 정보를 구분한다. */
+.source-reader {
+  margin: 0 auto;
+  max-width: 640px;
+  padding: 36px 28px 56px;
+
+  .source-reader-meta {
+    align-items: center;
+    color: var(--legacy-muted-design);
+    display: flex;
+    font-size: 12.5px;
+    gap: 6px;
+  }
+
+  .source-reader-favicon {
+    border-radius: 3px;
+    flex: none;
+    height: 14px;
+    width: 14px;
+  }
+
+  .source-reader-title {
+    color: var(--legacy-ink-design);
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 8px 0 4px;
+    text-wrap: balance;
+  }
+
+  .source-reader-url {
+    color: var(--legacy-muted-design);
+    display: block;
+    font-size: 12.5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--legacy-coral-600);
+      text-decoration: underline;
+    }
+  }
+
+  .source-reader-keywords {
+    margin-top: 12px;
+  }
+
+  .source-reader-keyword {
+    background: transparent;
+    border-color: var(--legacy-border);
+    color: var(--legacy-muted-design);
+    font-weight: 500;
+    text-transform: none;
+  }
+
+  .source-reader-thumbnail {
+    border-radius: 10px;
+    display: block;
+    margin-top: 18px;
+    outline: 1px solid rgba(0, 0, 0, 0.1);
+    outline-offset: -1px;
+    width: 100%;
+  }
+
+  .source-reader-toggle {
+    margin-top: 22px;
+  }
+
+  .source-reader-body {
+    border-top: 1px solid var(--legacy-border);
+    margin-top: 14px;
+    padding-top: 18px;
+
+    p,
+    pre {
+      color: var(--legacy-ink-design);
+      font: inherit;
+      font-size: 15px;
+      line-height: 1.75;
+      margin: 0;
+      text-wrap: pretty;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .source-reader-pending {
+      color: var(--legacy-muted-design);
+      font-size: 13.5px;
     }
   }
 }
@@ -5511,7 +5707,7 @@ code {
   
   span {
     font-size: 10px;
-    color: #cc785c;
+    color: var(--legacy-coral-500);
     font-weight: bold;
   }
   
@@ -5788,7 +5984,7 @@ code {
     border-radius: 24px;
     overflow: hidden;
     background:
-      radial-gradient(120% 90% at 50% 110%, rgba(204, 120, 92, 0.16), transparent 60%),
+      radial-gradient(120% 90% at 50% 110%, rgba(var(--app-color-brand-rgb), 0.16), transparent 60%),
       linear-gradient(160deg, #f3ece2 0%, #efe6da 100%);
     border: 1px solid var(--tt-border-color);
   }
@@ -5955,7 +6151,7 @@ code {
 
   &:focus {
     border-color: var(--tt-brand-color-500);
-    box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+    box-shadow: 0 0 0 3px var(--app-color-focus-ring);
   }
 
   &:disabled {
@@ -6008,7 +6204,7 @@ code {
 
   &:focus {
     border-color: var(--tt-brand-color-500);
-    box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+    box-shadow: 0 0 0 3px var(--app-color-focus-ring);
   }
 }
 
@@ -6095,7 +6291,7 @@ code {
   align-items: center;
 
   .brand-mark-coral {
-    background-color: var(--tt-brand-color-500); /* #cc785c primary */
+    background-color: var(--app-color-action-primary);
     color: #ffffff;
     width: 44px;
     height: 44px;
@@ -6104,7 +6300,7 @@ code {
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
-    box-shadow: 0 4px 12px rgba(204, 120, 92, 0.2);
+    box-shadow: 0 4px 12px var(--app-color-brand-glow);
   }
 
   h2 {
@@ -6257,7 +6453,7 @@ code {
     
     &:focus {
       border-color: var(--tt-brand-color-500);
-      box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+      box-shadow: 0 0 0 3px var(--app-color-focus-ring);
     }
   }
 }

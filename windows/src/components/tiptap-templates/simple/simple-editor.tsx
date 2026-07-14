@@ -19,16 +19,12 @@ import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table
 import { Markdown } from "@tiptap/markdown"
 
 // --- UI Primitives ---
-import { Button } from "@/components/tiptap-ui-primitive/button"
-import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
-import {
-  Toolbar,
-  ToolbarGroup,
-  ToolbarSeparator,
-} from "@/components/tiptap-ui-primitive/toolbar"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
+import { Spacer } from "@/components/tiptap-ui-primitive/spacer/spacer"
+import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar/toolbar"
 
 // --- Tiptap Node ---
-import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
+import { getCursorContextText } from "@/lib/memoChunker"
 import { DateHighlight } from "@/components/tiptap-extension/date-highlight-extension"
 import { FormattingShortcuts } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
@@ -45,27 +41,18 @@ import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
 import "@/components/tiptap-node/table-node/table-node.scss"
 
 // --- Tiptap UI ---
-import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
-import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
-import { CopyMarkdownButton } from "@/components/tiptap-ui/copy-markdown-button"
-import { CopyFilePathButton } from "@/components/tiptap-ui/copy-file-path-button"
-import { SaveButton } from "@/components/tiptap-ui/save-button"
-import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu"
-import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button"
-import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button"
-import {
-  ColorHighlightPopover,
-  ColorHighlightPopoverContent,
-  ColorHighlightPopoverButton,
-} from "@/components/tiptap-ui/color-highlight-popover"
-import {
-  LinkPopover,
-  LinkContent,
-  LinkButton,
-} from "@/components/tiptap-ui/link-popover"
-import { MarkButton } from "@/components/tiptap-ui/mark-button"
-import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
-import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button"
+import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu/heading-dropdown-menu"
+import { CopyMarkdownButton } from "@/components/tiptap-ui/copy-markdown-button/copy-markdown-button"
+import { CopyFilePathButton } from "@/components/tiptap-ui/copy-file-path-button/copy-file-path-button"
+import { SaveButton } from "@/components/tiptap-ui/save-button/save-button"
+import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/list-dropdown-menu"
+import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button/blockquote-button"
+import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button/code-block-button"
+import { ColorHighlightPopover, ColorHighlightPopoverContent, ColorHighlightPopoverButton } from "@/components/tiptap-ui/color-highlight-popover/color-highlight-popover"
+import { LinkPopover, LinkContent, LinkButton } from "@/components/tiptap-ui/link-popover/link-popover"
+import { MarkButton } from "@/components/tiptap-ui/mark-button/mark-button"
+import { TextAlignButton } from "@/components/tiptap-ui/text-align-button/text-align-button"
+import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button/undo-redo-button"
 
 // --- Icons ---
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
@@ -78,9 +65,6 @@ import { useWindowSize } from "@/hooks/use-window-size"
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 // --- Components ---
-
-// --- Lib ---
-import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
@@ -141,12 +125,6 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <ImageUploadButton text="Add" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
         <SaveButton onSave={onSave} canSave={canSave} />
         <CopyMarkdownButton />
         <CopyFilePathButton filePath={currentFilePath} />
@@ -194,6 +172,13 @@ const MobileToolbarContent = ({
     )}
   </>
 )
+
+// 이미지 업로드는 현재 비활성화 — 파일 드롭/붙여넣기를 조용히 무시한다.
+// (기존 이미지 노드 렌더링은 Image 확장이 그대로 담당한다.)
+const containsImageFile = (data: DataTransfer | null) =>
+  Boolean(
+    data && Array.from(data.files).some(file => file.type.startsWith("image/")),
+  )
 
 export interface SimpleEditorProps {
   hideToolbar?: boolean;
@@ -295,6 +280,9 @@ export function SimpleEditor({
           return false
         },
       },
+      // 이미지 파일 드롭/붙여넣기 차단 (이미지 업로드 비활성화 정책).
+      handleDrop: (_view, event) => containsImageFile(event.dataTransfer),
+      handlePaste: (_view, event) => containsImageFile(event.clipboardData),
     },
     extensions: [
       StarterKit.configure({
@@ -323,13 +311,6 @@ export function SimpleEditor({
       TableRow,
       TableCell,
       TableHeader,
-      ImageUploadNode.configure({
-        accept: "image/*",
-        maxSize: MAX_FILE_SIZE,
-        limit: 3,
-        upload: handleImageUpload,
-        onError: (error) => console.error("Upload failed:", error),
-      }),
       Markdown,
     ],
     content: value,
@@ -411,17 +392,24 @@ export function SimpleEditor({
       if (ambientIdleTimerRef.current) {
         window.clearTimeout(ambientIdleTimerRef.current)
       }
+
       ambientIdleTimerRef.current = window.setTimeout(() => {
         const { $from } = editor.state.selection
         const paragraph = $from.parent.textContent
-        const start = Math.max(0, Math.min($from.parentOffset, paragraph.length) - 2000)
-        const chunkText = paragraph.slice(start, start + 4000).trim()
+        // Query with the cursor sentence ± 1, not the whole paragraph — the
+        // backend indexes ~3-sentence chunks, so a paragraph-sized query
+        // drags similarity down and floods the "지금 문장" card.
+        const chunkText = getCursorContextText(
+          paragraph,
+          Math.min($from.parentOffset, paragraph.length),
+        ).slice(0, 1000)
         onAmbientIdle(chunkText)
       }, 900)
     }
 
     editor.on('update', scheduleAmbientIdle)
     editor.on('selectionUpdate', scheduleAmbientIdle)
+
     return () => {
       if (ambientIdleTimerRef.current) {
         window.clearTimeout(ambientIdleTimerRef.current)

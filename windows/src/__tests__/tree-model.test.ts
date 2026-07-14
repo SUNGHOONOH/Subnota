@@ -46,9 +46,9 @@ describe('getTreeStage', () => {
   it('walks the stage boundaries', () => {
     expect(getTreeStage(stats({}))).toBe('seed');
     expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 0 }))).toBe('sprout');
-    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 3 }))).toBe('seedling');
-    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 10 }))).toBe('young_tree');
-    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 30 }))).toBe('mature_tree');
+    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 2 }))).toBe('seedling');
+    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 5 }))).toBe('young_tree');
+    expect(getTreeStage(stats({ totalCompleted: 1, completedDays: 14 }))).toBe('mature_tree');
   });
 });
 

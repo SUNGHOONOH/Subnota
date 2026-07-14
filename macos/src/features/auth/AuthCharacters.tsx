@@ -1,460 +1,186 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { desktopColorTokens } from '../../lib/colorTokens';
 
-// Playful mascot panel shown on the left of the auth screen. The shapes track
-// the cursor with their eyes, lean while you type, glance at each other when a
-// field is focused, and shyly look away (or sneakily peek) while you enter a
-// password. Recoloured for the Subnota warm palette.
+// Auth 화면 왼쪽의 주황 물망초(forget-me-not) 꽃밭. 커서를 향해 꽃이 부드럽게
+// 기울고, 커서가 없을 때는 각자 위상이 다른 미세한 바람 흔들림만 남는다.
+// 단일 <canvas> + rAF 루프 하나로 그려 성능 부담이 없다.
 
-interface PupilProps {
-  size?: number;
-  maxDistance?: number;
-  pupilColor?: string;
-  forceLookX?: number;
-  forceLookY?: number;
-  mousePosition: { x: number; y: number };
+const STAGE_WIDTH = 550;
+const STAGE_HEIGHT = 400;
+const FLOWER_COUNT = 46;
+
+// Subnota 웜 팔레트 계열의 주황 꽃잎 + 노란 꽃심 + 차분한 초록 줄기.
+const PETAL_COLORS = [
+  '#E8853D',
+  '#F09A52',
+  '#D97633',
+  '#F2A868',
+  desktopColorTokens.brand.primary,
+];
+const CORE_COLOR = '#E8C254';
+const STEM_COLORS = ['#66705A', '#7A8563', '#5C6650'];
+
+interface Flower {
+  baseX: number;
+  baseY: number;
+  height: number;
+  headRadius: number;
+  petalColor: string;
+  stemColor: string;
+  swayPhase: number;
+  swaySpeed: number;
+  swayAmplitude: number;
+  stiffness: number;
+  lean: number; // 현재 머리의 가로 오프셋(px) — 스프링으로 목표를 따라간다
 }
 
-const useMouse = () => {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const frameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const handle = (event: MouseEvent) => {
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-      }
-      frameRef.current = window.requestAnimationFrame(() => {
-        setPos({ x: event.clientX, y: event.clientY });
-        frameRef.current = null;
-      });
-    };
-
-    window.addEventListener('mousemove', handle);
-    return () => {
-      window.removeEventListener('mousemove', handle);
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-      }
-    };
-  }, []);
-  return pos;
+const createFlowers = (): Flower[] => {
+  const flowers: Flower[] = [];
+  for (let index = 0; index < FLOWER_COUNT; index += 1) {
+    // 아래쪽 3분의 1 영역에 얕은 원근: 뒤쪽(위) 꽃은 작고, 앞쪽(아래)은 크다.
+    const depth = Math.random(); // 0 = 뒤, 1 = 앞
+    const baseY = STAGE_HEIGHT - 8 - (1 - depth) * 70 - Math.random() * 14;
+    flowers.push({
+      baseX: 16 + Math.random() * (STAGE_WIDTH - 32),
+      baseY,
+      height: (66 + Math.random() * 74) * (0.62 + depth * 0.38),
+      headRadius: (9 + Math.random() * 5) * (0.62 + depth * 0.38),
+      petalColor: PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)],
+      stemColor: STEM_COLORS[Math.floor(Math.random() * STEM_COLORS.length)],
+      swayPhase: Math.random() * Math.PI * 2,
+      swaySpeed: 0.55 + Math.random() * 0.5,
+      swayAmplitude: 2.5 + Math.random() * 3.5,
+      stiffness: 0.045 + Math.random() * 0.04,
+      lean: 0,
+    });
+  }
+  // 뒤쪽 꽃 먼저 그려서 앞쪽 꽃이 자연스럽게 겹치게 한다.
+  return flowers.sort((a, b) => a.baseY - b.baseY);
 };
 
-const useBlinking = () => {
-  const [isBlinking, setBlinking] = useState(false);
+const drawFlower = (context: CanvasRenderingContext2D, flower: Flower) => {
+  const headX = flower.baseX + flower.lean;
+  const headY = flower.baseY - flower.height;
 
-  useEffect(() => {
-    let blinkTimer: number | undefined;
-    let resetTimer: number | undefined;
-    let disposed = false;
-
-    const schedule = () => {
-      blinkTimer = window.setTimeout(() => {
-        if (disposed) return;
-        setBlinking(true);
-        resetTimer = window.setTimeout(() => {
-          if (disposed) return;
-          setBlinking(false);
-          schedule();
-        }, 150);
-      }, Math.random() * 4000 + 3000);
-    };
-
-    schedule();
-    return () => {
-      disposed = true;
-      if (blinkTimer !== undefined) window.clearTimeout(blinkTimer);
-      if (resetTimer !== undefined) window.clearTimeout(resetTimer);
-    };
-  }, []);
-
-  return isBlinking;
-};
-
-const Pupil = ({
-  size = 12,
-  maxDistance = 5,
-  pupilColor = '#2D2D2D',
-  forceLookX,
-  forceLookY,
-  mousePosition,
-}: PupilProps) => {
-  const { x: mouseX, y: mouseY } = mousePosition;
-  const ref = useRef<HTMLDivElement>(null);
-
-  const position = (() => {
-    if (forceLookX !== undefined && forceLookY !== undefined) {
-      return { x: forceLookX, y: forceLookY };
-    }
-    if (!ref.current) return { x: 0, y: 0 };
-    const rect = ref.current.getBoundingClientRect();
-    const deltaX = mouseX - (rect.left + rect.width / 2);
-    const deltaY = mouseY - (rect.top + rect.height / 2);
-    const distance = Math.min(Math.sqrt(deltaX ** 2 + deltaY ** 2), maxDistance);
-    const angle = Math.atan2(deltaY, deltaX);
-    return { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
-  })();
-
-  return (
-    <div
-      ref={ref}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        backgroundColor: pupilColor,
-        transform: `translate(${position.x}px, ${position.y}px)`,
-        transition: 'transform 0.1s ease-out',
-      }}
-    />
+  context.strokeStyle = flower.stemColor;
+  context.lineWidth = Math.max(1.4, flower.headRadius * 0.16);
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(flower.baseX, flower.baseY);
+  context.quadraticCurveTo(
+    flower.baseX + flower.lean * 0.3,
+    flower.baseY - flower.height * 0.55,
+    headX,
+    headY,
   );
+  context.stroke();
+
+  // 물망초: 둥근 꽃잎 5장 + 밝은 꽃심.
+  context.fillStyle = flower.petalColor;
+  for (let petal = 0; petal < 5; petal += 1) {
+    const angle = (Math.PI * 2 * petal) / 5 - Math.PI / 2 + flower.lean * 0.008;
+    context.beginPath();
+    context.arc(
+      headX + Math.cos(angle) * flower.headRadius * 0.72,
+      headY + Math.sin(angle) * flower.headRadius * 0.72,
+      flower.headRadius * 0.52,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+  context.fillStyle = CORE_COLOR;
+  context.beginPath();
+  context.arc(headX, headY, flower.headRadius * 0.34, 0, Math.PI * 2);
+  context.fill();
 };
 
-interface EyeBallProps {
-  size?: number;
-  pupilSize?: number;
-  maxDistance?: number;
-  eyeColor?: string;
-  pupilColor?: string;
-  isBlinking?: boolean;
-  forceLookX?: number;
-  forceLookY?: number;
-  mousePosition: { x: number; y: number };
-}
+const AuthCharacters = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-const EyeBall = ({
-  size = 48,
-  pupilSize = 16,
-  maxDistance = 10,
-  eyeColor = 'white',
-  pupilColor = '#2D2D2D',
-  isBlinking = false,
-  forceLookX,
-  forceLookY,
-  mousePosition,
-}: EyeBallProps) => {
-  const { x: mouseX, y: mouseY } = mousePosition;
-  const ref = useRef<HTMLDivElement>(null);
-
-  const position = (() => {
-    if (forceLookX !== undefined && forceLookY !== undefined) {
-      return { x: forceLookX, y: forceLookY };
-    }
-    if (!ref.current) return { x: 0, y: 0 };
-    const rect = ref.current.getBoundingClientRect();
-    const deltaX = mouseX - (rect.left + rect.width / 2);
-    const deltaY = mouseY - (rect.top + rect.height / 2);
-    const distance = Math.min(Math.sqrt(deltaX ** 2 + deltaY ** 2), maxDistance);
-    const angle = Math.atan2(deltaY, deltaX);
-    return { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
-  })();
-
-  return (
-    <div
-      ref={ref}
-      style={{
-        width: size,
-        height: isBlinking ? 2 : size,
-        borderRadius: '50%',
-        backgroundColor: eyeColor,
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.15s',
-      }}
-    >
-      {!isBlinking && (
-        <div
-          style={{
-            width: pupilSize,
-            height: pupilSize,
-            borderRadius: '50%',
-            backgroundColor: pupilColor,
-            transform: `translate(${position.x}px, ${position.y}px)`,
-            transition: 'transform 0.1s ease-out',
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-// Subnota warm palette mascots.
-const CORAL = '#CC785C';
-const INK = '#2D2D2D';
-const SAND = '#EBA47E';
-const GOLD = '#E8D754';
-
-interface AuthCharactersProps {
-  isTyping: boolean;
-  password: string;
-  showPassword: boolean;
-}
-
-const AuthCharacters = ({ isTyping, password, showPassword }: AuthCharactersProps) => {
-  const mousePosition = useMouse();
-  const { x: mouseX, y: mouseY } = mousePosition;
-  const isCoralBlinking = useBlinking();
-  const isInkBlinking = useBlinking();
-  const [isLookingAtEachOther, setLookingAtEachOther] = useState(false);
-  const [isPeeking, setPeeking] = useState(false);
-
-  const coralRef = useRef<HTMLDivElement>(null);
-  const inkRef = useRef<HTMLDivElement>(null);
-  const sandRef = useRef<HTMLDivElement>(null);
-  const goldRef = useRef<HTMLDivElement>(null);
-
-  const hidingPassword = password.length > 0 && !showPassword;
-  const peekingPassword = password.length > 0 && showPassword;
-
-  // Glance at each other briefly when a field is focused.
   useEffect(() => {
-    if (!isTyping) {
-      setLookingAtEachOther(false);
-      return;
-    }
-    setLookingAtEachOther(true);
-    const timer = setTimeout(() => setLookingAtEachOther(false), 800);
-    return () => clearTimeout(timer);
-  }, [isTyping]);
-
-  // Sneaky peek while the password is visible.
-  useEffect(() => {
-    if (!peekingPassword) {
-      setPeeking(false);
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) {
       return undefined;
     }
 
-    let peekTimer: number | undefined;
-    let resetTimer: number | undefined;
-    let disposed = false;
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    canvas.width = STAGE_WIDTH * devicePixelRatio;
+    canvas.height = STAGE_HEIGHT * devicePixelRatio;
+    context.scale(devicePixelRatio, devicePixelRatio);
 
-    const schedule = () => {
-      peekTimer = window.setTimeout(() => {
-        if (disposed) return;
-        setPeeking(true);
-        resetTimer = window.setTimeout(() => {
-          if (disposed) return;
-          setPeeking(false);
-          schedule();
-        }, 800);
-      }, Math.random() * 3000 + 2000);
+    const flowers = createFlowers();
+    const mouse = { active: false, x: 0, y: 0 };
+    let frameId: number | null = null;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = event.clientX - rect.left;
+      mouse.y = event.clientY - rect.top;
+      mouse.active = true;
+    };
+    const handleMouseLeave = () => {
+      mouse.active = false;
     };
 
-    schedule();
+    const renderFrame = (time: number) => {
+      context.clearRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+      const seconds = time / 1000;
+
+      for (const flower of flowers) {
+        const sway =
+          Math.sin(seconds * flower.swaySpeed + flower.swayPhase) *
+          flower.swayAmplitude;
+
+        let target = sway;
+        if (mouse.active) {
+          const headY = flower.baseY - flower.height;
+          const dx = mouse.x - flower.baseX;
+          const dy = mouse.y - headY;
+          const distance = Math.hypot(dx, dy);
+          // 가우시안 감쇠: 커서 근처 꽃만 커서 쪽으로 기울고, 먼 꽃은
+          // 바람 흔들림만 유지한다.
+          const influence = Math.exp(-((distance / 190) ** 2));
+          const leanToward = Math.max(-30, Math.min(30, dx * 0.16));
+          target = sway + leanToward * influence;
+        }
+
+        flower.lean += (target - flower.lean) * flower.stiffness;
+        drawFlower(context, flower);
+      }
+
+      frameId = window.requestAnimationFrame(renderFrame);
+    };
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      renderFrame(0);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        frameId = null;
+      }
+      return undefined;
+    }
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseout', handleMouseLeave);
+    frameId = window.requestAnimationFrame(renderFrame);
+
     return () => {
-      disposed = true;
-      if (peekTimer !== undefined) window.clearTimeout(peekTimer);
-      if (resetTimer !== undefined) window.clearTimeout(resetTimer);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseout', handleMouseLeave);
     };
-  }, [peekingPassword]);
-
-  const position = (ref: React.RefObject<HTMLDivElement | null>) => {
-    if (!ref.current) return { faceX: 0, faceY: 0, bodySkew: 0 };
-    const rect = ref.current.getBoundingClientRect();
-    const deltaX = mouseX - (rect.left + rect.width / 2);
-    const deltaY = mouseY - (rect.top + rect.height / 3);
-    return {
-      faceX: Math.max(-15, Math.min(15, deltaX / 20)),
-      faceY: Math.max(-10, Math.min(10, deltaY / 30)),
-      bodySkew: Math.max(-6, Math.min(6, -deltaX / 120)),
-    };
-  };
-
-  const coral = position(coralRef);
-  const ink = position(inkRef);
-  const sand = position(sandRef);
-  const gold = position(goldRef);
+  }, []);
 
   return (
-    <div style={{ position: 'relative', width: 550, height: 400 }}>
-      {/* Coral tall character — back layer */}
-      <div
-        ref={coralRef}
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 70,
-          width: 180,
-          height: isTyping || hidingPassword ? 440 : 400,
-          backgroundColor: CORAL,
-          borderRadius: '10px 10px 0 0',
-          zIndex: 1,
-          transformOrigin: 'bottom center',
-          transition: 'all 0.7s ease-in-out',
-          transform: peekingPassword
-            ? 'skewX(0deg)'
-            : isTyping || hidingPassword
-              ? `skewX(${coral.bodySkew - 12}deg) translateX(40px)`
-              : `skewX(${coral.bodySkew}deg)`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            gap: 32,
-            transition: 'all 0.7s ease-in-out',
-            left: peekingPassword ? 20 : isLookingAtEachOther ? 55 : 45 + coral.faceX,
-            top: peekingPassword ? 35 : isLookingAtEachOther ? 65 : 40 + coral.faceY,
-          }}
-        >
-          {[0, 1].map(i => (
-            <EyeBall
-              key={i}
-              size={18}
-              pupilSize={7}
-              maxDistance={5}
-              isBlinking={isCoralBlinking}
-              mousePosition={mousePosition}
-              forceLookX={peekingPassword ? (isPeeking ? 4 : -4) : isLookingAtEachOther ? 3 : undefined}
-              forceLookY={peekingPassword ? (isPeeking ? 5 : -4) : isLookingAtEachOther ? 4 : undefined}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Ink tall character — middle layer */}
-      <div
-        ref={inkRef}
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 240,
-          width: 120,
-          height: 310,
-          backgroundColor: INK,
-          borderRadius: '8px 8px 0 0',
-          zIndex: 2,
-          transformOrigin: 'bottom center',
-          transition: 'all 0.7s ease-in-out',
-          transform: peekingPassword
-            ? 'skewX(0deg)'
-            : isLookingAtEachOther
-              ? `skewX(${ink.bodySkew * 1.5 + 10}deg) translateX(20px)`
-              : isTyping || hidingPassword
-                ? `skewX(${ink.bodySkew * 1.5}deg)`
-                : `skewX(${ink.bodySkew}deg)`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            gap: 24,
-            transition: 'all 0.7s ease-in-out',
-            left: peekingPassword ? 10 : isLookingAtEachOther ? 32 : 26 + ink.faceX,
-            top: peekingPassword ? 28 : isLookingAtEachOther ? 12 : 32 + ink.faceY,
-          }}
-        >
-          {[0, 1].map(i => (
-            <EyeBall
-              key={i}
-              size={16}
-              pupilSize={6}
-              maxDistance={4}
-              isBlinking={isInkBlinking}
-              mousePosition={mousePosition}
-              forceLookX={peekingPassword ? -4 : isLookingAtEachOther ? 0 : undefined}
-              forceLookY={peekingPassword ? -4 : isLookingAtEachOther ? -4 : undefined}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Sand semicircle — front left */}
-      <div
-        ref={sandRef}
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: 240,
-          height: 200,
-          backgroundColor: SAND,
-          borderRadius: '120px 120px 0 0',
-          zIndex: 3,
-          transformOrigin: 'bottom center',
-          transition: 'all 0.7s ease-in-out',
-          transform: peekingPassword ? 'skewX(0deg)' : `skewX(${sand.bodySkew}deg)`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            gap: 32,
-            transition: 'all 0.2s ease-out',
-            left: peekingPassword ? 50 : 82 + sand.faceX,
-            top: peekingPassword ? 85 : 90 + sand.faceY,
-          }}
-        >
-          {[0, 1].map(i => (
-            <Pupil
-              key={i}
-              size={12}
-              maxDistance={5}
-              forceLookX={peekingPassword ? -5 : undefined}
-              forceLookY={peekingPassword ? -4 : undefined}
-              mousePosition={mousePosition}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Gold tall character — front right */}
-      <div
-        ref={goldRef}
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 310,
-          width: 140,
-          height: 230,
-          backgroundColor: GOLD,
-          borderRadius: '70px 70px 0 0',
-          zIndex: 4,
-          transformOrigin: 'bottom center',
-          transition: 'all 0.7s ease-in-out',
-          transform: peekingPassword ? 'skewX(0deg)' : `skewX(${gold.bodySkew}deg)`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            gap: 24,
-            transition: 'all 0.2s ease-out',
-            left: peekingPassword ? 20 : 52 + gold.faceX,
-            top: peekingPassword ? 35 : 40 + gold.faceY,
-          }}
-        >
-          {[0, 1].map(i => (
-            <Pupil
-              key={i}
-              size={12}
-              maxDistance={5}
-              forceLookX={peekingPassword ? -5 : undefined}
-              forceLookY={peekingPassword ? -4 : undefined}
-              mousePosition={mousePosition}
-            />
-          ))}
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            width: 80,
-            height: 4,
-            backgroundColor: INK,
-            borderRadius: 9999,
-            transition: 'all 0.2s ease-out',
-            left: peekingPassword ? 10 : 40 + gold.faceX,
-            top: peekingPassword ? 88 : 88 + gold.faceY,
-          }}
-        />
-      </div>
-    </div>
+    <canvas
+      aria-hidden="true"
+      ref={canvasRef}
+      style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}
+    />
   );
 };
 
