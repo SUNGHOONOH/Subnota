@@ -34,5 +34,5 @@ Detailed setup instructions, dependency installations, testing scripts, and envi
 ## Design System & Guideline Reference
 
 All desktop layout assets, components, SCSS styling tokens, and color palettes follow the specifications outlined in:
-* [macOS/Windows Design System Docs](macos/docs/design.md) *(legacy folder retained during migration)*
-* [macOS/Windows Source Codemap](macos/docs/CODEMAP.md) *(legacy folder retained during migration)*
+* [macOS/Windows Design System Docs](desktop/docs/design.md)
+* [macOS/Windows Source Codemap](desktop/docs/CODEMAP.md)

@@ -16,12 +16,15 @@ Subnota desktop releases must use a Subnota-owned GitHub release repo. Do not pu
 
 ## Environment Setup
 
-Create an `.env` file in the `desktop` directory if custom endpoints are needed (defaults to production endpoints):
+Create an `.env` file in the `desktop` directory from `.env.example` and fill
+in the endpoints for the target environment:
 ```text
-SUPABASE_URL=your-supabase-url
-SUPABASE_ANON_KEY=your-supabase-anon-key
-MEMO_BACKEND_URL=http://localhost:8000
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_MEMO_BACKEND_URL=http://localhost:8000
 ```
+
+Start from `.env.example`; never commit the populated `.env` file.
 
 ## Development
 
@@ -62,6 +65,9 @@ publishes the Squirrel Setup EXE.
 - Native current-browser-page capture and recent captures in the tray are
   macOS-only.
 - The Windows browser-extension clipper is reserved for a later release.
+
+Agent-facing architecture and UI invariants are documented in
+`docs/CODEMAP.md`, `docs/design.md`, and `CLAUDE.md`.
 
 ### Build DMG (local only)
 
