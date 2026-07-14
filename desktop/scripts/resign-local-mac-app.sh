@@ -2,6 +2,8 @@
 set -euo pipefail
 
 APP_PATH="${1:-}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENTITLEMENTS_PATH="$SCRIPT_DIR/../build/entitlements.mac.plist"
 
 if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
   echo "Usage: scripts/resign-local-mac-app.sh /path/to/Subnota.app" >&2
@@ -10,4 +12,5 @@ fi
 
 echo "==> Re-signing local app bundle with ad-hoc identity..."
 codesign --force --deep --sign - "$APP_PATH"
+codesign --force --sign - --entitlements "$ENTITLEMENTS_PATH" "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

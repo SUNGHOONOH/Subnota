@@ -29,6 +29,9 @@ DerivedData
 # Android/IntelliJ
 #
 build/
+!desktop/build/
+desktop/build/*
+!desktop/build/entitlements.mac.plist
 .idea
 .gradle
 local.properties
