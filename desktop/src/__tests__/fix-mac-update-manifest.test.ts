@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  normalizeManifest,
-  normalizeZipName,
-} from '../../scripts/fix-mac-update-manifest.mjs';
+const { normalizeManifest, normalizeZipName } = await import(
+  '../../scripts/fix-mac-update-manifest.mjs'
+);
 
 describe('fix mac update manifest', () => {
   it('normalizes GitHub release zip names with spaces', () => {
