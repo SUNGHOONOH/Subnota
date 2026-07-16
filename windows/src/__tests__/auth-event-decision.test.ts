@@ -21,6 +21,18 @@ describe('auth event decisions', () => {
     ).toBe('ignore');
   });
 
+  it('updates (not re-activates) when the same user rotates the access token', () => {
+    // Re-activation resets the workspace, wiping the memo draft being typed.
+    expect(
+      decideAuthEvent({
+        event: 'SIGNED_IN',
+        hasSession: true,
+        isSameSession: false,
+        isSameUser: true,
+      }).action,
+    ).toBe('update');
+  });
+
   it('activates a new sign-in and deactivates sign-out', () => {
     expect(
       decideAuthEvent({

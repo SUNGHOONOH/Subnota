@@ -1,3 +1,5 @@
+@use './color-tokens';
+
 :root {
   /******************
   Basics
@@ -61,18 +63,18 @@
   --tt-gray-dark-800: #e8e0d2;
   --tt-gray-dark-900: #faf9f5;
 
-  /* Brand colors — warm coral */
-  --tt-brand-color-50: #fdf4f0;
-  --tt-brand-color-100: #f8e4da;
-  --tt-brand-color-200: #f0cbb8;
-  --tt-brand-color-300: #e4a98e;
-  --tt-brand-color-400: #d9916f;
-  --tt-brand-color-500: #cc785c;
-  --tt-brand-color-600: #a9583e;
-  --tt-brand-color-700: #8f4a33;
-  --tt-brand-color-800: #6e3826;
-  --tt-brand-color-900: #4d2819;
-  --tt-brand-color-950: #331a10;
+  /* Brand colors — orange coral */
+  --tt-brand-color-50: var(--app-color-brand-50);
+  --tt-brand-color-100: var(--app-color-brand-100);
+  --tt-brand-color-200: var(--app-color-brand-200);
+  --tt-brand-color-300: var(--app-color-brand-300);
+  --tt-brand-color-400: var(--app-color-brand-400);
+  --tt-brand-color-500: var(--app-color-brand-500);
+  --tt-brand-color-600: var(--app-color-brand-600);
+  --tt-brand-color-700: var(--app-color-brand-700);
+  --tt-brand-color-800: var(--app-color-brand-800);
+  --tt-brand-color-900: var(--app-color-brand-900);
+  --tt-brand-color-950: var(--app-color-brand-950);
 
   /* Green */
   --tt-color-green-inc-5: hsla(129, 100%, 97%, 1);
@@ -183,7 +185,7 @@
   --tt-sidebar-bg-color: var(--tt-gray-light-100);
   --tt-scrollbar-color: var(--tt-gray-light-a-200);
   --tt-cursor-color: var(--tt-brand-color-500);
-  --tt-selection-color: rgba(204, 120, 92, 0.2);
+  --tt-selection-color: var(--app-color-selection);
   --tt-card-bg-color: var(--white);
   --tt-card-border-color: var(--tt-gray-light-a-100);
 }
@@ -196,7 +198,7 @@
   --tt-sidebar-bg-color: var(--tt-gray-dark-100);
   --tt-scrollbar-color: var(--tt-gray-dark-a-200);
   --tt-cursor-color: var(--tt-brand-color-400);
-  --tt-selection-color: rgba(204, 120, 92, 0.18);
+  --tt-selection-color: var(--app-color-selection);
   --tt-card-bg-color: var(--tt-gray-dark-50);
   --tt-card-border-color: var(--tt-gray-dark-a-50);
 

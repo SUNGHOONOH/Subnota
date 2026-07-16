@@ -1,6 +1,11 @@
 import { hashText } from '../../lib/contentHash';
 import { getMemoCategory } from '../../lib/memoCategory';
-import { CalendarBlockRow, MemoRow } from '../../types';
+import {
+  CalendarBlockRow,
+  MemoRow,
+  ScheduleInboxRow,
+  TopicMapData,
+} from '../../types';
 import { ActivityCompletion, DailyCompletion, ForestTree } from '../../features/tree/model/treeTypes';
 import { InboxSession, InboxSourceType } from '../backend/inboxService';
 
@@ -17,15 +22,21 @@ type RecordType =
   | 'daily_completion'
   | 'inbox'
   | 'memo'
+  | 'schedule_inbox'
+  | 'topic_map'
   | 'tree';
 
 export type LocalMemoRow = MemoRow & { local_sync_status?: LocalSyncStatus };
 export type LocalCalendarBlockRow = CalendarBlockRow & {
   local_sync_status?: LocalSyncStatus;
 };
-export type LocalInboxSession = InboxSession & {
+// 'inbox' 컬렉션에는 두 종류의 행이 산다: 아직 서버로 못 올린 대기 큐
+// (pending/failed, clientId 필수)와 서버 목록의 로컬 캐시(synced).
+export type LocalInboxItem = InboxSession & {
+  local_sync_status?: 'failed' | 'pending' | 'synced';
+};
+export type LocalInboxSession = LocalInboxItem & {
   clientId: string;
-  local_sync_status?: 'failed' | 'pending';
 };
 
 const migrationPromises = new Map<string, Promise<void>>();
@@ -138,6 +149,7 @@ export const createLocalMemoRow = (
   memo: Pick<MemoRow, 'content' | 'created_at' | 'id'> & {
     category?: string | null;
     content_updated_at?: string | null;
+    synced_content?: string | null;
     synced_content_hash?: string | null;
     updated_at?: string;
   },
@@ -151,8 +163,10 @@ export const createLocalMemoRow = (
   id: memo.id,
   is_archived: false,
   local_sync_status: syncStatus,
-  // Carry the last-synced server hash forward across local edits so the cloud
-  // push can use it as the optimistic-concurrency base.
+  // Carry the last-synced server content/hash forward across local edits: the
+  // hash is the optimistic-concurrency base for pushes, the content is the
+  // shared base for 3-way conflict merges.
+  synced_content: memo.synced_content ?? null,
   synced_content_hash: memo.synced_content_hash ?? null,
   updated_at: memo.updated_at ?? new Date().toISOString(),
 });
@@ -169,6 +183,25 @@ export const upsertLocalMemo = (
   syncStatus: LocalSyncStatus = 'pending',
   ownerId?: string,
 ) => persistLocalMemo(createLocalMemoRow(memo, syncStatus), ownerId);
+
+export const getLocalMemo = async (memoId: string, ownerId?: string) =>
+  (await loadLocalMemos(ownerId)).find(memo => memo.id === memoId) ?? null;
+
+// Record the server-acknowledged sync base without touching newer local
+// content. Every acked push must land here — dropping an ack leaves a stale
+// base hash behind, and the next push gets misread as a cross-device conflict.
+export const updateLocalMemoSyncedBase = async (
+  memoId: string,
+  base: { content: string; hash: string | null },
+  ownerId?: string,
+) => {
+  const memo = await getLocalMemo(memoId, ownerId);
+  if (!memo) return;
+  await persistLocalMemo(
+    { ...memo, synced_content: base.content, synced_content_hash: base.hash },
+    ownerId,
+  );
+};
 
 export const markLocalMemoDeleted = async (
   memoId: string,
@@ -194,7 +227,9 @@ export const replaceSyncedMemos = async (remoteMemos: MemoRow[], ownerId?: strin
   const records = (await getApi().localDbReplaceSynced(
     ownerKey(ownerId),
     'memo',
-    remoteMemos,
+    // Pulled rows are the synced state by definition — keep their content as
+    // the 3-way merge base for later conflicts.
+    remoteMemos.map(memo => ({ ...memo, synced_content: memo.content })),
   )) as LocalMemoRow[];
   return records.filter(memo => !memo.is_archived).sort(byUpdatedDesc);
 };
@@ -251,8 +286,46 @@ export const replaceSyncedCalendarBlocks = async (
   return records.filter(block => block.local_sync_status !== 'pending_delete');
 };
 
-export const loadLocalInboxQueue = (ownerId?: string) =>
-  list<LocalInboxSession>('inbox', ownerId);
+// 캐시 + 대기 큐 전체 — 앱 시작 시 즉시 표시용(local-first).
+export const loadLocalInboxItems = (ownerId?: string) =>
+  list<LocalInboxItem>('inbox', ownerId);
+
+// 서버로 아직 못 올린 대기 항목만. 캐시(synced) 행이 섞이면 큐 재전송
+// 루프가 서버 항목을 다시 POST하므로 반드시 여기서 걸러야 한다.
+export const loadLocalInboxQueue = async (ownerId?: string) =>
+  (await loadLocalInboxItems(ownerId)).filter(
+    (item): item is LocalInboxSession =>
+      item.local_sync_status === 'pending' || item.local_sync_status === 'failed',
+  );
+
+// 서버에서 받아온 목록으로 로컬 캐시를 교체한다. replaceSynced는 synced
+// 행만 갈아끼우고 pending/failed 큐 행은 보존한다.
+export const replaceLocalInboxCache = async (
+  items: InboxSession[],
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  return (await getApi().localDbReplaceSynced(
+    ownerKey(ownerId),
+    'inbox',
+    items,
+  )) as LocalInboxItem[];
+};
+
+// 서버 반영이 확인된 항목 한 건을 캐시에 upsert한다 — 저장/큐 재전송/좋아요
+// 직후처럼 전체 목록을 다시 받기 전에 로컬 상태를 맞춰두는 용도.
+export const cacheLocalInboxItem = async (
+  item: InboxSession,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(ownerKey(ownerId), 'inbox', item.id, {
+    ...item,
+    local_sync_status: 'synced',
+  });
+};
 
 export const createLocalInboxSession = async (
   url: string,
@@ -272,6 +345,8 @@ export const createLocalInboxSession = async (
     domain: null,
     duration: null,
     id: clientId,
+    keywords: [],
+    liked: false,
     local_sync_status: 'pending',
     originalUrl: url,
     publishedAt: null,
@@ -298,6 +373,48 @@ export const removeLocalInboxSession = async (clientId: string, ownerId?: string
   await ensureMigrated(ownerId);
   await getApi().localDbSetOwner?.(ownerKey(ownerId));
   await getApi().localDbDelete(ownerKey(ownerId), 'inbox', clientId);
+};
+
+// 일정 inbox 캐시 — 서버 배치 결과의 읽기 전용 표시용. 수락/무시 쓰기는
+// 온라인 전용이며, 처리된 항목은 removeLocalScheduleInboxItem으로 걷어낸다.
+export const loadLocalScheduleInbox = (ownerId?: string) =>
+  list<ScheduleInboxRow>('schedule_inbox', ownerId);
+
+export const replaceLocalScheduleInbox = async (
+  rows: ScheduleInboxRow[],
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbReplaceSynced(ownerKey(ownerId), 'schedule_inbox', rows);
+};
+
+export const removeLocalScheduleInboxItem = async (
+  id: string,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbDelete(ownerKey(ownerId), 'schedule_inbox', id);
+};
+
+// Topics 지도 캐시 — 야간 배치 결과 전체를 단일 레코드(blob)로 저장한다.
+const TOPIC_MAP_RECORD_ID = 'latest';
+
+export const loadLocalTopicMap = async (
+  ownerId?: string,
+): Promise<TopicMapData | null> => {
+  const rows = await list<TopicMapData>('topic_map', ownerId);
+  return rows[0] ?? null;
+};
+
+export const saveLocalTopicMap = async (
+  map: TopicMapData,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(ownerKey(ownerId), 'topic_map', TOPIC_MAP_RECORD_ID, map);
 };
 
 // Growth events (append-only). Keyed by block id / local date so re-recording

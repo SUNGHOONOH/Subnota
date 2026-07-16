@@ -29,6 +29,9 @@ DerivedData
 # Android/IntelliJ
 #
 build/
+!desktop/build/
+desktop/build/*
+!desktop/build/entitlements.mac.plist
 .idea
 .gradle
 local.properties
@@ -89,10 +92,15 @@ pwa/.vercel/
 
 # Local docs / working notes
 docs/
+!desktop/docs/
+desktop/docs/*
+!desktop/docs/CODEMAP.md
+!desktop/docs/design.md
 /.agents/
 /.vscode/
 .claude/
 CLAUDE.md
+!desktop/CLAUDE.md
 /ELECTRON_MIGRATION_STATUS.md
 # Yarn
 .yarn/*

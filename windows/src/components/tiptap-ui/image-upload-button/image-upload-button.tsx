@@ -7,16 +7,13 @@ import { parseShortcutKeys } from "@/lib/tiptap-utils"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
-import type { UseImageUploadConfig } from "@/components/tiptap-ui/image-upload-button"
-import {
-  IMAGE_UPLOAD_SHORTCUT_KEY,
-  useImageUpload,
-} from "@/components/tiptap-ui/image-upload-button"
+import type { UseImageUploadConfig } from "@/components/tiptap-ui/image-upload-button/use-image-upload"
+import { IMAGE_UPLOAD_SHORTCUT_KEY, useImageUpload } from "@/components/tiptap-ui/image-upload-button/use-image-upload"
 
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
-import { Badge } from "@/components/tiptap-ui-primitive/badge"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
+import { Button } from "@/components/tiptap-ui-primitive/button/button"
+import { Badge } from "@/components/tiptap-ui-primitive/badge/badge"
 
 type IconProps = React.SVGProps<SVGSVGElement>
 type IconComponent = ({ className, ...props }: IconProps) => React.ReactElement

@@ -8,7 +8,9 @@ import {
   MemoRow,
   ScheduleInboxRow,
   TopicCluster,
+  TopicInboxMembership,
   TopicMapData,
+  TopicMemoInboxEdge,
   TopicMemoEdge,
   TopicMembership,
 } from '../../types';
@@ -193,14 +195,16 @@ export const upsertMemo = async (
     createdAt?: string;
     id: string;
   },
+  options?: { preserveConflictCopy?: boolean },
 ): Promise<UpsertMemoResult> => {
   const contentHash = hashText(memo.content);
   const contentUpdatedAt = memo.contentUpdatedAt ?? new Date().toISOString();
   const createdAt = memo.createdAt ?? new Date().toISOString();
 
   // Optimistic-concurrency upsert: on a concurrent edit the server keeps its
-  // version and preserves ours as a conflict copy (returned via next fetchMemos)
-  // instead of letting this push blindly overwrite it.
+  // version and returns 'conflict' so the caller can 3-way merge and re-push
+  // (see pushMemoMerging). Only the explicit fallback asks the server to
+  // preserve ours as a conflict copy.
   const { data, error } = await supabase.rpc('upsert_memo_if_base_hash', {
     p_id: memo.id,
     p_base_hash: memo.baseHash ?? null,
@@ -209,6 +213,7 @@ export const upsertMemo = async (
     p_category: getMemoCategory(memo.category),
     p_content_updated_at: contentUpdatedAt,
     p_created_at: createdAt,
+    p_preserve_conflict_copy: options?.preserveConflictCopy ?? false,
   });
 
   if (error) {
@@ -289,6 +294,7 @@ export const upsertCalendarBlock = async (
     allDay: boolean;
     color: string;
     completedAt?: string | null;
+    endDate?: string | null;
     id: string;
     isCompleted?: boolean;
     note: string | null;
@@ -306,7 +312,7 @@ export const upsertCalendarBlock = async (
         title: block.title.trim() || '새 일정',
         note: block.note,
         start_date: block.startDate,
-        end_date: null,
+        end_date: block.allDay ? null : block.endDate ?? null,
         all_day: block.allDay,
         all_day_date: block.allDay ? toLocalCalendarDate(block.startDate) : null,
         time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -491,6 +497,27 @@ interface TopicMemoEdgeRow {
   topic_id: string;
 }
 
+interface MemoSimilarityEdgeRow {
+  similarity: number;
+  source_memo_id: string;
+  source_topic_id: string | null;
+  target_memo_id: string;
+  target_topic_id: string | null;
+}
+
+interface TopicInboxItemRow {
+  inbox_session_id: string;
+  score: number | null;
+  topic_id: string;
+}
+
+interface TopicMemoInboxEdgeRow {
+  inbox_session_id: string;
+  memo_id: string;
+  similarity: number;
+  topic_id: string;
+}
+
 export const fetchTopicMap = async (session: Session): Promise<TopicMapData> => {
   const { data: clusterData, error: clusterError } = await supabase
     .from('topic_clusters')
@@ -514,6 +541,19 @@ export const fetchTopicMap = async (session: Session): Promise<TopicMapData> => 
     .from('topic_memo_edges')
     .select('topic_id, source_memo_id, target_memo_id, similarity');
   const edgeData = edgeResult.error ? [] : edgeResult.data ?? [];
+  // Tolerate a missing table so the app keeps working pre-migration.
+  const inboxItemResult = await supabase
+    .from('topic_cluster_inbox_items')
+    .select('topic_id, inbox_session_id, score');
+  const inboxItemData = inboxItemResult.error ? [] : inboxItemResult.data ?? [];
+  const inboxEdgeResult = await supabase
+    .from('topic_memo_inbox_edges')
+    .select('topic_id, memo_id, inbox_session_id, similarity');
+  const inboxEdgeData = inboxEdgeResult.error ? [] : inboxEdgeResult.data ?? [];
+  const globalEdgeResult = await supabase
+    .from('memo_similarity_edges')
+    .select('source_memo_id, target_memo_id, source_topic_id, target_topic_id, similarity');
+  const globalEdgeData = globalEdgeResult.error ? [] : globalEdgeResult.data ?? [];
 
   const clusters: TopicCluster[] = ((clusterData ?? []) as TopicClusterRow[]).map(
     row => ({
@@ -538,6 +578,29 @@ export const fetchTopicMap = async (session: Session): Promise<TopicMapData> => 
     targetMemoId: row.target_memo_id,
     topicId: row.topic_id,
   }));
+  const globalEdges = (globalEdgeData as MemoSimilarityEdgeRow[]).map(row => ({
+    similarity: row.similarity,
+    sourceMemoId: row.source_memo_id,
+    sourceTopicId: row.source_topic_id,
+    targetMemoId: row.target_memo_id,
+    targetTopicId: row.target_topic_id,
+  }));
 
-  return { clusters, edges, memberships };
+  const inboxMemberships: TopicInboxMembership[] = (
+    inboxItemData as TopicInboxItemRow[]
+  ).map(row => ({
+    inboxSessionId: row.inbox_session_id,
+    score: row.score,
+    topicId: row.topic_id,
+  }));
+  const inboxEdges: TopicMemoInboxEdge[] = (
+    inboxEdgeData as TopicMemoInboxEdgeRow[]
+  ).map(row => ({
+    inboxSessionId: row.inbox_session_id,
+    memoId: row.memo_id,
+    similarity: row.similarity,
+    topicId: row.topic_id,
+  }));
+
+  return { clusters, edges, globalEdges, inboxEdges, inboxMemberships, memberships };
 };

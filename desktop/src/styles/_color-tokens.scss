@@ -1,0 +1,136 @@
+:root {
+  /* Global UI color decisions live here. Feature/data palettes stay local. */
+  --app-color-bg: #fdfdfb;
+  --app-color-bg-design-soft: #f8f8f6;
+  --app-color-bg-design-card: #ffffff;
+  --app-color-bg-canvas: #ffffff;
+  --app-color-bg-surface: #ffffff;
+  --app-color-bg-toolbar: #fbfbfa;
+  --app-color-bg-paper: #ffffff;
+  --app-color-bg-muted: #f7f7f4;
+  --app-color-bg-active: #f8e4da;
+  --app-color-bg-active-soft: #fdf4f0;
+  --app-color-bg-source: #ffffff;
+  --app-color-bg-code: #1f1e1b;
+  --app-color-bg-hover: #f7f7f4;
+  --app-color-bg-pressed: #f1f0ed;
+  --app-color-bg-overlay: rgba(44, 37, 32, 0.24);
+  --app-color-chrome-bg: #fbfbfa;
+  --app-color-chrome-border: rgba(29, 29, 31, 0.07);
+
+  --app-color-border: #e9e7e1;
+  --app-color-border-soft: #eeece7;
+  --app-color-border-strong: #dedbd2;
+  --app-color-border-muted: #e3e1dc;
+  --app-color-border-warm: #e5ddd0;
+  --app-color-border-card: #e4ded5;
+  --app-color-border-design: #ece9e3;
+  --app-color-border-design-soft: #f0eee9;
+  --app-color-border-subtle: rgba(29, 29, 31, 0.05);
+  --app-color-border-wash: rgba(44, 37, 32, 0.06);
+
+  --app-color-text: #2c2520;
+  --app-color-text-strong: #1d1d1f;
+  --app-color-text-design: #141413;
+  --app-color-text-soft: #3b332b;
+  --app-color-muted: #9c8e7c;
+  --app-color-muted-2: #a09180;
+  --app-color-muted-design: #6c6a64;
+  --app-color-muted-soft: #8e8b82;
+  --app-color-muted-tab: #766c61;
+  --app-color-muted-control: #786b5f;
+  --app-color-muted-icon: #8a8175;
+
+  --app-color-accent: #8b7355;
+  --app-color-accent-dark: #5c4d3c;
+  --app-color-accent-soft: #f0ebdf;
+  --app-color-accent-border: #d8cebc;
+
+  --app-color-brand-50: #fdf4f0;
+  --app-color-brand-100: #f8e4da;
+  --app-color-brand-200: #f3b9a6;
+  --app-color-brand-300: #e98a6d;
+  --app-color-brand-400: #dc6343;
+  --app-color-brand-500: #cc4929;
+  --app-color-brand-600: #bf3f22;
+  --app-color-brand-700: #9f321b;
+  --app-color-brand-800: #7f2817;
+  --app-color-brand-900: #5b1c10;
+  --app-color-brand-950: #351008;
+  --app-color-brand-rgb: 204, 73, 41;
+  --app-color-selection: rgba(var(--app-color-brand-rgb), 0.2);
+  --app-color-focus-ring: rgba(var(--app-color-brand-rgb), 0.15);
+  --app-color-brand-glow: rgba(var(--app-color-brand-rgb), 0.2);
+
+  --app-color-danger: #b42318;
+  --app-color-danger-hover: #912018;
+  --app-color-danger-strong: #f97066;
+  --app-color-danger-soft: #fef3f2;
+  --app-color-danger-border: #fecdca;
+
+  --app-color-action-primary: var(--app-color-brand-500);
+  --app-color-action-primary-hover: var(--app-color-brand-600);
+  --app-color-action-primary-text: #ffffff;
+  --app-color-action-secondary-bg: var(--app-color-bg-paper);
+  --app-color-action-secondary-border: var(--app-color-border);
+  --app-color-action-secondary-text: var(--app-color-text-soft);
+  --app-color-action-secondary-hover: var(--app-color-bg-muted);
+}
+
+html.dark {
+  --app-color-bg: #161513;
+  --app-color-bg-design-soft: #201f1c;
+  --app-color-bg-design-card: #252320;
+  --app-color-bg-canvas: #1b1a17;
+  --app-color-bg-surface: #1f1e1b;
+  --app-color-bg-toolbar: #1b1a18;
+  --app-color-bg-paper: #1f1e1b;
+  --app-color-bg-muted: #232220;
+  --app-color-bg-active: #322f29;
+  --app-color-bg-active-soft: #2a2824;
+  --app-color-bg-source: #1d1c19;
+  --app-color-bg-code: #14130f;
+  --app-color-bg-hover: rgba(250, 249, 245, 0.06);
+  --app-color-bg-pressed: #35322c;
+  --app-color-bg-overlay: rgba(0, 0, 0, 0.5);
+  --app-color-chrome-bg: #1b1a18;
+  --app-color-chrome-border: rgba(250, 249, 245, 0.1);
+
+  --app-color-border: rgba(250, 249, 245, 0.12);
+  --app-color-border-soft: rgba(250, 249, 245, 0.08);
+  --app-color-border-strong: rgba(250, 249, 245, 0.16);
+  --app-color-border-muted: rgba(250, 249, 245, 0.1);
+  --app-color-border-warm: rgba(250, 249, 245, 0.14);
+  --app-color-border-card: rgba(250, 249, 245, 0.1);
+  --app-color-border-design: rgba(250, 249, 245, 0.1);
+  --app-color-border-design-soft: rgba(250, 249, 245, 0.07);
+  --app-color-border-subtle: rgba(250, 249, 245, 0.06);
+  --app-color-border-wash: rgba(250, 249, 245, 0.06);
+
+  --app-color-text: #ece7dd;
+  --app-color-text-strong: #faf9f5;
+  --app-color-text-design: #faf9f5;
+  --app-color-text-soft: #c9c3b8;
+  --app-color-muted: #9a948a;
+  --app-color-muted-2: #9a948a;
+  --app-color-muted-design: #908d85;
+  --app-color-muted-soft: #8e8b82;
+  --app-color-muted-tab: #a09d96;
+  --app-color-muted-control: #a09d96;
+  --app-color-muted-icon: #908d85;
+
+  --app-color-accent: #b89b78;
+  --app-color-accent-dark: #c4ab88;
+  --app-color-accent-soft: #2c2820;
+  --app-color-accent-border: rgba(184, 155, 120, 0.4);
+
+  --app-color-brand-50: #2a1a14;
+  --app-color-brand-100: #3a241b;
+  --app-color-selection: rgba(var(--app-color-brand-rgb), 0.18);
+
+  --app-color-danger: #f97066;
+  --app-color-danger-hover: #f04438;
+  --app-color-danger-strong: #f97066;
+  --app-color-danger-soft: #2e1c18;
+  --app-color-danger-border: rgba(181, 69, 58, 0.42);
+}

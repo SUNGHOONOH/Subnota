@@ -1,7 +1,7 @@
 .mini-composer {
-  background: #ffffff;
+  background: var(--legacy-bg-app, #faf9f5);
   box-sizing: border-box;
-  color: #1d1d1f;
+  color: var(--legacy-ink, #2c2520);
   display: flex;
   flex-direction: column;
   font-family: var(
@@ -34,7 +34,7 @@
   }
 
   &__main-button {
-    color: #717784;
+    color: var(--legacy-muted-design, #5c4d3c);
     position: relative;
     transition: background-color 140ms ease, color 140ms ease, transform 100ms ease;
 
@@ -45,8 +45,8 @@
     }
 
     &:hover {
-      background: #f0f1f3;
-      color: #1d1d1f;
+      background: var(--legacy-bg-hover, rgba(44, 37, 32, 0.08));
+      color: var(--legacy-ink, #2c2520);
     }
 
     &:active {
@@ -61,16 +61,16 @@
   }
 
   &__hint {
-    color: #9aa0ac;
+    color: var(--legacy-muted-soft, #9c8e7c);
     font-size: 11px;
   }
 
   &__input {
-    background: #f7f8fa;
-    border: 1px solid #e6e8ec;
+    background: var(--legacy-bg-paper, #fcfaf7);
+    border: 1px solid var(--legacy-border, #e5ddd0);
     border-radius: 10px;
     box-sizing: border-box;
-    color: #1d1d1f;
+    color: var(--legacy-ink, #2c2520);
     flex: 1;
     font-size: 14px;
     letter-spacing: -0.01em;
@@ -83,12 +83,13 @@
     -webkit-app-region: no-drag;
 
     &::placeholder {
-      color: #9aa0ac;
+      color: var(--legacy-muted-soft, #9c8e7c);
     }
 
     &:focus {
-      background: #ffffff;
-      border-color: #c2c8d2;
+      background: var(--legacy-bg-surface, #fffdf8);
+      border-color: var(--app-color-action-primary);
+      box-shadow: 0 0 0 3px var(--app-color-focus-ring);
     }
   }
 
@@ -101,9 +102,9 @@
 
   &__shortcut {
     align-items: center;
-    background: #f7f8fa;
+    background: var(--legacy-bg-paper, #fcfaf7);
     border-radius: 8px;
-    color: #50545d;
+    color: var(--legacy-accent-dark, #5c4d3c);
     display: flex;
     font-size: 10px;
     gap: 6px;
@@ -115,8 +116,8 @@
 
     &:hover,
     &.recording {
-      background: #eef0f3;
-      color: #1d1d1f;
+      background: var(--app-color-brand-100);
+      color: var(--legacy-ink, #2c2520);
     }
 
     &:active {
@@ -131,16 +132,16 @@
     gap: 2px;
 
     em {
-      color: #737985;
+      color: var(--app-color-action-primary);
       font-size: 10px;
       font-style: normal;
     }
 
     .mantine-Kbd-root {
-      background: #ffffff;
+      background: var(--legacy-bg-surface, #fffdf8);
       border: 0;
       box-shadow: 0 1px 1px rgb(0 0 0 / 8%), 0 0 0 1px rgb(0 0 0 / 6%);
-      color: #4f545d;
+      color: var(--legacy-accent-dark, #5c4d3c);
       font-family: inherit;
       font-size: 9px;
       height: 18px;
@@ -150,7 +151,7 @@
   }
 
   &__recent {
-    border-top: 1px solid #eceef1;
+    border-top: 1px solid var(--legacy-border, #e5ddd0);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -160,7 +161,7 @@
   }
 
   &__recent-title {
-    color: #8b909b;
+    color: var(--legacy-muted-design, #8b7355);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -177,7 +178,7 @@
     align-items: center;
     background: transparent;
     border: 0;
-    color: #3c3f46;
+    color: var(--legacy-ink-soft, #4f4b42);
     cursor: pointer;
     display: grid;
     font: inherit;
@@ -190,12 +191,12 @@
     width: 100%;
 
     &:hover {
-      color: #1d1d1f;
+      color: var(--app-color-action-primary);
     }
   }
 
   &__recent-source {
-    color: #717784;
+    color: var(--legacy-accent, #8b7355);
     font-size: 10px;
     font-weight: 600;
     max-width: 72px;
@@ -213,7 +214,7 @@
   }
 
   &__recent-empty {
-    color: #9aa0ac;
+    color: var(--legacy-muted-soft, #9c8e7c);
     font-size: 11px;
     margin: 0;
   }
@@ -226,7 +227,7 @@
   }
 
   &__status {
-    color: #9aa0ac;
+    color: var(--legacy-muted-soft, #9c8e7c);
     flex: 1;
     font-size: 11px;
     overflow: hidden;
@@ -235,10 +236,10 @@
   }
 
   &__save {
-    background: #1d1d1f;
+    background: var(--app-color-action-primary);
     border: 0;
     border-radius: 8px;
-    color: #ffffff;
+    color: var(--app-color-action-primary-text);
     cursor: pointer;
     flex-shrink: 0;
     font-size: 13px;
@@ -249,7 +250,7 @@
     -webkit-app-region: no-drag;
 
     &:hover {
-      background: #313135;
+      background: var(--app-color-action-primary-hover);
     }
 
     &:active {

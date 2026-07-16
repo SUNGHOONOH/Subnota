@@ -104,7 +104,7 @@ describe('networkService', () => {
     });
   });
 
-  it('formats browser-level fetch failures as an empty-state message', async () => {
+  it('formats browser-level fetch failures as retryable errors', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -113,7 +113,7 @@ describe('networkService', () => {
     );
 
     const {
-      NETWORK_SEARCH_EMPTY_MESSAGE,
+      NETWORK_SEARCH_RETRY_MESSAGE,
       formatNetworkSearchErrorMessage,
       searchCursorNetwork,
     } = await import('../services/backend/networkService');
@@ -128,7 +128,7 @@ describe('networkService', () => {
     await searchCursorNetwork({ memoId: null, queryText: '테스트' }).catch(
       error => {
         expect(formatNetworkSearchErrorMessage(error)).toBe(
-          NETWORK_SEARCH_EMPTY_MESSAGE,
+          NETWORK_SEARCH_RETRY_MESSAGE,
         );
       },
     );

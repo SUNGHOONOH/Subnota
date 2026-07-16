@@ -759,7 +759,9 @@ app.on('ready', () => {
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
             "font-src 'self' data: https://fonts.gstatic.com; " +
             "connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.run.app; " +
-            "img-src 'self' data: blob:",
+            // https: matches the packaged-app CSP — inbox thumbnails and
+            // domain favicons are remote images.
+            "img-src 'self' data: blob: https:",
           ],
         },
       });

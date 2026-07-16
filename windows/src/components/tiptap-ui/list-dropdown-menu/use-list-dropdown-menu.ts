@@ -15,12 +15,7 @@ import { ListTodoIcon } from "@/components/tiptap-icons/list-todo-icon"
 import { isNodeInSchema } from "@/lib/tiptap-utils"
 
 // --- Tiptap UI ---
-import {
-  canToggleList,
-  isListActive,
-  listIcons,
-  type ListType,
-} from "@/components/tiptap-ui/list-button"
+import { canToggleList, isListActive, listIcons, type ListType } from "@/components/tiptap-ui/list-button/use-list"
 
 /**
  * Configuration for the list dropdown menu functionality

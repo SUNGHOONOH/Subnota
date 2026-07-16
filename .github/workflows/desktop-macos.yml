@@ -1,0 +1,34 @@
+name: desktop-macos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'macos/**'
+      - '.github/workflows/desktop-macos.yml'
+  pull_request:
+    paths:
+      - 'macos/**'
+      - '.github/workflows/desktop-macos.yml'
+
+jobs:
+  check:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm version comes from macos/package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: macos/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: macos/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm test
+      - run: pnpm run lint

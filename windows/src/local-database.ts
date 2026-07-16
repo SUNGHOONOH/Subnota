@@ -10,6 +10,9 @@ const RECORD_TYPES = new Set([
   'activity_completion',
   'daily_completion',
   'tree',
+  // 서버 배치 결과의 읽기 전용 캐시 (local-first 즉시 표시용).
+  'schedule_inbox',
+  'topic_map',
 ]);
 const PENDING_TIMEOUT_MS = 10_000;
 const QUIT_DRAIN_DEADLINE_MS = 2_000;

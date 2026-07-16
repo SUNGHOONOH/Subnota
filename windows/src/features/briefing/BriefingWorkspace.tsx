@@ -1,31 +1,23 @@
 import { useState } from 'react';
+import { Group, Pagination } from '@mantine/core';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 import { CalendarDays } from '@/components/icons';
-import { formatBriefingDate } from '../../lib/date';
-import { BriefingRow, ScheduleInboxRow } from '../../types';
+import { ScheduleInboxRow } from '../../types';
 import DateSchedulePopover from '../memo/components/DateSchedulePopover';
+import DateScheduleField from '../memo/components/DateScheduleField';
 
 interface BriefingWorkspaceProps {
-  briefings: BriefingRow[];
   inboxItems: ScheduleInboxRow[];
   onAcceptInbox: (item: ScheduleInboxRow) => void;
   onDismissInbox: (item: ScheduleInboxRow) => void;
 }
 
-const getPreview = (content: string) => {
-  const line =
-    content
-      .split('\n')
-      .map(value => value.trim())
-      .find(Boolean) ?? '아직 브리핑이 없습니다.';
-
-  return line.length > 70 ? `${line.slice(0, 70).trimEnd()}...` : line;
-};
-
 // A candidate "has a time" only when it is not all-day and the extractor found a
 // time phrase. Otherwise approving it opens the mini calendar to pick one.
+const PAGE_SIZE = 6;
+
 const hasScheduledTime = (item: ScheduleInboxRow) =>
   !item.all_day && item.time_text !== null;
 
@@ -38,22 +30,21 @@ const formatScheduleDate = (item: ScheduleInboxRow) => {
 };
 
 const BriefingWorkspace = ({
-  briefings,
   inboxItems,
   onAcceptInbox,
   onDismissInbox,
 }: BriefingWorkspaceProps) => {
-  const [isBriefingInboxOpen, setBriefingInboxOpen] = useState(false);
   const [editingInbox, setEditingInbox] = useState<ScheduleInboxRow | null>(null);
   const [editingTime, setEditingTime] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
-  const [selectedBriefing, setSelectedBriefing] = useState<BriefingRow | null>(
-    null,
-  );
   const [approvingItem, setApprovingItem] = useState<ScheduleInboxRow | null>(
     null,
   );
-  const latestBriefing = briefings[0] ?? null;
+  const [page, setPage] = useState(1);
+
+  const pageCount = Math.max(1, Math.ceil(inboxItems.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const pagedItems = inboxItems.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   const openInboxEditor = (item: ScheduleInboxRow) => {
     const scheduledAt = new Date(item.scheduled_at);
@@ -87,35 +78,6 @@ const BriefingWorkspace = ({
 
   return (
     <div className="briefing-layout">
-      <button
-        className="latest-briefing-card"
-        disabled={!latestBriefing}
-        onClick={() => latestBriefing && setSelectedBriefing(latestBriefing)}
-        type="button"
-      >
-        <span>최근 브리핑</span>
-        <strong>
-          {latestBriefing
-            ? formatBriefingDate(latestBriefing.briefing_date, latestBriefing.created_at)
-            : '아직 생성된 브리핑이 없습니다'}
-        </strong>
-        <p>
-          {latestBriefing
-            ? latestBriefing.content
-            : '저녁 batch가 실행되면 내일 일정, 최근 메모, 한 달 전쯤의 생각을 엮은 브리핑이 표시됩니다.'}
-        </p>
-      </button>
-
-      {briefings.length > 0 && (
-        <button
-          className="briefing-history-link"
-          onClick={() => setBriefingInboxOpen(true)}
-          type="button"
-        >
-          과거 브리핑 {briefings.length}개 보기
-        </button>
-      )}
-
       <div className="schedule-approve-header">
         <strong>저장할 일정</strong>
         <span className="count">{inboxItems.length}</span>
@@ -126,7 +88,7 @@ const BriefingWorkspace = ({
         {inboxItems.length === 0 && (
           <p className="empty-text">아직 쌓인 일정 후보가 없습니다.</p>
         )}
-        {inboxItems.map(item => (
+        {pagedItems.map(item => (
           <article className="schedule-approve-card" key={item.id}>
             <div className="schedule-approve-title-row">
               <strong className="schedule-approve-title">{item.title}</strong>
@@ -184,41 +146,10 @@ const BriefingWorkspace = ({
         ))}
       </div>
 
-      {isBriefingInboxOpen && (
-        <div className="modal-backdrop" role="presentation">
-          <section className="sheet-panel">
-            <div className="sheet-handle" />
-            <div className="sheet-title-row">
-              <div>
-                <p className="eyebrow">Briefing Inbox</p>
-                <h2>과거 브리핑</h2>
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => setBriefingInboxOpen(false)}
-                type="button"
-              >
-                닫기
-              </button>
-            </div>
-            <div className="sheet-list">
-              {briefings.length === 0 && (
-                <p className="empty-text">아직 저장된 데일리 브리핑이 없습니다.</p>
-              )}
-              {briefings.map(item => (
-                <button
-                  className="briefing-row"
-                  key={item.id}
-                  onClick={() => setSelectedBriefing(item)}
-                  type="button"
-                >
-                  <strong>{formatBriefingDate(item.briefing_date, item.created_at)}</strong>
-                  <span>{getPreview(item.content)}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
+      {pageCount > 1 && (
+        <Group justify="center" mt="md">
+          <Pagination onChange={setPage} size="sm" total={pageCount} value={current} />
+        </Group>
       )}
 
       {editingInbox && (
@@ -226,7 +157,7 @@ const BriefingWorkspace = ({
           <section className="detail-panel compact-sheet">
             <div className="sheet-title-row">
               <div>
-                <p className="eyebrow">Schedule Candidate</p>
+                <p className="eyebrow">일정 후보</p>
                 <h2>시간 / 제목 수정</h2>
               </div>
               <button
@@ -244,14 +175,16 @@ const BriefingWorkspace = ({
                 value={editingTitle}
               />
             </label>
-            <label>
-              시간
-              <input
-                onChange={event => setEditingTime(event.target.value)}
-                type="datetime-local"
-                value={editingTime}
+            <div className="sheet-field">
+              <DateScheduleField
+                allDay={false}
+                date={new Date(editingTime)}
+                label="시간"
+                onChange={date =>
+                  setEditingTime(format(date, "yyyy-MM-dd'T'HH:mm"))
+                }
               />
-            </label>
+            </div>
             <p className="empty-text">{editingInbox.source_text}</p>
             <div className="sheet-actions">
               <button
@@ -262,27 +195,6 @@ const BriefingWorkspace = ({
                 수정해서 등록
               </button>
             </div>
-          </section>
-        </div>
-      )}
-
-      {selectedBriefing && (
-        <div className="modal-backdrop detail-backdrop" role="presentation">
-          <section className="detail-panel">
-            <div className="sheet-title-row">
-              <div>
-                <p className="eyebrow">Daily Briefing</p>
-                <h2>{formatBriefingDate(selectedBriefing.briefing_date, selectedBriefing.created_at)}</h2>
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => setSelectedBriefing(null)}
-                type="button"
-              >
-                닫기
-              </button>
-            </div>
-            <p className="briefing-detail-content">{selectedBriefing.content}</p>
           </section>
         </div>
       )}

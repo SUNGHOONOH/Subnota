@@ -1,0 +1,190 @@
+export interface ShortcutSettings {
+  capturePage: string;
+  openSearch: string;
+  toggleMini: string;
+}
+
+export interface GlobalShortcutRegistration {
+  capture: boolean;
+  toggle: boolean;
+}
+
+export interface GlobalShortcutUpdateResult {
+  registered: GlobalShortcutRegistration;
+  settings: ShortcutSettings;
+}
+
+// Bumped to v2 when 메모 검색 moved off ⌘K (now used for link insertion in the
+// editor) to ⌘⇧F, so previously-persisted v1 settings don't keep the old key.
+export const SHORTCUT_STORAGE_KEY = 'subnota.shortcuts.v2';
+
+export const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
+  capturePage: 'Shift+CommandOrControl+S',
+  openSearch: 'Shift+CommandOrControl+F',
+  toggleMini: 'Alt+S',
+};
+
+const readShortcutValue = (
+  value: unknown,
+  fallback: string,
+) => (typeof value === 'string' && value.trim() ? value.trim() : fallback);
+
+export const normalizeShortcutSettings = (
+  value?: Partial<ShortcutSettings> | null,
+): ShortcutSettings => ({
+  capturePage: readShortcutValue(
+    value?.capturePage,
+    DEFAULT_SHORTCUT_SETTINGS.capturePage,
+  ),
+  openSearch: readShortcutValue(
+    value?.openSearch,
+    DEFAULT_SHORTCUT_SETTINGS.openSearch,
+  ),
+  toggleMini: readShortcutValue(
+    value?.toggleMini,
+    DEFAULT_SHORTCUT_SETTINGS.toggleMini,
+  ),
+});
+
+export const loadShortcutSettings = () => {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return DEFAULT_SHORTCUT_SETTINGS;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SHORTCUT_STORAGE_KEY);
+    return raw
+      ? normalizeShortcutSettings(JSON.parse(raw) as Partial<ShortcutSettings>)
+      : DEFAULT_SHORTCUT_SETTINGS;
+  } catch {
+    return DEFAULT_SHORTCUT_SETTINGS;
+  }
+};
+
+export const saveShortcutSettings = (settings: ShortcutSettings) => {
+  const normalized = normalizeShortcutSettings(settings);
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(normalized));
+  }
+
+  return normalized;
+};
+
+const normalizeKey = (key: string) => {
+  if (key === ' ') {
+    return 'space';
+  }
+  return key.toLowerCase();
+};
+
+const MODIFIER_KEYS = new Set([
+  'Alt',
+  'Control',
+  'Meta',
+  'Shift',
+]);
+
+const normalizeAcceleratorKey = (key: string) => {
+  if (MODIFIER_KEYS.has(key)) {
+    return null;
+  }
+  if (key === ' ') {
+    return 'Space';
+  }
+  if (key === 'ArrowUp') {
+    return 'Up';
+  }
+  if (key === 'ArrowDown') {
+    return 'Down';
+  }
+  if (key === 'ArrowLeft') {
+    return 'Left';
+  }
+  if (key === 'ArrowRight') {
+    return 'Right';
+  }
+  if (key.length === 1) {
+    return key.toUpperCase();
+  }
+  return key;
+};
+
+export const keyboardEventToAccelerator = (
+  event: Pick<
+    KeyboardEvent,
+    'altKey' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'
+  >,
+  options: { requireModifier?: boolean } = {},
+) => {
+  const key = normalizeAcceleratorKey(event.key);
+  if (!key) {
+    return null;
+  }
+
+  const modifiers: string[] = [];
+  if (event.ctrlKey || event.metaKey) {
+    modifiers.push('CommandOrControl');
+  }
+  if (event.altKey) {
+    modifiers.push('Alt');
+  }
+  if (event.shiftKey) {
+    modifiers.push('Shift');
+  }
+
+  if (options.requireModifier && modifiers.length === 0) {
+    return null;
+  }
+
+  return [...modifiers, key].join('+');
+};
+
+export const matchesKeyboardShortcut = (
+  event: KeyboardEvent,
+  accelerator: string,
+) => {
+  const tokens = accelerator
+    .split('+')
+    .map(token => token.trim().toLowerCase())
+    .filter(Boolean);
+  const wantsShift = tokens.includes('shift');
+  const wantsAlt = tokens.includes('alt') || tokens.includes('option');
+  const wantsCommandOrControl =
+    tokens.includes('commandorcontrol') || tokens.includes('cmdorctrl');
+  const wantsControl =
+    tokens.includes('control') || tokens.includes('ctrl') || wantsCommandOrControl;
+  const wantsCommand =
+    tokens.includes('command') ||
+    tokens.includes('cmd') ||
+    tokens.includes('meta') ||
+    wantsCommandOrControl;
+  const keyToken = tokens.find(
+    token =>
+      ![
+        'alt',
+        'cmd',
+        'cmdorctrl',
+        'command',
+        'commandorcontrol',
+        'control',
+        'ctrl',
+        'meta',
+        'option',
+        'shift',
+      ].includes(token),
+  );
+
+  if (!keyToken || normalizeKey(event.key) !== keyToken) {
+    return false;
+  }
+  if (event.shiftKey !== wantsShift || event.altKey !== wantsAlt) {
+    return false;
+  }
+
+  if (wantsCommandOrControl) {
+    return event.ctrlKey || event.metaKey;
+  }
+
+  return event.ctrlKey === wantsControl && event.metaKey === wantsCommand;
+};
