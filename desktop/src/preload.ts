@@ -208,4 +208,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('local-db:restore', filePath),
   exportJson: (name: string, value: unknown): Promise<string | null> =>
     ipcRenderer.invoke('local-db:export-json', name, value),
+  exportMarkdown: (name: string, content: string): Promise<string | null> =>
+    ipcRenderer.invoke('local-db:export-markdown', name, content),
 });

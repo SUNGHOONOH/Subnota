@@ -184,6 +184,24 @@ def rebuild_user_memo_chunk_edges(
     return int(response.data or 0)
 
 
+def rebuild_user_memo_similarity_edges(
+    user_id: str,
+    match_count: int,
+    min_similarity: float,
+) -> int:
+    client = get_supabase()
+    response = client.rpc(
+        "rebuild_user_memo_similarity_edges",
+        {
+            "p_user_id": user_id,
+            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_match_count": match_count,
+            "p_min_similarity": min_similarity,
+        },
+    ).execute()
+    return int(response.data or 0)
+
+
 def claim_memo_chunk_index_lease(
     user_id: str,
     lease_token: str,
@@ -229,3 +247,30 @@ def fetch_memo_chunk_neighbors(
         },
     ).execute()
     return cast(list[DatabaseRow], response.data or [])
+
+
+def fetch_inbox_embeddings_for_user(user_id: str) -> list[DatabaseRow]:
+    """Latest summary embedding per saved inbox session, parsed to floats."""
+    client = get_supabase()
+    response = (
+        client.table("inbox_session_embeddings")
+        .select("inbox_session_id, embedding, updated_at")
+        .eq("user_id", user_id)
+        .eq("embedding_model", constants.EMBEDDING_MODEL)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    rows = cast(list[DatabaseRow], response.data or [])
+
+    seen: set[str] = set()
+    latest: list[DatabaseRow] = []
+    for row in rows:
+        session_id = str(row.get("inbox_session_id") or "")
+        embedding = row.get("embedding")
+        if not session_id or session_id in seen or embedding is None:
+            continue
+        seen.add(session_id)
+        latest.append(
+            {"inbox_session_id": session_id, "embedding": parse_vector(embedding)}
+        )
+    return latest

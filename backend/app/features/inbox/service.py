@@ -1,14 +1,15 @@
 from urllib.parse import urlparse
 
 from app.core import constants
-from app.db import (
-    DatabaseRow,
+from app.db.inbox import (
+    delete_inbox_session,
     fetch_inbox_session,
     fetch_inbox_sessions,
     fetch_indexable_inbox_sessions,
     insert_inbox_session,
     update_inbox_session,
 )
+from app.db.types import DatabaseRow
 from app.features.inbox.indexing import replace_inbox_summary_embedding
 from app.features.inbox.schemas import (
     InboxSessionCreateRequest,
@@ -62,6 +63,18 @@ def create_inbox_session(user_id: str, request: InboxSessionCreateRequest) -> Da
         "metadata": {},
     }
     return insert_inbox_session(user_id, row)
+
+
+# Likes are written through the backend because inbox_sessions has no client
+# RLS policy (revoked 2026-06-23) — the service role scopes the row by user_id.
+def set_inbox_session_liked(user_id: str, session_id: str, liked: bool) -> DatabaseRow:
+    return update_inbox_session(user_id, session_id, {"liked": liked})
+
+
+# Deletes follow the same backend-only write path. Idempotent: removing an
+# already-deleted session is not an error.
+def remove_inbox_session(user_id: str, session_id: str) -> bool:
+    return delete_inbox_session(user_id, session_id)
 
 
 def list_inbox_sessions(user_id: str, limit: int = 50) -> InboxSessionListResponse:
@@ -158,7 +171,14 @@ def analyze_youtube(url: str | None) -> DatabaseRow:
 
 
 def analyze_url(url: str | None) -> DatabaseRow:
-    page = fetch_page_metadata(url)
+    try:
+        page = fetch_page_metadata(url)
+    except Exception as exc:
+        page = {
+            "provider": "html_fetch_failed",
+            "canonical_url": url,
+            "error": str(exc)[:500],
+        } if url else {}
     extracted = optional_str(page.get("extracted_text"))
     summary = None
     summary_model = None
@@ -181,11 +201,16 @@ def analyze_url(url: str | None) -> DatabaseRow:
         }
 
     fallback_summary = build_metadata_summary_payload(page)
+    has_preview = any(page.get(key) for key in ("title", "description", "thumbnail_url"))
     return {
         **metadata_to_patch(page, keep_existing=True),
         **summary_payload_to_patch(fallback_summary),
         "summary_status": "partial" if page else "unsupported",
-        "summary_basis": "제목/설명 기준" if page else "요약 불가",
+        "summary_basis": (
+            "제목/설명 기준"
+            if has_preview
+            else "링크만 저장됨" if page else "요약 불가"
+        ),
         "summary_provider": page.get("provider", "open_graph") if page else "subnota",
         "metadata": page,
     }

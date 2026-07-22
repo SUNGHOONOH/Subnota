@@ -114,6 +114,7 @@ interface ElectronAPI {
   backupLocalData: () => Promise<string | null>;
   restoreLocalData: (filePath: string) => Promise<void>;
   exportJson: (name: string, value: unknown) => Promise<string | null>;
+  exportMarkdown: (name: string, content: string) => Promise<string | null>;
 }
 
 interface Window {

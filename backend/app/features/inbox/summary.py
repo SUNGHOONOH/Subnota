@@ -3,7 +3,7 @@ from typing import Any
 
 from app.core import constants as model_constants
 from app.core.config import settings
-from app.db import DatabaseRow
+from app.db.types import DatabaseRow
 from app.features.inbox.constants import MAX_EXTRACTED_TEXT_CHARS, SUMMARY_PROMPT_KO
 from app.features.inbox.utils import clean_summary, clean_text, limit_chars, optional_str
 
@@ -120,7 +120,29 @@ def parse_summary_payload(value: str | None) -> DatabaseRow | None:
         "one_liner": one_liner,
         "search_summary": search_summary,
         "detail_summary": detail_summary,
+        "keywords": clean_keywords(payload.get("keywords")),
     }
+
+
+def clean_keywords(value: Any) -> list[str]:
+    # Optional enrichment: anything malformed degrades to an empty list so the
+    # card simply shows no keyword chips instead of surfacing an error.
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in value:
+        text = limit_chars(clean_text(optional_str(item)), 24)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= 6:
+            break
+    return result
 
 
 def fallback_summary_payload(value: str | None) -> DatabaseRow | None:
@@ -141,11 +163,13 @@ def summary_payload_to_patch(payload: DatabaseRow | None) -> DatabaseRow:
     one_liner = optional_str(payload.get("one_liner")) if payload else None
     search_summary = optional_str(payload.get("search_summary")) if payload else None
     detail_summary = optional_str(payload.get("detail_summary")) if payload else None
+    keywords = payload.get("keywords") if payload else None
     return {
         "summary": one_liner,
         "summary_one_liner": one_liner,
         "summary_search_text": search_summary,
         "summary_detail": detail_summary,
+        "keywords": keywords if isinstance(keywords, list) else [],
     }
 
 

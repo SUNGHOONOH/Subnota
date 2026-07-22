@@ -9,12 +9,16 @@ def replace_topic_clusters(
     clusters: list[DatabaseRow],
     memberships_by_cluster_index: list[list[DatabaseRow]],
     edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
+    inbox_items_by_cluster_index: list[list[DatabaseRow]] | None = None,
+    inbox_edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
 ) -> None:
     client = get_supabase()
 
     cluster_rows: list[DatabaseRow] = []
     memberships: list[DatabaseRow] = []
     edges: list[DatabaseRow] = []
+    inbox_items: list[DatabaseRow] = []
+    inbox_edges: list[DatabaseRow] = []
     for index, cluster in enumerate(clusters):
         topic_id = str(uuid4())
         cluster_rows.append({**cluster, "id": topic_id})
@@ -23,6 +27,12 @@ def replace_topic_clusters(
         if edges_by_cluster_index:
             for edge in edges_by_cluster_index[index]:
                 edges.append({"topic_id": topic_id, **edge})
+        if inbox_items_by_cluster_index:
+            for item in inbox_items_by_cluster_index[index]:
+                inbox_items.append({"topic_id": topic_id, **item})
+        if inbox_edges_by_cluster_index:
+            for edge in inbox_edges_by_cluster_index[index]:
+                inbox_edges.append({"topic_id": topic_id, **edge})
     client.rpc(
         "replace_topic_map",
         {
@@ -30,6 +40,8 @@ def replace_topic_clusters(
             "p_clusters": cluster_rows,
             "p_memberships": memberships,
             "p_edges": edges,
+            "p_inbox_items": inbox_items,
+            "p_inbox_edges": inbox_edges,
         },
     ).execute()
 
@@ -47,6 +59,12 @@ def has_topic_dirty_memos(user_id: str) -> bool:
     )
     rows = cast(list[DatabaseRow], response.data or [])
     return bool(rows)
+
+
+def mark_user_topics_dirty(user_id: str) -> None:
+    get_supabase().table("memos").update({"topic_dirty": True}).eq(
+        "user_id", user_id
+    ).eq("is_archived", False).neq("content", "").execute()
 
 
 def mark_topic_memos_clean(user_id: str, memos: list[MemoRecord]) -> None:

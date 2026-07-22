@@ -14,7 +14,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_headers=["Authorization", "Content-Type"],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    # PATCH: /inbox/sessions/{id}/liked — 빠지면 preflight에서 차단된다.
+    allow_methods=["GET", "PATCH", "POST", "OPTIONS"],
     allow_origins=[
         origin.strip()
         for origin in settings.cors_allow_origins.split(",")

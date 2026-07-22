@@ -66,6 +66,9 @@ export const buildKnowledgeGraph = (
   const graph = new Graph({ multi: true, type: 'undirected' });
 
   nodes.forEach(node => {
+    if (!node.id || graph.hasNode(node.id)) {
+      return;
+    }
     graph.addNode(node.id, {
       color: node.color ?? (node.muted ? GRAPH_COLORS.mutedNode : GRAPH_COLORS.defaultNode),
       forceLabel: node.forceLabel,
@@ -74,8 +77,8 @@ export const buildKnowledgeGraph = (
       memoId: node.memoId,
       size: node.size ?? 8,
       topicId: node.topicId,
-      x: node.x,
-      y: node.y,
+      x: Number.isFinite(node.x) ? node.x : 0,
+      y: Number.isFinite(node.y) ? node.y : 0,
       // Icon nodes: disc + white pictogram (compound 'icon' program).
       ...(node.image
         ? { image: node.image, type: 'icon' }
@@ -93,8 +96,13 @@ export const buildKnowledgeGraph = (
       return;
     }
 
+    const edgeId = edge.id ?? `${edge.source}-${edge.target}-${index}`;
+    if (graph.hasEdge(edgeId)) {
+      return;
+    }
+
     const weight = normalizeWeight(edge.weight);
-    graph.addEdgeWithKey(edge.id ?? `${edge.source}-${edge.target}-${index}`, edge.source, edge.target, {
+    graph.addEdgeWithKey(edgeId, edge.source, edge.target, {
       color: edge.color ?? GRAPH_COLORS.defaultEdge,
       size: edge.size ?? 0.6 + weight * 2.4,
       weight,

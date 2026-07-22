@@ -8,21 +8,28 @@ import React, {
 import { format } from 'date-fns';
 import type { Editor } from '@tiptap/core';
 import {
-  CalendarPlus,
+  CalendarDays,
   Check,
   ChevronDown,
+  ClipboardCopy,
   Columns2,
+  Copy,
+  Download,
   ExternalLink,
+  MoreHorizontal,
   Network,
   PanelLeft,
   PanelLeftClose,
   Pin,
   PinSolid,
   Plus,
+  Search,
+  Trash2,
   X,
 } from '@/components/icons';
 import { useClickOutside } from '@mantine/hooks';
 import TooltipIconButton from '../../../components/TooltipIconButton';
+import RenderErrorBoundary from '../../../components/RenderErrorBoundary';
 import {
   MemoRow,
   CalendarBlockRow,
@@ -44,9 +51,11 @@ import {
   searchCursorNetwork,
 } from '../../../services/backend/networkService';
 import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
+import { EditorContext } from '@tiptap/react';
+import { UndoRedoButton } from '../../../components/tiptap-ui/undo-redo-button/undo-redo-button';
 import {
+  NoteFixedToolbar,
   SimpleEditor,
-  SimpleEditorToolbar,
 } from '../../../components/tiptap-templates/simple/simple-editor';
 import CalendarWorkspace, { CalendarTreePanel } from '../../calendar/CalendarWorkspace';
 import BriefingWorkspace from '../../briefing/BriefingWorkspace';
@@ -56,8 +65,17 @@ import {
   editorsAfterOpenSource,
   editorsAfterOpenTab,
 } from '../../../lib/splitPaneTabs';
-import { parseDates } from '../../../lib/dateParser';
+import {
+  formatDisplayDate,
+  formatTimeIfPresent,
+} from '../../../lib/dateParser';
+import { joinNoteContent, splitNoteContent } from '../../../lib/noteTitle';
+import {
+  buildScheduleFromSelection,
+  buildScheduleNote,
+} from '../../../lib/scheduleFromSelection';
 import DateSchedulePopover from './DateSchedulePopover';
+import ScheduleConfirmPopover from './ScheduleConfirmPopover';
 import SourceDetailPane from './SourceDetailPane';
 import KnowledgeGraphView, {
   KnowledgeGraphEdge,
@@ -194,6 +212,10 @@ const getActiveEditor = (pane: MemoSplitPaneState) => {
     editors.find(editor => editor.id === pane.activeEditorId) ?? editors[0]
   );
 };
+
+const PaneBodyRenderer = ({ render }: { render: () => React.ReactNode }) => (
+  <>{render()}</>
+);
 
 const mirrorEditorPatch = (
   editor: MemoSplitEditorState,
@@ -509,8 +531,12 @@ const getSourceLabel = (result: NetworkSearchResult) => {
 
 interface MemoSplitWorkspaceProps {
   ambientEditorId?: string | null;
+  ambientEmptyEditorId?: string | null;
   ambientError?: string | null;
+  ambientPendingEditorId?: string | null;
   ambientResult?: NetworkSearchResult | null;
+  ambientSearchingEditorId?: string | null;
+  onRunAmbientSearch?: () => void;
   canAddPane?: boolean;
   focusedPaneId?: string | null;
   initialPaneWidths?: Record<string, number>;
@@ -523,10 +549,10 @@ interface MemoSplitWorkspaceProps {
   onFocusPane?: (id: string) => void;
   onPaneWidthsChange?: (widths: Record<string, number>) => void;
   onAmbientQuery?: (editorId: string, memoId: string | null, queryText: string) => void;
-  onRetryAmbient?: () => void;
   panes: MemoSplitPaneState[];
   memos: MemoRow[];
   onCreateMemo: (content: string, category?: string) => MemoRow;
+  onDeleteMemoById?: (memoId: string) => void;
   onUpdateMemo: (id: string, content: string) => void;
   onSelectMemoById: (memoId: string) => void;
   
@@ -540,6 +566,7 @@ interface MemoSplitWorkspaceProps {
   // 수집함 연동
   inboxItems: any[];
   isInboxLoading: boolean;
+  onDeleteInboxItem: (id: string) => void;
   onRefreshInbox: () => void;
   onSaveInboxUrl: (url: string) => Promise<void>;
   onToggleInboxLike: (id: string, liked: boolean) => void;
@@ -565,8 +592,12 @@ interface MemoSplitWorkspaceProps {
 
 const MemoSplitWorkspace = ({
   ambientEditorId = null,
+  ambientEmptyEditorId = null,
   ambientError = null,
+  ambientPendingEditorId = null,
   ambientResult = null,
+  ambientSearchingEditorId = null,
+  onRunAmbientSearch,
   canAddPane = true,
   focusedPaneId,
   initialPaneWidths = {},
@@ -579,10 +610,10 @@ const MemoSplitWorkspace = ({
   onFocusPane,
   onPaneWidthsChange,
   onAmbientQuery,
-  onRetryAmbient,
   panes,
   memos,
   onCreateMemo,
+  onDeleteMemoById,
   onUpdateMemo,
   onSelectMemoById,
   calendarBlocks,
@@ -592,6 +623,7 @@ const MemoSplitWorkspace = ({
   calendarTreePanel,
   inboxItems,
   isInboxLoading,
+  onDeleteInboxItem,
   onRefreshInbox,
   onSaveInboxUrl,
   onToggleInboxLike,
@@ -614,6 +646,16 @@ const MemoSplitWorkspace = ({
   const [openDatePickerEditorId, setOpenDatePickerEditorId] = useState<
     string | null
   >(null);
+  // 피커를 "날짜 변경"으로 열 때 감지된 날짜를 시드로 넘긴다.
+  const [datePickerSeed, setDatePickerSeed] = useState<Date | null>(null);
+  // 날짜가 감지됐을 때 바로 저장하지 않고 보여주는 확인 팝오버 상태.
+  const [scheduleConfirm, setScheduleConfirm] = useState<{
+    editorId: string;
+    date: Date;
+    allDay: boolean;
+    title: string;
+    label: string;
+  } | null>(null);
   const [openMenuPaneId, setOpenMenuPaneId] = useState<string | null>(null);
   // 스택 탭 드롭다운 외부 클릭 시 닫기. 토글 버튼이 있는 actions 줄은 제외해
   // "닫힘 → onClick 재오픈" 레이스를 막는다 (한 번에 하나만 열리므로 ref 한 쌍).
@@ -623,10 +665,20 @@ const MemoSplitWorkspace = ({
     menuDropdownEl,
     menuActionsEl,
   ]);
+  // 노트 ⋯ 메뉴(노트 관리 전용). 패널 메뉴와 동일한 외부 클릭 닫기 패턴.
+  const [openNoteMenuEditorId, setOpenNoteMenuEditorId] = useState<
+    string | null
+  >(null);
+  const [noteMenuDropdownEl, setNoteMenuDropdownEl] =
+    useState<HTMLDivElement | null>(null);
+  const [noteMenuButtonEl, setNoteMenuButtonEl] =
+    useState<HTMLDivElement | null>(null);
+  useClickOutside(() => setOpenNoteMenuEditorId(null), null, [
+    noteMenuDropdownEl,
+    noteMenuButtonEl,
+  ]);
   const [focusedTopicId, setFocusedTopicId] = useState<string | null>(null);
-  const [activeEditorInstanceId, setActiveEditorInstanceId] = useState<string | null>(
-    null,
-  );
+  const [focusedMemoId, setFocusedMemoId] = useState<string | null>(null);
   const [editorInstances, setEditorInstances] = useState<
     Record<string, Editor | null>
   >({});
@@ -640,8 +692,9 @@ const MemoSplitWorkspace = ({
 
   useEffect(() => {
     const handleShowTopicFolder = (event: Event) => {
-      const detail = (event as CustomEvent<{ topicId?: string }>).detail;
+      const detail = (event as CustomEvent<{ memoId?: string; topicId?: string }>).detail;
       setFocusedTopicId(detail?.topicId ?? null);
+      setFocusedMemoId(detail?.memoId ?? null);
     };
 
     window.addEventListener('subnota:show-topic-folder', handleShowTopicFolder);
@@ -709,25 +762,10 @@ const MemoSplitWorkspace = ({
     const instance = editorInstances[id];
     return instance && !instance.isDestroyed ? instance : null;
   };
-  // Safety net: if neither id resolves (e.g. an id changed out from under the
-  // map), fall back to any live instance so the toolbar never vanishes.
-  const firstLiveEditor = () => {
-    for (const candidate of Object.values(editorInstances)) {
-      if (candidate && !candidate.isDestroyed) {
-        return candidate;
-      }
-    }
-    return null;
-  };
-  // The live editor for the focused pane (null when the focused pane shows a
-  // non-editor view like calendar/inbox). Drives whether the toolbar is active.
+  // 크롬 줄 undo/redo가 바라보는 에디터. 노트 탭이 아닐 때는 null을 넘겨
+  // 파괴된 Tiptap 인스턴스를 잡는 destroy/render 레이스를 피한다.
   const focusedToolbarEditor =
-    resolveLiveEditor(focusedPane?.id) ?? resolveLiveEditor(activeEditorInstanceId);
-  // Always hand the toolbar SOME live instance so the buttons render; when the
-  // focused pane has no editor we keep them rendered but disabled (greyed),
-  // rather than letting the whole toolbar vanish.
-  const activeToolbarEditor = focusedToolbarEditor ?? firstLiveEditor();
-  const isToolbarActive = Boolean(focusedToolbarEditor);
+    focusedEditor?.view === 'memo' ? resolveLiveEditor(focusedPane?.id) : null;
 
   // Editor instances are keyed by PANE id (each pane renders exactly one live
   // SimpleEditor, for its active editor). Keying by editor.id was fragile: when
@@ -742,9 +780,6 @@ const MemoSplitWorkspace = ({
         ? prev
         : Object.fromEntries(entries);
     });
-    setActiveEditorInstanceId(prev =>
-      prev && livePaneIds.has(prev) ? prev : null,
-    );
   }, [panes]);
 
   const patchActiveEditor = useCallback(
@@ -1146,6 +1181,21 @@ const MemoSplitWorkspace = ({
       window.removeEventListener('subnota:open-inbox-source', handleOpenInboxSource);
   }, [focusedPane, inboxItems, openSourceInPane, panes]);
 
+  // 캘린더 일정의 "원본 노트 열기" → 해당 노트를 포커스 패널 탭으로 연다.
+  useEffect(() => {
+    const handleOpenMemo = (event: Event) => {
+      const detail = (event as CustomEvent<{ memoId?: string }>).detail;
+      const memo = detail?.memoId ? memoById.get(detail.memoId) : null;
+      const pane = focusedPane ?? panes[0];
+      if (memo && pane) {
+        openMemoInPane(pane.id, memo);
+      }
+    };
+
+    window.addEventListener('subnota:open-memo', handleOpenMemo);
+    return () => window.removeEventListener('subnota:open-memo', handleOpenMemo);
+  }, [focusedPane, memoById, openMemoInPane, panes]);
+
   const handleChangeMemoText = (
     pane: MemoSplitPaneState,
     editor: MemoSplitEditorState,
@@ -1203,23 +1253,54 @@ const MemoSplitWorkspace = ({
       return;
     }
 
-    const match = parseDates(selectedText, Date.now())[0];
-    if (!match) {
-      window.alert('선택한 문장 안에 날짜 표현이 필요합니다.');
+    const schedule = buildScheduleFromSelection(selectedText);
+    if (!schedule.date) {
+      // 날짜 미인식 → 바로 날짜 피커를 띄워 직접 고르게 한다.
+      setScheduleConfirm(null);
+      setDatePickerSeed(null);
+      setOpenDatePickerEditorId(editor.id);
       return;
     }
 
+    // 날짜 감지 → 저장 전에 감지 결과(숫자 날짜)를 확인 바로 보여준다.
+    const time = formatTimeIfPresent(schedule.date);
+    const label = time
+      ? `${formatDisplayDate(schedule.date)} ${time}`
+      : formatDisplayDate(schedule.date);
+    setOpenDatePickerEditorId(null);
+    setScheduleConfirm({
+      editorId: editor.id,
+      date: schedule.date,
+      allDay: schedule.allDay,
+      title: schedule.title,
+      label,
+    });
+  };
+
+  const commitScheduleConfirm = (editor: MemoSplitEditorState) => {
+    if (!scheduleConfirm) {
+      return;
+    }
+    const selectedText = editor.selectedText?.trim() ?? '';
     void onSaveCalendarBlock({
-      allDay:
-        match.date.getHours() === 0 &&
-        match.date.getMinutes() === 0,
+      allDay: scheduleConfirm.allDay,
       color: '#66705A',
-      note: selectedText,
-      startDate: match.date.toISOString(),
-      title: selectedText,
+      note: buildScheduleNote(selectedText, editor.memoId),
+      startDate: scheduleConfirm.date.toISOString(),
+      title: scheduleConfirm.title,
     }).then(() => {
       window.alert('일정이 등록되었습니다.');
     });
+    setScheduleConfirm(null);
+  };
+
+  const openPickerFromConfirm = (editor: MemoSplitEditorState) => {
+    if (!scheduleConfirm) {
+      return;
+    }
+    // scheduleConfirm은 유지한다 — 피커를 닫으면 확인 바로 되돌아오도록.
+    setDatePickerSeed(scheduleConfirm.date);
+    setOpenDatePickerEditorId(editor.id);
   };
 
   const applyEditorDate = (
@@ -1233,9 +1314,9 @@ const MemoSplitWorkspace = ({
       void onSaveCalendarBlock({
         allDay,
         color: '#66705A',
-        note: selectedText,
+        note: buildScheduleNote(selectedText, editor.memoId),
         startDate: date.toISOString(),
-        title: selectedText,
+        title: buildScheduleFromSelection(selectedText).title,
       }).then(() => {
         window.alert('일정이 등록되었습니다.');
       });
@@ -1246,6 +1327,8 @@ const MemoSplitWorkspace = ({
       );
     }
     setOpenDatePickerEditorId(null);
+    setDatePickerSeed(null);
+    setScheduleConfirm(null);
   };
 
   const renderHighlight = (
@@ -1353,6 +1436,7 @@ const MemoSplitWorkspace = ({
         <InboxWorkspace
           inboxItems={inboxItems}
           isLoading={isInboxLoading}
+          onDelete={onDeleteInboxItem}
           onOpenDetail={item =>
             openSourceInPane(pane, inboxSessionToSourceResult(item))
           }
@@ -1506,7 +1590,13 @@ const MemoSplitWorkspace = ({
           <div className="split-global-network split-topics-stage">
             <div className="split-topics-stage-title">Topics</div>
             <KnowledgeGraphView
-              activeNodeId={activeTopicId ? `topic:${activeTopicId}` : null}
+              activeNodeId={
+                focusedMemoId
+                  ? `memo:${focusedMemoId}`
+                  : activeTopicId
+                    ? `topic:${activeTopicId}`
+                    : null
+              }
               ariaLabel="토픽 지식 그래프"
               className="split-knowledge-graph"
               edges={graph.edges}
@@ -1515,6 +1605,7 @@ const MemoSplitWorkspace = ({
               onSelectNode={nodeId => {
                 if (nodeId.startsWith('topic:')) {
                   const topicId = nodeId.slice('topic:'.length);
+                  setFocusedMemoId(null);
                   if (focusedTopicId === topicId) {
                     // Second click on the focused hub returns to the full map.
                     setFocusedTopicId(null);
@@ -1610,93 +1701,273 @@ const MemoSplitWorkspace = ({
       editor.mode === 'existing'
         ? editor.draftText ?? memo?.content ?? ''
         : editor.draftText ?? '';
-    // Same base as schedule creation (Date.now) — a created_at base made the
-    // recognition bar disagree with the schedule actually created.
-    const firstDateMatch = parseDates(value)[0] ?? null;
-    const selectedText = editor.selectedText?.trim() ?? '';
     const syncLabel =
       memo?.local_sync_status === 'synced'
         ? '클라우드에 동기화됨'
         : memo?.local_sync_status === 'failed'
           ? '로컬에 저장됨 · 동기화 실패'
           : '로컬에 저장됨';
+    // 제목 = content 첫 줄(기존 파생 규칙). 본문 에디터에는 첫 줄을 제외한
+    // 나머지만 넣고, 저장은 항상 join된 전체 content로 기존 경로를 탄다.
+    const { body: noteBody, title: noteTitle } = splitNoteContent(value);
+    const isNoteMenuOpen = openNoteMenuEditorId === editor.id;
+    const liveEditor = resolveLiveEditor(pane.id);
+    // 하단 보조 줄은 표시할 내용(날짜 인식·연관 문장 결과)이 있을 때만 그린다.
+    const isAmbientTarget =
+      pane.id === focusedPane?.id &&
+      (editor.id === ambientEmptyEditorId ||
+        (editor.id === ambientEditorId &&
+          Boolean(ambientResult || ambientError)));
 
     return (
       <div className="split-memo-pane-body">
-        {renderHighlight(pane, editor, value)}
-        <div className="split-editor-assist-row">
-          {memo && (
-            <span
-              aria-label={syncLabel}
-              className="selected-text-chip save-status-chip"
-              title={syncLabel}
-            >
-              {memo.local_sync_status === 'synced'
-                ? '☁︎'
+        <div className="split-note-header">
+          <span
+            aria-label={memo ? syncLabel : undefined}
+            className="split-note-save-status"
+            title={memo ? syncLabel : undefined}
+          >
+            {memo
+              ? memo.local_sync_status === 'synced'
+                ? '☁︎ 저장됨'
                 : memo.local_sync_status === 'failed'
-                  ? '!'
-                  : '✓'}
-            </span>
-          )}
-          <button
-            className="quick-date-chip date-picker-chip"
-            onClick={() =>
-              setOpenDatePickerEditorId(current =>
-                current === editor.id ? null : editor.id,
-              )
-            }
-            type="button"
-          >
-            날짜 선택
-          </button>
-          <TooltipIconButton
-            className="ghost-button schedule-register-chip"
-            disabled={!selectedText}
-            onClick={() => registerEditorSchedule(editor)}
-            tooltip="일정 등록"
-          >
-            <CalendarPlus size={16} />
-            <span>일정 등록</span>
-          </TooltipIconButton>
-          {firstDateMatch && (
-            <span className="date-detect-chip">
-              {firstDateMatch.text} : {format(firstDateMatch.date, 'yyyy.MM.dd')}
-            </span>
-          )}
-          {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
-            <button
-              className="ambient-card ambient-card-compact"
-              onClick={() => {
-                const target = ambientResult.memoId
-                  ? memos.find(candidate => candidate.id === ambientResult.memoId)
-                  : null;
-                if (target) {
-                  openMemoInPane(pane.id, target);
-                } else if (ambientResult.sourceKind === 'inbox') {
-                  openSourceInPane(pane, ambientResult);
+                  ? '! 저장됨 · 동기화 실패'
+                  : '✓ 저장됨'
+              : '새 노트'}
+          </span>
+          <div className="split-note-title-row">
+            <input
+              aria-label="노트 제목"
+              className="split-note-title-input"
+              onChange={event =>
+                handleChangeMemoText(
+                  pane,
+                  editor,
+                  joinNoteContent(event.target.value, noteBody),
+                )
+              }
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  resolveLiveEditor(pane.id)?.chain().focus('start').run();
                 }
               }}
-              type="button"
-            >
-              <span>연결 추천</span>
-              <strong>{ambientResult.chunkText}</strong>
-            </button>
-          )}
-          {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientError && (
-            <span className="ambient-inline-error">
-              {ambientError}
-              {isNetworkSearchRetryableMessage(ambientError) && (
-                <button onClick={onRetryAmbient} type="button">다시 시도</button>
-              )}
-            </span>
-          )}
-        </div>
-        {openDatePickerEditorId === editor.id && (
-          <div className="date-schedule-floating split-date-schedule-floating">
-            <DateSchedulePopover
-              onApplyDate={(date, allDay) => applyEditorDate(editor, date, allDay)}
-              onClose={() => setOpenDatePickerEditorId(null)}
+              placeholder="제목 없음"
+              spellCheck={false}
+              type="text"
+              value={noteTitle}
             />
+            <div
+              className="split-note-menu-anchor"
+              ref={isNoteMenuOpen ? setNoteMenuButtonEl : undefined}
+            >
+              <TooltipIconButton
+                className={`split-action-btn split-note-menu-btn ${isNoteMenuOpen ? 'active' : ''}`}
+                onClick={() =>
+                  setOpenNoteMenuEditorId(current =>
+                    current === editor.id ? null : editor.id,
+                  )
+                }
+                tooltip="노트 메뉴"
+              >
+                <MoreHorizontal size={18} />
+              </TooltipIconButton>
+              {isNoteMenuOpen && (
+                <div
+                  className="split-pane-menu-dropdown split-note-menu-dropdown"
+                  ref={setNoteMenuDropdownEl}
+                >
+                  <div className="split-menu-title-row">
+                    {memo ? syncLabel : '아직 저장되지 않은 새 노트'}
+                  </div>
+                  <div className="split-menu-separator" />
+                  <button
+                    className="split-menu-item"
+                    disabled={!memo || !onTogglePinMemo}
+                    onClick={() => {
+                      if (memo) {
+                        onTogglePinMemo?.(memo.id);
+                      }
+                      setOpenNoteMenuEditorId(null);
+                    }}
+                    type="button"
+                  >
+                    {memo && pinnedMemoIds.includes(memo.id) ? (
+                      <PinSolid size={15} />
+                    ) : (
+                      <Pin size={15} />
+                    )}
+                    <span>
+                      {memo && pinnedMemoIds.includes(memo.id)
+                        ? '메모 고정 해제'
+                        : '메모 고정'}
+                    </span>
+                  </button>
+                  <button
+                    className="split-menu-item"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(value);
+                      setOpenNoteMenuEditorId(null);
+                    }}
+                    type="button"
+                  >
+                    <ClipboardCopy size={15} />
+                    <span>Markdown 복사</span>
+                  </button>
+                  <button
+                    className="split-menu-item"
+                    onClick={() => {
+                      void window.electronAPI.exportMarkdown(
+                        noteTitle.trim() || '제목 없음',
+                        value,
+                      );
+                      setOpenNoteMenuEditorId(null);
+                    }}
+                    type="button"
+                  >
+                    <Download size={15} />
+                    <span>Markdown 내보내기</span>
+                  </button>
+                  <button
+                    className="split-menu-item"
+                    disabled={!value.trim()}
+                    onClick={() => {
+                      const duplicated = onCreateMemo(
+                        value,
+                        memo?.category ?? editor.draftCategory,
+                      );
+                      openMemoInPane(pane.id, duplicated);
+                      setOpenNoteMenuEditorId(null);
+                    }}
+                    type="button"
+                  >
+                    <Copy size={15} />
+                    <span>복제</span>
+                  </button>
+                  <div className="split-menu-separator" />
+                  <button
+                    className="split-menu-item split-menu-item-danger"
+                    disabled={!memo || !onDeleteMemoById}
+                    onClick={() => {
+                      if (
+                        memo &&
+                        window.confirm('노트를 삭제하시겠습니까?')
+                      ) {
+                        onDeleteMemoById?.(memo.id);
+                        handleCloseEditor(pane, editor.id);
+                      }
+                      setOpenNoteMenuEditorId(null);
+                    }}
+                    type="button"
+                  >
+                    <Trash2 size={15} />
+                    <span>삭제</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <NoteFixedToolbar editor={liveEditor}>
+            <TooltipIconButton
+              className="split-action-btn note-tool-btn"
+              onClick={() => {
+                setScheduleConfirm(null);
+                setDatePickerSeed(null);
+                setOpenDatePickerEditorId(current =>
+                  current === editor.id ? null : editor.id,
+                );
+              }}
+              tooltip="날짜 선택"
+            >
+              <CalendarDays size={15} />
+            </TooltipIconButton>
+            <TooltipIconButton
+              aria-busy={editor.id === ambientSearchingEditorId || undefined}
+              aria-label={
+                editor.id === ambientSearchingEditorId
+                  ? '연관 문장 검색 중'
+                  : '연관 문장'
+              }
+              className="split-action-btn note-tool-btn ambient-search-button"
+              disabled={
+                editor.id === ambientSearchingEditorId ||
+                editor.id !== ambientPendingEditorId
+              }
+              onClick={() => onRunAmbientSearch?.()}
+              tooltip={
+                editor.id === ambientSearchingEditorId
+                  ? '연관 문장 검색 중'
+                  : '연관 문장'
+              }
+            >
+              {editor.id === ambientSearchingEditorId ? (
+                <span aria-hidden className="ambient-search-spinner" />
+              ) : (
+                <Search size={15} />
+              )}
+            </TooltipIconButton>
+            <TooltipIconButton
+              className="split-action-btn note-tool-btn"
+              onClick={() => void runEditorNetworkSearch(pane, editor)}
+              tooltip="네트워크 검색"
+            >
+              <Network size={15} />
+            </TooltipIconButton>
+          </NoteFixedToolbar>
+          {openDatePickerEditorId === editor.id ? (
+            <div className="date-schedule-floating split-date-schedule-floating">
+              <DateSchedulePopover
+                confirmLabel="등록"
+                initialDate={datePickerSeed ?? undefined}
+                onApplyDate={(date, allDay) => applyEditorDate(editor, date, allDay)}
+                onClose={() => {
+                  // 피커만 닫는다 — scheduleConfirm이 있으면 확인 바로 복귀.
+                  setOpenDatePickerEditorId(null);
+                  setDatePickerSeed(null);
+                }}
+              />
+            </div>
+          ) : scheduleConfirm?.editorId === editor.id ? (
+            <div className="schedule-confirm-floating">
+              <ScheduleConfirmPopover
+                label={scheduleConfirm.label}
+                onChangeDate={() => openPickerFromConfirm(editor)}
+                onClose={() => setScheduleConfirm(null)}
+                onConfirm={() => commitScheduleConfirm(editor)}
+              />
+            </div>
+          ) : null}
+        </div>
+        {renderHighlight(pane, editor, value)}
+        {isAmbientTarget && (
+          <div className="split-editor-assist-row">
+            {pane.id === focusedPane?.id && editor.id === ambientEmptyEditorId && (
+              <span className="ambient-empty-notice">
+                유사한 문장이 아직은 없습니다
+              </span>
+            )}
+            {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
+              <button
+                className="ambient-card ambient-card-compact"
+                onClick={() => {
+                  const target = ambientResult.memoId
+                    ? memos.find(candidate => candidate.id === ambientResult.memoId)
+                    : null;
+                  if (target) {
+                    openMemoInPane(pane.id, target);
+                  } else if (ambientResult.sourceKind === 'inbox') {
+                    openSourceInPane(pane, ambientResult);
+                  }
+                }}
+                type="button"
+              >
+                <span>연결 추천</span>
+                <strong>{ambientResult.chunkText}</strong>
+              </button>
+            )}
+            {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientError && (
+              <span className="ambient-inline-error">{ambientError}</span>
+            )}
           </div>
         )}
         <SimpleEditor
@@ -1708,7 +1979,6 @@ const MemoSplitWorkspace = ({
           }}
           onEditorFocus={() => {
             onFocusPane?.(pane.id);
-            setActiveEditorInstanceId(pane.id);
             if (editor.memoId) {
               onSelectMemoById(editor.memoId);
             }
@@ -1718,15 +1988,19 @@ const MemoSplitWorkspace = ({
               ...previous,
               [pane.id]: instance,
             }));
-            if (instance && !activeEditorInstanceId) {
-              setActiveEditorInstanceId(pane.id);
-            }
           }}
           onInsertTextRequestHandled={requestId =>
             clearInsertTextRequest(editor.id, requestId)
           }
-          value={value}
-          onChange={(nextText: string) => handleChangeMemoText(pane, editor, nextText)}
+          onRegisterSchedule={() => registerEditorSchedule(editor)}
+          value={noteBody}
+          onChange={(nextBody: string) =>
+            handleChangeMemoText(
+              pane,
+              editor,
+              joinNoteContent(noteTitle, nextBody),
+            )
+          }
           onSelectionChange={(selectedText: string, from: number, to: number) => {
             patchActiveEditor(pane, {
               selectionEnd: to,
@@ -1741,11 +2015,13 @@ const MemoSplitWorkspace = ({
     );
   };
 
-  const canUseMemoActions = Boolean(focusedPane && focusedEditor?.view === 'memo');
-
   return (
     <div className="split-workspace-shell">
-      <div className="split-workspace-commandbar">
+      <div
+        className={`split-workspace-commandbar ${
+          isSessionCollapsed ? 'session-collapsed' : ''
+        }`}
+      >
         {onToggleSession && (
           <TooltipIconButton
             className="split-command-button session-toggle-button"
@@ -1759,57 +2035,13 @@ const MemoSplitWorkspace = ({
             )}
           </TooltipIconButton>
         )}
-        {activeToolbarEditor ? (
-          // Buttons need a real editor instance (the tiptap-ui buttons read it
-          // during render and crash on null). When the focused pane isn't an
-          // editor we keep them rendered but disabled; only when NO editor
-          // exists anywhere do we fall back to an empty, inert host.
-          <SimpleEditorToolbar
-            editor={activeToolbarEditor}
-            disabled={!isToolbarActive}
-          />
-        ) : (
-          <div className="simple-editor-toolbar-host is-disabled" />
-        )}
+        <EditorContext.Provider value={{ editor: focusedToolbarEditor }}>
+          <UndoRedoButton action="undo" aria-label="실행 취소" tooltip="실행 취소" />
+          <UndoRedoButton action="redo" aria-label="다시 실행" tooltip="다시 실행" />
+        </EditorContext.Provider>
         <div className="split-workspace-drag-spacer" />
-        <div className="split-workspace-actions" aria-label="레거시 상단 기능">
-          {/* 초기 릴리스: 다크 모드 토글 제거(설정에서만 노출). 복원 시
-              ThemeToggle을 다시 import해 이 자리에 되돌리면 된다. */}
-          <TooltipIconButton
-            className="split-command-button"
-            disabled={!canUseMemoActions || !focusedPane || !focusedEditor}
-            onClick={() => {
-              if (focusedPane && focusedEditor) {
-                void runEditorNetworkSearch(focusedPane, focusedEditor);
-              }
-            }}
-            tooltip="네트워크 검색"
-          >
-            <Network size={16} />
-          </TooltipIconButton>
-          {/* The pane header already has a split-add button; this slot used to
-              duplicate it. It now pins/unpins the focused memo instead. */}
-          <TooltipIconButton
-            className="split-command-button"
-            disabled={!focusedEditor?.memoId}
-            onClick={() => {
-              if (focusedEditor?.memoId) {
-                onTogglePinMemo?.(focusedEditor.memoId);
-              }
-            }}
-            tooltip={
-              focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
-                ? '메모 고정 해제'
-                : '메모 고정'
-            }
-          >
-            {focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId) ? (
-              <PinSolid size={17} />
-            ) : (
-              <Pin size={17} />
-            )}
-          </TooltipIconButton>
-        </div>
+        {/* 네트워크 검색·메모 고정은 노트 내부(툴바/⋯ 메뉴)로 이동했다.
+            다크 모드 토글 복원 시 ThemeToggle을 이 자리에 되돌리면 된다. */}
       </div>
       <div className="split-workspace-container" ref={containerRef}>
       {panes.map(pane => {
@@ -1863,15 +2095,15 @@ const MemoSplitWorkspace = ({
                       </span>
                     </button>
                   ))}
-                  <TooltipIconButton
-                    className="split-editor-tab-add"
-                    onClick={() => handleAddEditor(pane)}
-                    tooltip="새 탭"
-                  >
-                    <Plus size={15} strokeWidth={2.4} />
-                  </TooltipIconButton>
                 </div>
               </div>
+              <TooltipIconButton
+                className="split-editor-tab-add"
+                onClick={() => handleAddEditor(pane)}
+                tooltip="새 탭"
+              >
+                <Plus size={15} strokeWidth={2.4} />
+              </TooltipIconButton>
               <div
                 className="split-pane-actions"
                 ref={isMenuOpen ? setMenuActionsEl : undefined}
@@ -1954,7 +2186,22 @@ const MemoSplitWorkspace = ({
               )}
             </div>
               <div className="split-pane-body-wrapper">
-                {renderPaneBody(pane, activeEditor)}
+                <RenderErrorBoundary
+                  fallback={() => (
+                    <div className="split-pane-render-error" role="alert">
+                      <strong>이 탭을 표시하지 못했습니다.</strong>
+                      <button
+                        onClick={() => handleCloseAllEditors(pane)}
+                        type="button"
+                      >
+                        노트 탭으로 초기화
+                      </button>
+                    </div>
+                  )}
+                  resetKey={`${pane.id}:${activeEditor.id}:${activeEditor.view}`}
+                >
+                  <PaneBodyRenderer render={() => renderPaneBody(pane, activeEditor)} />
+                </RenderErrorBoundary>
               </div>
             </div>
             {paneIndex < panes.length - 1 && (

@@ -12,7 +12,6 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import { Burger, CloseButton } from '@mantine/core';
 import { ChevronLeft, ChevronRight, Trash2 } from '@/components/icons';
 
 import { createUuid } from '../../lib/contentHash';
@@ -136,7 +135,6 @@ const CalendarWorkspace = ({
   const [anchor, setAnchor] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [forestOpen, setForestOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [isEditorOpen, setEditorOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<CalendarBlockRow | null>(null);
@@ -534,7 +532,7 @@ const CalendarWorkspace = ({
   };
 
   return (
-    <div className={`cal-layout view-${view}${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={`cal-layout view-${view}`}>
       <div className="cal-root">
         <div className="cal-header">
           <h2 className="cal-title">{title_}</h2>
@@ -581,50 +579,32 @@ const CalendarWorkspace = ({
                 <ChevronRight size={18} />
               </button>
             </div>
-
-            <Burger
-              aria-label="Todo 패널"
-              className="cal-burger"
-              onClick={() => setDrawerOpen(open => !open)}
-              opened={drawerOpen}
-              size="sm"
-            />
           </div>
         </div>
 
         {view === 'month' ? renderMonth() : renderTimeGrid()}
       </div>
 
-      <button
-        aria-label="패널 닫기"
-        className="cal-drawer-backdrop"
-        onClick={() => setDrawerOpen(false)}
-        type="button"
-      />
-
-      <aside className="cal-side">
-        <CloseButton
-          aria-label="패널 닫기"
-          className="cal-drawer-close"
-          onClick={() => setDrawerOpen(false)}
-        />
-        <DayTodoPanel
-          blocks={dayEvents(selectedDay)}
-          date={selectedDay}
-          onAdd={() => openEditor(selectedDay)}
-          onEdit={block => openEditor(getBlockStart(block), block)}
-          onToggle={onToggleCompleted}
-        />
-        {treePanel && (
-          <TreeCard
-            forestCount={treePanel.forest.length}
-            onOpenForest={() => setForestOpen(true)}
-            onPlant={treePanel.onPlant}
-            tree={treePanel.tree}
-            wateringSignal={treePanel.wateringSignal}
+      {view === 'month' && (
+        <aside className="cal-side">
+          <DayTodoPanel
+            blocks={dayEvents(selectedDay)}
+            date={selectedDay}
+            onAdd={() => openEditor(selectedDay)}
+            onEdit={block => openEditor(getBlockStart(block), block)}
+            onToggle={onToggleCompleted}
           />
-        )}
-      </aside>
+          {treePanel && (
+            <TreeCard
+              forestCount={treePanel.forest.length}
+              onOpenForest={() => setForestOpen(true)}
+              onPlant={treePanel.onPlant}
+              tree={treePanel.tree}
+              wateringSignal={treePanel.wateringSignal}
+            />
+          )}
+        </aside>
+      )}
 
       {treePanel && forestOpen && (
         <ForestModal

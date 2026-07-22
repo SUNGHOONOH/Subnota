@@ -16,6 +16,10 @@ class InboxSessionAnalyzeRequest(BaseModel):
     session_id: str
 
 
+class InboxSessionLikeRequest(BaseModel):
+    liked: bool
+
+
 class InboxSessionListResponse(BaseModel):
     items: list[dict[str, Any]]
 

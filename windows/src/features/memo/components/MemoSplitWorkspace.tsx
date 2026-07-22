@@ -1601,6 +1601,10 @@ const MemoSplitWorkspace = ({
     );
   };
 
+  const canPinMemo = Boolean(
+    focusedEditor?.view === 'memo' && focusedEditor.memoId,
+  );
+
   return (
     <div className="split-workspace-shell">
       <div className="split-workspace-commandbar">
@@ -1643,16 +1647,18 @@ const MemoSplitWorkspace = ({
           {/* Pins/unpins the focused memo (replaced the inert placeholder). */}
           <TooltipIconButton
             className="split-command-button"
-            disabled={!focusedEditor?.memoId}
+            disabled={!canPinMemo}
             onClick={() => {
-              if (focusedEditor?.memoId) {
+              if (canPinMemo && focusedEditor?.memoId) {
                 onTogglePinMemo?.(focusedEditor.memoId);
               }
             }}
             tooltip={
-              focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
-                ? '메모 고정 해제'
-                : '메모 고정'
+              !canPinMemo
+                ? '노트 탭에서만 메모 고정 가능'
+                : focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
+                  ? '메모 고정 해제'
+                  : '메모 고정'
             }
           >
             {focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId) ? (
@@ -1715,15 +1721,15 @@ const MemoSplitWorkspace = ({
                       </span>
                     </button>
                   ))}
-                  <TooltipIconButton
-                    className="split-editor-tab-add"
-                    onClick={() => handleAddEditor(pane)}
-                    tooltip="새 탭"
-                  >
-                    <Plus size={15} />
-                  </TooltipIconButton>
                 </div>
               </div>
+              <TooltipIconButton
+                className="split-editor-tab-add"
+                onClick={() => handleAddEditor(pane)}
+                tooltip="새 탭"
+              >
+                <Plus size={15} />
+              </TooltipIconButton>
               <div
                 className="split-pane-actions"
                 ref={isMenuOpen ? setMenuActionsEl : undefined}

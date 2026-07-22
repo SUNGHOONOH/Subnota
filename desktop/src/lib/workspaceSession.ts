@@ -1,4 +1,8 @@
-import type { MemoSplitPaneState } from '../features/memo/components/MemoSplitWorkspace';
+import type {
+  MemoSplitEditorState,
+  MemoSplitPaneState,
+  MemoSplitPaneView,
+} from '../features/memo/components/MemoSplitWorkspace';
 import type { TabKey } from '../types';
 
 const WORKSPACE_SESSION_VERSION = 1;
@@ -11,6 +15,7 @@ const VALID_VIEWS = new Set([
   'briefing',
   'network',
   'source',
+  'topics',
 ]);
 
 export const WORKSPACE_SESSION_STORAGE_KEY = 'subnota.workspaceSession.v1';
@@ -31,6 +36,27 @@ export interface WorkspaceSession {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isRestorableNetworkResult = (value: unknown) =>
+  isRecord(value) &&
+  typeof value.chunkId === 'string' &&
+  typeof value.chunkText === 'string';
+
+const restoreNetworkResults = (
+  value: unknown,
+): MemoSplitEditorState['networkResults'] =>
+  Array.isArray(value)
+    ? (value.filter(isRestorableNetworkResult) as NonNullable<
+        MemoSplitEditorState['networkResults']
+      >)
+    : undefined;
+
+const restoreSourceResult = (
+  value: unknown,
+): MemoSplitEditorState['sourceResult'] =>
+  isRestorableNetworkResult(value)
+    ? (value as unknown as NonNullable<MemoSplitEditorState['sourceResult']>)
+    : undefined;
 
 const restorePane = (value: unknown): MemoSplitPaneState | null => {
   if (
@@ -53,6 +79,8 @@ const restorePane = (value: unknown): MemoSplitPaneState | null => {
           ...editor,
           networkIsLoading: false,
           networkRequestId: undefined,
+          networkResults: restoreNetworkResults(editor.networkResults),
+          sourceResult: restoreSourceResult(editor.sourceResult),
         }))
     : undefined;
   const activeEditorId =
@@ -62,10 +90,14 @@ const restorePane = (value: unknown): MemoSplitPaneState | null => {
 
   return {
     ...value,
+    id: value.id,
+    view: value.view as MemoSplitPaneView,
     activeEditorId,
     editors,
     networkIsLoading: false,
     networkRequestId: undefined,
+    networkResults: restoreNetworkResults(value.networkResults),
+    sourceResult: restoreSourceResult(value.sourceResult),
   } as MemoSplitPaneState;
 };
 

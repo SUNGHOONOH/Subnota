@@ -1,7 +1,7 @@
 import httpx
 
 from app.core.config import settings
-from app.db import DatabaseRow
+from app.db.types import DatabaseRow
 from app.features.inbox.constants import USER_AGENT
 from app.features.inbox.utils import extract_youtube_video_id
 

@@ -90,6 +90,21 @@ def update_inbox_session(user_id: str, session_id: str, patch: DatabaseRow) -> D
     return rows[0]
 
 
+def delete_inbox_session(user_id: str, session_id: str) -> bool:
+    # 연관 테이블(inbox_session_embeddings, topic_cluster_inbox_items,
+    # topic_memo_inbox_edges)은 모두 on delete cascade라 행 삭제만으로 정리된다.
+    client = get_supabase()
+    response = (
+        client.table("inbox_sessions")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("id", session_id)
+        .execute()
+    )
+    rows = cast(list[DatabaseRow], response.data or [])
+    return bool(rows)
+
+
 def replace_inbox_session_embedding(
     user_id: str,
     inbox_session_id: str,

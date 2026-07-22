@@ -1,4 +1,11 @@
-import { createTheme, Tooltip } from '@mantine/core';
+import {
+  Card,
+  createTheme,
+  Input,
+  Menu,
+  SegmentedControl,
+  Tooltip,
+} from '@mantine/core';
 import { desktopBrandColors, desktopColorTokens } from './colorTokens';
 
 // Subnota의 디자인 토큰(src/styles/_variables.scss의 --tt-* / --legacy-*)을
@@ -20,14 +27,15 @@ export const mantineTheme = createTheme({
   fontFamilyMonospace: 'var(--legacy-font-mono)',
   headings: { fontFamily: 'var(--legacy-font-ui)' },
 
-  // radius — --tt-radius-*
+  // radius — legacy 토큰을 직접 참조해 단일 소스를 유지한다.
+  // 수치는 기존과 동일(4/6/8/12px)하므로 시각 변화 없음.
   defaultRadius: 'md',
   radius: {
-    xs: '0.25rem', // 4px
-    sm: '0.375rem', // 6px
-    md: '0.5rem', // 8px
-    lg: '0.75rem', // 12px
-    xl: '1rem', // 16px
+    xs: 'var(--legacy-radius-xs)', // 4px
+    sm: 'var(--legacy-radius-row)', // 6px
+    md: 'var(--legacy-radius-card)', // 8px
+    lg: 'var(--legacy-radius-panel)', // 12px
+    xl: '1rem', // 16px (legacy 스케일 밖 — Mantine 전용)
   },
 
   // 그림자 — --tt-shadow-elevated-md (다크 모드 값까지 CSS 변수가 처리)
@@ -43,6 +51,53 @@ export const mantineTheme = createTheme({
         tooltip: {
           fontSize: 'var(--mantine-font-size-xs)',
           padding: '2px 8px',
+        },
+      },
+    }),
+
+    // Mantine 컴포넌트가 legacy 페이퍼 룩을 입도록 표면 토큰을 연결한다.
+    // 화면 코드는 그대로 두고 테마에서만 통일한다(수집함 ↔ 메모 화면 룩 정합).
+    Card: Card.extend({
+      styles: {
+        root: {
+          backgroundColor: 'var(--legacy-bg-canvas)',
+          borderColor: 'var(--legacy-border)',
+          color: 'var(--legacy-ink)',
+        },
+      },
+    }),
+    Input: Input.extend({
+      styles: {
+        input: {
+          backgroundColor: 'var(--legacy-bg-canvas)',
+          borderColor: 'var(--legacy-border)',
+          color: 'var(--legacy-ink)',
+        },
+      },
+    }),
+    Menu: Menu.extend({
+      styles: {
+        dropdown: {
+          backgroundColor: 'var(--legacy-bg-canvas)',
+          borderColor: 'var(--legacy-border)',
+        },
+        item: {
+          color: 'var(--legacy-ink)',
+        },
+      },
+    }),
+    // 메모 사이드바의 커스텀 .segment-control과 같은 계열로:
+    // 트랙은 은은한 활성 배경, 선택 인디케이터는 종이색.
+    SegmentedControl: SegmentedControl.extend({
+      styles: {
+        indicator: {
+          backgroundColor: 'var(--legacy-bg-canvas)',
+        },
+        label: {
+          color: 'var(--legacy-ink)',
+        },
+        root: {
+          backgroundColor: 'var(--legacy-bg-active-soft)',
         },
       },
     }),

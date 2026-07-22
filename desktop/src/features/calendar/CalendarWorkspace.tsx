@@ -12,10 +12,14 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import { Burger, CloseButton } from '@mantine/core';
 import { ChevronLeft, ChevronRight, Trash2 } from '@/components/icons';
 
 import { createUuid } from '../../lib/contentHash';
+import {
+  buildScheduleNote,
+  getScheduleNoteText,
+  parseScheduleNoteMemoId,
+} from '../../lib/scheduleFromSelection';
 import { CalendarBlockRow } from '../../types';
 import { getBlockStart, offsetToHour } from './calendarUtils';
 import DateScheduleField from '../memo/components/DateScheduleField';
@@ -54,9 +58,6 @@ type ViewType = 'week' | 'month';
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const HOUR_HEIGHT = 40;
-// Month cells show one representative event + a "+N" badge so a busy day never
-// grows the row height (keeps every week row the same ratio).
-const MONTH_MAX_CHIPS = 1;
 const DEFAULT_COLOR = '#66705A';
 const HOUR_MS = 60 * 60 * 1000;
 const MIN_EVENT_MINUTES = 30;
@@ -136,12 +137,12 @@ const CalendarWorkspace = ({
   const [anchor, setAnchor] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [forestOpen, setForestOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [isEditorOpen, setEditorOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<CalendarBlockRow | null>(null);
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
+  const [sourceMemoId, setSourceMemoId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(toLocalInputDate(new Date()));
   const [time, setTime] = useState('09:00');
 
@@ -194,7 +195,8 @@ const CalendarWorkspace = ({
   const openEditor = (date: Date, block?: CalendarBlockRow) => {
     setEditingBlock(block ?? null);
     setTitle(block?.title ?? '');
-    setNote(block?.note ?? '');
+    setSourceMemoId(parseScheduleNoteMemoId(block?.note));
+    setNote(getScheduleNoteText(block?.note));
     const base = block ? getBlockStart(block) : date;
     setSelectedDate(toLocalInputDate(base));
     setTime(block?.all_day ? '' : format(base, 'HH:mm'));
@@ -216,7 +218,8 @@ const CalendarWorkspace = ({
       color: editingBlock?.color ?? DEFAULT_COLOR,
       endDate: time ? new Date(startDate.getTime() + duration).toISOString() : null,
       id: editingBlock?.id ?? createUuid(),
-      note: note.trim() || null,
+      note:
+        buildScheduleNote(note.trim(), sourceMemoId).trim() || null,
       order: editingBlock?.order ?? 0,
       startDate: startDate.toISOString(),
       title: title.trim() || '새 일정',
@@ -333,7 +336,6 @@ const CalendarWorkspace = ({
         {monthDays.map(date => {
           const events = dayEvents(date);
           const inMonth = isSameMonth(date, anchor);
-          const firstOfMonth = date.getDate() === 1;
           const isSelected = isSameDay(date, selectedDay);
           return (
             <div
@@ -345,40 +347,23 @@ const CalendarWorkspace = ({
               role="button"
               tabIndex={0}
             >
-              <span
-                className={`cal-daynum${isToday(date) ? ' today' : ''}${
-                  date.getDay() === 0 ? ' sunday' : ''
-                }`}
-              >
-                {firstOfMonth ? format(date, 'M월 d일') : format(date, 'd')}
-              </span>
-              <div className="cal-chips">
-                {events.slice(0, MONTH_MAX_CHIPS).map(block => {
-                  const tone = getTone(block.color);
-                  return (
-                    <button
-                      className={`cal-chip${block.is_completed ? ' completed' : ''}`}
-                      key={block.id}
-                      onClick={event => {
-                        event.stopPropagation();
-                        openEditor(date, block);
-                      }}
-                      style={{ backgroundColor: tone.bg, color: tone.text }}
-                      type="button"
-                    >
-                      <span className="cal-chip-dot" style={{ background: tone.accent }} />
-                      <span className="cal-chip-title">{block.title}</span>
-                      {!block.all_day && (
-                        <span className="cal-chip-time">
-                          {format(getBlockStart(block), 'a h:mm')}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-                {events.length > MONTH_MAX_CHIPS && (
-                  <span className="cal-more">+{events.length - MONTH_MAX_CHIPS}</span>
+              <div className="cal-month-meta">
+                {events.length > 0 && (
+                  <span
+                    aria-label={`${events.length}개 일정`}
+                    className="cal-month-event-count"
+                    title={`${events.length}개 일정`}
+                  >
+                    {events.length}
+                  </span>
                 )}
+                <span
+                  className={`cal-daynum${isToday(date) ? ' today' : ''}${
+                    date.getDay() === 0 ? ' sunday' : ''
+                  }`}
+                >
+                  {format(date, 'd')}
+                </span>
               </div>
             </div>
           );
@@ -534,7 +519,7 @@ const CalendarWorkspace = ({
   };
 
   return (
-    <div className={`cal-layout view-${view}${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={`cal-layout view-${view}`}>
       <div className="cal-root">
         <div className="cal-header">
           <h2 className="cal-title">{title_}</h2>
@@ -581,50 +566,32 @@ const CalendarWorkspace = ({
                 <ChevronRight size={18} />
               </button>
             </div>
-
-            <Burger
-              aria-label="Todo 패널"
-              className="cal-burger"
-              onClick={() => setDrawerOpen(open => !open)}
-              opened={drawerOpen}
-              size="sm"
-            />
           </div>
         </div>
 
         {view === 'month' ? renderMonth() : renderTimeGrid()}
       </div>
 
-      <button
-        aria-label="패널 닫기"
-        className="cal-drawer-backdrop"
-        onClick={() => setDrawerOpen(false)}
-        type="button"
-      />
-
-      <aside className="cal-side">
-        <CloseButton
-          aria-label="패널 닫기"
-          className="cal-drawer-close"
-          onClick={() => setDrawerOpen(false)}
-        />
-        <DayTodoPanel
-          blocks={dayEvents(selectedDay)}
-          date={selectedDay}
-          onAdd={() => openEditor(selectedDay)}
-          onEdit={block => openEditor(getBlockStart(block), block)}
-          onToggle={onToggleCompleted}
-        />
-        {treePanel && (
-          <TreeCard
-            forestCount={treePanel.forest.length}
-            onOpenForest={() => setForestOpen(true)}
-            onPlant={treePanel.onPlant}
-            tree={treePanel.tree}
-            wateringSignal={treePanel.wateringSignal}
+      {view === 'month' && (
+        <aside className="cal-side">
+          <DayTodoPanel
+            blocks={dayEvents(selectedDay)}
+            date={selectedDay}
+            onAdd={() => openEditor(selectedDay)}
+            onEdit={block => openEditor(getBlockStart(block), block)}
+            onToggle={onToggleCompleted}
           />
-        )}
-      </aside>
+          {treePanel && (
+            <TreeCard
+              forestCount={treePanel.forest.length}
+              onOpenForest={() => setForestOpen(true)}
+              onPlant={treePanel.onPlant}
+              tree={treePanel.tree}
+              wateringSignal={treePanel.wateringSignal}
+            />
+          )}
+        </aside>
+      )}
 
       {treePanel && forestOpen && (
         <ForestModal
@@ -680,6 +647,22 @@ const CalendarWorkspace = ({
                 value={note}
               />
             </label>
+            {sourceMemoId && (
+              <button
+                className="cal-btn ghost cal-source-note-btn"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('subnota:open-memo', {
+                      detail: { memoId: sourceMemoId },
+                    }),
+                  );
+                  setEditorOpen(false);
+                }}
+                type="button"
+              >
+                원본 노트 열기
+              </button>
+            )}
             <p className="cal-field-hint">시간을 비우면 종일 일정으로 저장됩니다.</p>
 
             <div className="cal-modal-actions">

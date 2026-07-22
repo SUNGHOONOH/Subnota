@@ -5,7 +5,8 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup
 
-from app.db import DatabaseRow
+from app.core.config import settings
+from app.db.types import DatabaseRow
 from app.features.inbox.constants import (
     IMPORTANT_JSON_TEXT_KEYS,
     MAX_EXTRACTED_TEXT_CHARS,
@@ -38,6 +39,8 @@ def fetch_page_metadata(url: str | None) -> DatabaseRow:
     html = fetch_static_html(url)
     metadata = extract_page_metadata_from_html(html, url, "static_html")
     if int(metadata.get("content_length") or 0) >= MIN_USEFUL_EXTRACTED_TEXT_CHARS:
+        return metadata
+    if not settings.enable_playwright_fetch:
         return metadata
 
     rendered_html = fetch_rendered_page_html(url)

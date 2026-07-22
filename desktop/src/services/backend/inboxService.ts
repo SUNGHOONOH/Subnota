@@ -171,6 +171,13 @@ export const setInboxLiked = async (id: string, liked: boolean) => {
   });
 };
 
+// 백엔드 멱등 삭제 — 이미 없는 세션이어도 성공으로 응답한다.
+export const deleteInboxSession = async (id: string) => {
+  await requestBackend(`/inbox/sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+};
+
 const mapInboxSession = (row: InboxSessionRow): InboxSession => ({
   canonicalUrl: row.canonical_url,
   channelTitle: row.metadata?.channel_title ?? row.metadata?.author_name ?? null,

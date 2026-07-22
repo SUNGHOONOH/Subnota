@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     backend_admin_key: str = ""
     backend_env: str = "development"
+    allow_local_admin_bypass: bool = False
+    enable_playwright_fetch: bool = False
     cors_allow_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "subnota-app://bundle,https://subnota.com"

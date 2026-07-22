@@ -7,6 +7,8 @@ import { CalendarDays } from '@/components/icons';
 import { ScheduleInboxRow } from '../../types';
 import DateSchedulePopover from '../memo/components/DateSchedulePopover';
 import DateScheduleField from '../memo/components/DateScheduleField';
+import { validDate } from '../memo/components/dateScheduleTime';
+import { toValidDate } from '../../lib/viewCrashGuards';
 
 interface BriefingWorkspaceProps {
   inboxItems: ScheduleInboxRow[];
@@ -22,11 +24,21 @@ const hasScheduledTime = (item: ScheduleInboxRow) =>
   !item.all_day && item.time_text !== null;
 
 const formatScheduleDate = (item: ScheduleInboxRow) => {
-  const date = new Date(item.scheduled_at);
+  const date = toValidDate(item.scheduled_at);
+  if (!date) {
+    return '날짜 확인 필요';
+  }
   if (!hasScheduledTime(item)) {
     return `${format(date, 'M월 d일 (EEE)', { locale: ko })} · 시간 미정`;
   }
   return format(date, 'M월 d일 (EEE) · a h:mm', { locale: ko });
+};
+
+const formatCreatedAgo = (value: string) => {
+  const date = toValidDate(value);
+  return date
+    ? formatDistanceToNow(date, { addSuffix: true, locale: ko })
+    : '생성일 확인 필요';
 };
 
 const BriefingWorkspace = ({
@@ -59,9 +71,14 @@ const BriefingWorkspace = ({
       return;
     }
 
+    const scheduledAt = new Date(editingTime);
+    if (!validDate(scheduledAt)) {
+      return;
+    }
+
     onAcceptInbox({
       ...editingInbox,
-      scheduled_at: new Date(editingTime).toISOString(),
+      scheduled_at: scheduledAt.toISOString(),
       title: editingTitle.trim() || editingInbox.title,
     });
     setEditingInbox(null);
@@ -93,10 +110,7 @@ const BriefingWorkspace = ({
             <div className="schedule-approve-title-row">
               <strong className="schedule-approve-title">{item.title}</strong>
               <span className="schedule-approve-ago">
-                {formatDistanceToNow(new Date(item.created_at), {
-                  addSuffix: true,
-                  locale: ko,
-                })}
+                {formatCreatedAgo(item.created_at)}
               </span>
             </div>
             <div className="schedule-approve-date">

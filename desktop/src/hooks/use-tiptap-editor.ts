@@ -15,7 +15,10 @@ export function useTiptapEditor(providedEditor?: Editor | null): {
   canCommand?: Editor["can"]
 } {
   const { editor: coreEditor } = useCurrentEditor()
-  const mainEditor = providedEditor ?? coreEditor
+  const candidateEditor = providedEditor ?? coreEditor
+  const mainEditor = candidateEditor && !candidateEditor.isDestroyed
+    ? candidateEditor
+    : null
 
   const [storageEditor, setStorageEditor] = useState<Editor | null>(null)
 
@@ -40,7 +43,7 @@ export function useTiptapEditor(providedEditor?: Editor | null): {
   }, [mainEditor])
 
   useEffect(() => {
-    if (!storageEditor) return
+    if (!storageEditor || storageEditor.isDestroyed) return
 
     const handleDestroy = () => setStorageEditor(null)
 
@@ -51,9 +54,12 @@ export function useTiptapEditor(providedEditor?: Editor | null): {
   }, [storageEditor])
 
   const editorState = useEditorState({
-    editor: storageEditor ?? mainEditor,
+    editor:
+      storageEditor && !storageEditor.isDestroyed
+        ? storageEditor
+        : mainEditor,
     selector(context) {
-      if (!context.editor) {
+      if (!context.editor || context.editor.isDestroyed) {
         return { editor: null, editorState: undefined, canCommand: undefined }
       }
 

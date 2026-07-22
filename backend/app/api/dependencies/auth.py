@@ -1,7 +1,9 @@
+from hmac import compare_digest
+
 from fastapi import Header, HTTPException
 
 from app.core.config import settings
-from app.db import get_supabase
+from app.db.client import get_supabase
 
 
 def require_user_id(authorization: str | None = Header(default=None)) -> str:
@@ -27,9 +29,12 @@ def require_user_id(authorization: str | None = Header(default=None)) -> str:
 
 def require_admin_key(x_backend_admin_key: str | None = Header(default=None)) -> None:
     if not settings.backend_admin_key:
-        if settings.backend_env == "production":
-            raise HTTPException(status_code=503, detail="Backend admin key not configured")
-        return
+        if settings.backend_env == "development" and settings.allow_local_admin_bypass:
+            return
+        raise HTTPException(status_code=503, detail="Backend admin key not configured")
 
-    if x_backend_admin_key != settings.backend_admin_key:
+    if not isinstance(x_backend_admin_key, str) or not compare_digest(
+        x_backend_admin_key,
+        settings.backend_admin_key,
+    ):
         raise HTTPException(status_code=401, detail="Invalid backend admin key")

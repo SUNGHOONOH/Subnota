@@ -3,7 +3,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from app.core import constants
-from app.db import (
+from app.db.profiles import (
     fetch_profile_ids,
     fetch_profile_ids_with_dirty_chunk_memos,
     fetch_profile_ids_with_dirty_schedule_memos,

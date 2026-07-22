@@ -15,7 +15,8 @@
   --app-color-bg-hover: #f7f7f4;
   --app-color-bg-pressed: #f1f0ed;
   --app-color-bg-overlay: rgba(44, 37, 32, 0.24);
-  --app-color-chrome-bg: #fbfbfa;
+  /* 사이드바(레일+세션+크롬 줄) 전용 웜톤 — 흰색 작업공간과 면으로 구분된다. */
+  --app-color-chrome-bg: #f6f2eb;
   --app-color-chrome-border: rgba(29, 29, 31, 0.07);
 
   --app-color-border: #e9e7e1;
@@ -93,7 +94,8 @@ html.dark {
   --app-color-bg-hover: rgba(250, 249, 245, 0.06);
   --app-color-bg-pressed: #35322c;
   --app-color-bg-overlay: rgba(0, 0, 0, 0.5);
-  --app-color-chrome-bg: #1b1a18;
+  /* 다크: 콘텐츠(#1f1e1b)보다 한 단계 어두워 사이드바가 면으로 구분된다. */
+  --app-color-chrome-bg: #171614;
   --app-color-chrome-border: rgba(250, 249, 245, 0.1);
 
   --app-color-border: rgba(250, 249, 245, 0.12);

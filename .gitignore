@@ -130,6 +130,9 @@ supabase/.branches/
 supabase/.temp/
 mobile/supabase/.temp/
 
+# Supabase migrations are maintained outside this repository.
+/supabase/migrations/
+
 # Local backend/runtime secrets
 backend/.env
 backend/.env.*

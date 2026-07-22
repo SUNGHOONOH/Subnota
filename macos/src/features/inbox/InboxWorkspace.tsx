@@ -111,8 +111,7 @@ const InboxWorkspace = ({
       {/* 노션 웹클리퍼식 상단 바 — [검색 / ⋯ / 전체·좋아요]. 링크 저장과
           새로고침은 부가 기능이라 ⋯ 메뉴 안으로. */}
       <div className="inbox-list-header">
-        <strong>최근 수집함</strong>
-        <Group gap={8} wrap="nowrap">
+        <Group className="inbox-toolbar" gap={6} wrap="nowrap">
           <TextInput
             className="inbox-search-input"
             leftSection={<Search size={13} />}
@@ -179,6 +178,7 @@ const InboxWorkspace = ({
           </Menu>
           {inboxItems.length > 0 && (
             <SegmentedControl
+              className="inbox-filter"
               data={[
                 { label: '전체', value: 'all' },
                 { label: '좋아요', value: 'liked' },
@@ -201,7 +201,7 @@ const InboxWorkspace = ({
           const excerpt = item.thumbnailUrl ? null : item.summary ?? item.summaryOneLiner;
           const favicon = faviconUrlFor(item.domain);
           return (
-            <Card className="inbox-card" key={item.id} padding="md" radius="md" withBorder>
+            <Card className="inbox-card" key={item.id} padding="sm" radius="sm" withBorder>
               <Card.Section>
                 <div className={item.thumbnailUrl ? 'inbox-thumbnail' : 'inbox-thumbnail empty'}>
                   {item.thumbnailUrl ? (
@@ -213,11 +213,11 @@ const InboxWorkspace = ({
                 </div>
               </Card.Section>
 
-              <Text fw={500} fz="lg" lineClamp={2} mt="md">
+              <Text fw={500} fz="md" lineClamp={2} mt="sm">
                 {item.title ?? item.originalUrl ?? '제목을 가져오는 중'}
               </Text>
               {(item.channelTitle || item.domain) && (
-                <Group align="center" gap={5} mt={2} wrap="nowrap">
+                <Group align="center" gap={4} mt={1} wrap="nowrap">
                   {favicon && (
                     <img
                       alt=""
@@ -234,29 +234,29 @@ const InboxWorkspace = ({
                 </Group>
               )}
               {oneLiner && oneLiner !== excerpt && (
-                <Text fz="sm" lineClamp={2} mt="xs">
+                <Text fz="xs" lineClamp={2} mt={4}>
                   {oneLiner}
                 </Text>
               )}
               {item.keywords.length > 0 && (
-                <Group gap={7} mt="sm">
+                <Group gap={5} mt="xs">
                   {item.keywords.slice(0, CARD_KEYWORD_LIMIT).map(keyword => (
-                    <Badge key={keyword} size="sm" variant="light">
+                    <Badge key={keyword} size="xs" variant="light">
                       {keyword}
                     </Badge>
                   ))}
                   {item.keywords.length > CARD_KEYWORD_LIMIT && (
-                    <Badge color="gray" size="sm" variant="light">
+                    <Badge color="gray" size="xs" variant="light">
                       +{item.keywords.length - CARD_KEYWORD_LIMIT}
                     </Badge>
                   )}
                 </Group>
               )}
-              <Group gap="xs" mt="md" wrap="nowrap">
+              <Group gap={6} mt="sm" wrap="nowrap">
                 <Button
                   onClick={() => onOpenDetail(item)}
-                  radius="md"
-                  size="sm"
+                  radius="sm"
+                  size="xs"
                   style={{ flex: 1 }}
                 >
                   자세히
@@ -265,11 +265,11 @@ const InboxWorkspace = ({
                   aria-label={item.liked ? '좋아요 취소' : '좋아요'}
                   className="inbox-like"
                   onClick={() => onToggleLike(item.id, !item.liked)}
-                  radius="md"
-                  size={36}
+                  radius="sm"
+                  size={32}
                   variant="default"
                 >
-                  <Heart fill={item.liked ? 'currentColor' : 'none'} size={18} />
+                  <Heart fill={item.liked ? 'currentColor' : 'none'} size={16} />
                 </ActionIcon>
               </Group>
             </Card>

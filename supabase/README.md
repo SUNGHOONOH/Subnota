@@ -3,7 +3,9 @@
 This directory contains the database schema migrations, local seed data, and Edge Function configurations for Subnota.
 
 ## Database Migrations
-Run these migrations in order using the Supabase CLI or your remote database SQL Editor:
+These files are the local schema source and historical reference. Do not paste
+the full list into the SQL Editor or replay it against production; check the
+production history mapping below first.
 
 ```text
 supabase/migrations/20260519_final_schema.sql
@@ -31,7 +33,28 @@ supabase/migrations/20260624000200_memo_conflict_copy_rpc.sql
 supabase/migrations/20260625000000_calendar_completed_at.sql
 supabase/migrations/20260626000000_growth_events.sql
 supabase/migrations/20260626000100_trees.sql
+supabase/migrations/20260627145059_memo_similarity_edges.sql
+supabase/migrations/20260629000000_inbox_keywords_liked.sql
+supabase/migrations/20260706000100_memo_conflict_merge_optin.sql
+supabase/migrations/20260706020000_fix_network_rate_limit_timestamp.sql
+supabase/migrations/20260707190355_topic_memo_inbox_edges.sql
+supabase/migrations/20260708000000_topic_cluster_inbox_items.sql
 ```
+
+## Production history
+
+Production currently has 30 recorded migrations through
+`20260707190355_topic_memo_inbox_edges`. The live schema reflects the feature
+SQL represented by the local files, but several production entries use
+generated timestamps because some SQL was executed manually before being
+recorded in migration history. The inbox-topic membership change is recorded in
+production as `20260707181903_topic_cluster_inbox_items` and
+`20260707182219_topic_cluster_inbox_items_service_grant`; the local
+`20260708000000_topic_cluster_inbox_items.sql` is the consolidated equivalent.
+
+Do **not** run a blanket `supabase db push` until the local filenames and
+production history mapping are deliberately reconciled. Re-applying a local
+alias would duplicate an already reflected schema change.
 
 ## Schema Entities
 The migrations define and configure the following database structures:

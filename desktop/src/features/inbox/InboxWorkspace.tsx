@@ -11,14 +11,16 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { Heart, MoreHorizontal, RefreshCw, Search } from '@/components/icons';
+import { Heart, MoreHorizontal, RefreshCw, Search, Trash2 } from '@/components/icons';
 
 import { InboxSession } from '../../services/backend/inboxService';
 import { faviconUrlFor } from '../../lib/favicon';
+import { normalizeStringArray } from '../../lib/viewCrashGuards';
 
 interface InboxWorkspaceProps {
   inboxItems: InboxSession[];
   isLoading: boolean;
+  onDelete: (id: string) => void;
   onOpenDetail: (item: InboxSession) => void;
   onRefresh: () => void;
   onSaveUrl: (url: string) => Promise<void>;
@@ -29,6 +31,9 @@ type InboxFilter = 'all' | 'liked';
 
 const PAGE_SIZE = 6;
 const CARD_KEYWORD_LIMIT = 4;
+
+const getInboxKeywords = (item: InboxSession) =>
+  normalizeStringArray(item.keywords);
 
 const formatDuration = (duration: string | null) => {
   if (!duration) {
@@ -56,7 +61,7 @@ const matchesQuery = (item: InboxSession, query: string) => {
     item.domain,
     item.summaryOneLiner,
     item.summary,
-    ...item.keywords,
+    ...getInboxKeywords(item),
   ]
     .filter(Boolean)
     .join(' ')
@@ -67,6 +72,7 @@ const matchesQuery = (item: InboxSession, query: string) => {
 const InboxWorkspace = ({
   inboxItems,
   isLoading,
+  onDelete,
   onOpenDetail,
   onRefresh,
   onSaveUrl,
@@ -111,8 +117,7 @@ const InboxWorkspace = ({
       {/* 노션 웹클리퍼식 상단 바 — [검색 / ⋯ / 전체·좋아요]. 링크 저장과
           새로고침은 부가 기능이라 ⋯ 메뉴 안으로. */}
       <div className="inbox-list-header">
-        <strong>최근 수집함</strong>
-        <Group gap={8} wrap="nowrap">
+        <Group className="inbox-toolbar" gap={6} wrap="nowrap">
           <TextInput
             className="inbox-search-input"
             leftSection={<Search size={13} />}
@@ -179,6 +184,7 @@ const InboxWorkspace = ({
           </Menu>
           {inboxItems.length > 0 && (
             <SegmentedControl
+              className="inbox-filter"
               data={[
                 { label: '전체', value: 'all' },
                 { label: '좋아요', value: 'liked' },
@@ -196,12 +202,13 @@ const InboxWorkspace = ({
 
       <section className="inbox-grid">
         {paged.map(item => {
+          const keywords = getInboxKeywords(item);
           const duration = formatDuration(item.duration);
           const oneLiner = item.summaryOneLiner ?? item.summary;
           const excerpt = item.thumbnailUrl ? null : item.summary ?? item.summaryOneLiner;
           const favicon = faviconUrlFor(item.domain);
           return (
-            <Card className="inbox-card" key={item.id} padding="md" radius="md" withBorder>
+            <Card className="inbox-card" key={item.id} padding="sm" radius="sm" withBorder>
               <Card.Section>
                 <div className={item.thumbnailUrl ? 'inbox-thumbnail' : 'inbox-thumbnail empty'}>
                   {item.thumbnailUrl ? (
@@ -213,65 +220,86 @@ const InboxWorkspace = ({
                 </div>
               </Card.Section>
 
-              <Text fw={500} fz="lg" lineClamp={2} mt="md">
-                {item.title ?? item.originalUrl ?? '제목을 가져오는 중'}
-              </Text>
-              {(item.channelTitle || item.domain) && (
-                <Group align="center" gap={5} mt={2} wrap="nowrap">
-                  {favicon && (
-                    <img
-                      alt=""
-                      className="inbox-domain-favicon"
-                      onError={event => {
-                        event.currentTarget.style.display = 'none';
-                      }}
-                      src={favicon}
-                    />
-                  )}
-                  <Text c="dimmed" fz="xs" truncate>
-                    {item.channelTitle ?? item.domain}
+              <div className="inbox-card-content">
+                <div className="inbox-card-title">
+                  <Text fw={500} fz="md" lineClamp={2}>
+                    {item.title ?? item.originalUrl ?? '제목을 가져오는 중'}
                   </Text>
-                </Group>
-              )}
-              {oneLiner && oneLiner !== excerpt && (
-                <Text fz="sm" lineClamp={2} mt="xs">
-                  {oneLiner}
-                </Text>
-              )}
-              {item.keywords.length > 0 && (
-                <Group gap={7} mt="sm">
-                  {item.keywords.slice(0, CARD_KEYWORD_LIMIT).map(keyword => (
-                    <Badge key={keyword} size="sm" variant="light">
+                </div>
+
+                <div className="inbox-card-source">
+                  {(item.channelTitle || item.domain) && (
+                    <Group align="center" gap={4} wrap="nowrap">
+                      {favicon && (
+                        <img
+                          alt=""
+                          className="inbox-domain-favicon"
+                          onError={event => {
+                            event.currentTarget.style.display = 'none';
+                          }}
+                          src={favicon}
+                        />
+                      )}
+                      <Text c="dimmed" fz="xs" truncate>
+                        {item.channelTitle ?? item.domain}
+                      </Text>
+                    </Group>
+                  )}
+                </div>
+
+                <div className="inbox-card-summary">
+                  {oneLiner && oneLiner !== excerpt && (
+                    <Text fz="xs" lineClamp={2}>
+                      {oneLiner}
+                    </Text>
+                  )}
+                </div>
+
+                <Group className="inbox-card-keywords" gap={5}>
+                  {keywords.slice(0, CARD_KEYWORD_LIMIT).map(keyword => (
+                    <Badge key={keyword} size="xs" variant="light">
                       {keyword}
                     </Badge>
                   ))}
-                  {item.keywords.length > CARD_KEYWORD_LIMIT && (
-                    <Badge color="gray" size="sm" variant="light">
-                      +{item.keywords.length - CARD_KEYWORD_LIMIT}
+                  {keywords.length > CARD_KEYWORD_LIMIT && (
+                    <Badge color="gray" size="xs" variant="light">
+                      +{keywords.length - CARD_KEYWORD_LIMIT}
                     </Badge>
                   )}
                 </Group>
-              )}
-              <Group gap="xs" mt="md" wrap="nowrap">
-                <Button
-                  onClick={() => onOpenDetail(item)}
-                  radius="md"
-                  size="sm"
-                  style={{ flex: 1 }}
-                >
-                  자세히
-                </Button>
-                <ActionIcon
-                  aria-label={item.liked ? '좋아요 취소' : '좋아요'}
-                  className="inbox-like"
-                  onClick={() => onToggleLike(item.id, !item.liked)}
-                  radius="md"
-                  size={36}
-                  variant="default"
-                >
-                  <Heart fill={item.liked ? 'currentColor' : 'none'} size={18} />
-                </ActionIcon>
-              </Group>
+
+                <Group className="inbox-card-actions" gap={6} wrap="nowrap">
+                  <Button
+                    onClick={() => onOpenDetail(item)}
+                    radius="sm"
+                    size="xs"
+                    style={{ flex: 1 }}
+                  >
+                    자세히
+                  </Button>
+                  <ActionIcon
+                    aria-label={item.liked ? '좋아요 취소' : '좋아요'}
+                    className="inbox-like"
+                    onClick={() => onToggleLike(item.id, !item.liked)}
+                    radius="sm"
+                    size={32}
+                    variant="default"
+                  >
+                    <Heart fill={item.liked ? 'currentColor' : 'none'} size={16} />
+                  </ActionIcon>
+                  <ActionIcon
+                    aria-label="삭제"
+                    className="inbox-delete"
+                    onClick={() => onDelete(item.id)}
+                    radius="sm"
+                    size={32}
+                    title="삭제"
+                    variant="default"
+                  >
+                    <Trash2 size={16} />
+                  </ActionIcon>
+                </Group>
+              </div>
             </Card>
           );
         })}

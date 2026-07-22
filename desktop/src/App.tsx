@@ -22,13 +22,18 @@ import MemoSplitWorkspace, {
 import SettingsModal from './features/settings/SettingsModal';
 import { useAppHotkeys } from './hooks/useAppHotkeys';
 import {
-  AMBIENT_COOLDOWN_MS,
+  AMBIENT_EMPTY_NOTICE_MS,
   AMBIENT_MAX_RESULT_COUNT,
   AMBIENT_MIN_CHARS,
   AMBIENT_MIN_SIMILARITY,
   NETWORK_MIN_SIMILARITY,
 } from './lib/constants';
-import { createUuid, hashText } from './lib/contentHash';
+import {
+  AmbientSearchTarget,
+  canRunAmbientAutoSearch,
+  createAmbientSearchRunner,
+} from './lib/ambientSearch';
+import { createUuid } from './lib/contentHash';
 import { parseDates } from './lib/dateParser';
 import {
   loadPinnedMemoIds,
@@ -36,8 +41,9 @@ import {
   togglePinnedMemoId,
 } from './lib/pinnedMemos';
 import { MemoChunk, getCursorContextText } from './lib/memoChunker';
+import { decideMemoNavAction } from './lib/memoNavAction';
 import { registerReconnectSync } from './lib/reconnectSync';
-import { editorsAfterOpenTab } from './lib/splitPaneTabs';
+import { editorsAfterNewTab, editorsAfterOpenTab } from './lib/splitPaneTabs';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import {
   AppSettings,
@@ -65,6 +71,7 @@ import {
 import {
   InboxSession,
   createInboxSession,
+  deleteInboxSession,
   fetchInboxSessions,
   setInboxLiked,
 } from './services/backend/inboxService';
@@ -221,6 +228,14 @@ const isSplitPaneBlankMemoDraft = (pane: MemoSplitPaneState) => {
   );
 };
 
+const getAppPaneEditors = (pane: MemoSplitPaneState) =>
+  pane.editors && pane.editors.length > 0 ? pane.editors : [pane];
+
+const getAppActiveEditor = (pane: MemoSplitPaneState) => {
+  const editors = getAppPaneEditors(pane);
+  return editors.find(editor => editor.id === pane.activeEditorId) ?? editors[0];
+};
+
 const mergeInboxItems = (
   remoteItems: InboxSession[],
   localItems: InboxSession[],
@@ -281,12 +296,17 @@ const App = () => {
     null,
   );
   const [ambientError, setAmbientError] = useState<string | null>(null);
-  const [ambientRetrySignal, setAmbientRetrySignal] = useState(0);
-  const [ambientTarget, setAmbientTarget] = useState<{
-    editorId: string;
-    memoId: string | null;
-    queryText: string;
-  } | null>(null);
+  const [ambientDisplayEditorId, setAmbientDisplayEditorId] = useState<
+    string | null
+  >(null);
+  const [ambientEmptyEditorId, setAmbientEmptyEditorId] = useState<
+    string | null
+  >(null);
+  const [ambientSearchingEditorId, setAmbientSearchingEditorId] = useState<
+    string | null
+  >(null);
+  const [ambientTarget, setAmbientTarget] =
+    useState<AmbientSearchTarget | null>(null);
   const [briefings, setBriefings] = useState<BriefingRow[]>([]);
   const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlockRow[]>([]);
   const [activityCompletions, setActivityCompletions] = useState<ActivityCompletion[]>([]);
@@ -367,7 +387,20 @@ const App = () => {
 
   const activeMemoIdRef = useRef<string | null>(null);
   const hasHydratedActiveMemoRef = useRef(false);
-  const ambientSuccessAtRef = useRef<Map<string, number>>(new Map());
+  const ambientEmptyNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const ambientRunnerRef = useRef(
+    createAmbientSearchRunner({
+      search: target =>
+        searchCursorNetwork({
+          limit: AMBIENT_MAX_RESULT_COUNT,
+          memoId: target.memoId,
+          minimumSimilarity: AMBIENT_MIN_SIMILARITY,
+          queryText: target.queryText,
+        }),
+    }),
+  );
   const memoSyncChainsRef = useRef<Map<string, Promise<void>>>(new Map());
   const memoLocalWriteRevisionsRef = useRef<Map<string, number>>(new Map());
   const deletingMemoIdsRef = useRef<Set<string>>(new Set());
@@ -760,12 +793,6 @@ const App = () => {
     });
     return map;
   }, [splitPanes]);
-  const dateMatches = useMemo(() => {
-    // Base "today", never the memo's created_at: schedule creation parses with
-    // Date.now(), so a created_at base made the preview lag a day behind the
-    // actual schedule on any memo created before today.
-    return parseDates(memoDraft);
-  }, [memoDraft]);
   const selectedText = useMemo(() => {
     if (selectedTextState) {
       return selectedTextState.trim();
@@ -1213,65 +1240,100 @@ const App = () => {
     [syncPendingLocalWorkspace],
   );
 
-  useEffect(() => {
-    setAmbientQueryChunk(null);
-    setAmbientResult(null);
-    setAmbientError(null);
-
-    if (!session || !ambientTarget) {
+  // idle 후에는 pending query만 준비한다. 네트워크 요청은 하단 "연관 문장"
+  // 버튼 클릭 또는 자동 검색 설정(고급 옵션)이 켜진 경우에만 나간다.
+  // 동일한 타겟이면 기존 객체를 유지하고, 12자 미만이면 pending을 비워
+  // 버튼을 숨긴다.
+  const updateAmbientTarget = (
+    editorId: string,
+    memoId: string | null,
+    queryText: string,
+  ) => {
+    if (queryText.trim().length < AMBIENT_MIN_CHARS) {
+      setAmbientTarget(previous =>
+        previous && previous.editorId === editorId ? null : previous,
+      );
       return;
     }
-
-    const queryText = ambientTarget.queryText.trim();
-    if (queryText.length < AMBIENT_MIN_CHARS) {
-      return;
-    }
-
-    const chunkHash = hashText(
-      `${ambientTarget.editorId}:${ambientTarget.memoId ?? 'draft'}:${queryText}`,
+    setAmbientTarget(previous =>
+      previous &&
+      previous.editorId === editorId &&
+      previous.memoId === memoId &&
+      previous.queryText === queryText
+        ? previous
+        : { editorId, memoId, queryText },
     );
-    const lastSuccessAt = ambientSuccessAtRef.current.get(chunkHash) ?? 0;
-    if (Date.now() - lastSuccessAt < AMBIENT_COOLDOWN_MS) {
+  };
+
+  const showAmbientEmptyNotice = (editorId: string) => {
+    if (ambientEmptyNoticeTimerRef.current) {
+      clearTimeout(ambientEmptyNoticeTimerRef.current);
+    }
+    setAmbientEmptyEditorId(editorId);
+    ambientEmptyNoticeTimerRef.current = setTimeout(() => {
+      setAmbientEmptyEditorId(null);
+    }, AMBIENT_EMPTY_NOTICE_MS);
+  };
+
+  // 결과·오류는 검색을 시작한 편집기(snapshot의 editorId)에만 바인딩한다.
+  // 로그아웃 뒤 도착한 응답은 무시한다.
+  const ambientSearchHandlers = {
+    onEmpty: (target: AmbientSearchTarget) => {
+      if (!sessionRef.current) return;
+      setAmbientQueryChunk(null);
+      setAmbientResult(null);
+      setAmbientError(null);
+      setAmbientDisplayEditorId(target.editorId);
+      showAmbientEmptyNotice(target.editorId);
+    },
+    onError: (target: AmbientSearchTarget, error: unknown) => {
+      if (!sessionRef.current) return;
+      setAmbientQueryChunk(null);
+      setAmbientResult(null);
+      setAmbientDisplayEditorId(target.editorId);
+      setAmbientError(
+        formatNetworkSearchErrorMessage(error, { isOnline: navigator.onLine }),
+      );
+    },
+    onFinish: () => {
+      setAmbientSearchingEditorId(null);
+    },
+    onResult: (
+      target: AmbientSearchTarget,
+      queryChunk: MemoChunk | null,
+      result: NetworkSearchResult,
+    ) => {
+      if (!sessionRef.current) return;
+      setAmbientQueryChunk(queryChunk);
+      setAmbientResult(result);
+      setAmbientError(null);
+      setAmbientDisplayEditorId(target.editorId);
+    },
+    onStart: (target: AmbientSearchTarget) => {
+      setAmbientSearchingEditorId(target.editorId);
+    },
+  };
+
+  const runAmbientSearchNow = () => {
+    if (!session) {
       return;
     }
+    ambientRunnerRef.current.run(ambientTarget, ambientSearchHandlers);
+  };
 
-    const controller = new AbortController();
-    let isCurrent = true;
-    void searchCursorNetwork({
-          limit: AMBIENT_MAX_RESULT_COUNT,
-          minimumSimilarity: AMBIENT_MIN_SIMILARITY,
-          memoId: ambientTarget.memoId,
-          queryText,
-          signal: controller.signal,
-        })
-        .then(result => {
-          if (!isCurrent) {
-            return;
-          }
-          ambientSuccessAtRef.current.set(chunkHash, Date.now());
-          if (ambientSuccessAtRef.current.size > 200) {
-            const oldestHash = ambientSuccessAtRef.current.keys().next().value;
-            if (oldestHash) ambientSuccessAtRef.current.delete(oldestHash);
-          }
-          setAmbientQueryChunk(result.queryChunk);
-          setAmbientResult(result.results[0] ?? null);
-        })
-        .catch(caught => {
-          if (!isCurrent || (caught instanceof DOMException && caught.name === 'AbortError')) {
-            return;
-          }
-          setAmbientQueryChunk(null);
-          setAmbientResult(null);
-          setAmbientError(formatNetworkSearchErrorMessage(caught, {
-            isOnline: navigator.onLine,
-          }));
-        });
-
-    return () => {
-      isCurrent = false;
-      controller.abort();
-    };
-  }, [ambientRetrySignal, ambientTarget, session]);
+  useEffect(() => {
+    if (
+      !canRunAmbientAutoSearch({
+        autoSearchEnabled: appSettings.ambientAutoSearchEnabled,
+        documentHasFocus: document.hasFocus(),
+        documentHidden: document.hidden,
+        hasSession: Boolean(session),
+      })
+    ) {
+      return;
+    }
+    ambientRunnerRef.current.run(ambientTarget, ambientSearchHandlers);
+  }, [ambientTarget, appSettings.ambientAutoSearchEnabled, session]);
 
   const saveMemoContent = (
     id: string,
@@ -1727,9 +1789,7 @@ const App = () => {
     }
 
     await saveCalendarBlock({
-      allDay:
-        containedMatch.date.getHours() === 0 &&
-        containedMatch.date.getMinutes() === 0,
+      allDay: !containedMatch.hasTime,
       color: '#66705A',
       note: selectedText,
       startDate: containedMatch.date.toISOString(),
@@ -2084,7 +2144,10 @@ const App = () => {
     });
   };
 
-  const openDraftInFocusedSplitPane = (category = DEFAULT_MEMO_CATEGORY) => {
+  const openDraftInFocusedSplitPane = (
+    category = DEFAULT_MEMO_CATEGORY,
+    forceNewTab = false,
+  ) => {
     const nextEditor = createEditorHelper('memo', {
       draftCategory: category,
       draftText: '',
@@ -2138,11 +2201,73 @@ const App = () => {
           ...pane,
           ...mirrorEditorPatchHelper(nextEditor),
           activeEditorId: nextEditor.id,
-          editors: editorsAfterOpenTab(editors, pane.activeEditorId, nextEditor),
+          editors: forceNewTab
+            ? editorsAfterNewTab(editors, nextEditor)
+            : editorsAfterOpenTab(editors, pane.activeEditorId, nextEditor),
           view: nextEditor.view,
         };
       });
     });
+  };
+
+  const handleMemoNavClick = () => {
+    const focusedPane = splitPanes.find(pane => pane.id === focusedPaneId);
+    const memoTabs = splitPanes.flatMap(pane =>
+      getAppPaneEditors(pane)
+        .filter(editor => editor.view === 'memo')
+        .map(editor => ({ editor, pane })),
+    );
+    const focusedEditor = focusedPane
+      ? getAppActiveEditor(focusedPane)
+      : undefined;
+    const action = decideMemoNavAction({
+      hasMemoTab: memoTabs.length > 0,
+      isMemoTabFocused:
+        activeTab === 'memo' && focusedEditor?.view === 'memo',
+    });
+
+    if (action === 'create-new') {
+      openDraftInFocusedSplitPane(DEFAULT_MEMO_CATEGORY, true);
+      return;
+    }
+
+    // Prefer a memo tab in the currently focused panel; otherwise use the
+    // first memo tab in panel order so the rail always has a deterministic
+    // target to focus.
+    const target =
+      (focusedPane
+        ? memoTabs.find(item => item.pane.id === focusedPane.id)
+        : undefined) ?? memoTabs[0];
+    if (!target) {
+      openDraftInFocusedSplitPane(DEFAULT_MEMO_CATEGORY, true);
+      return;
+    }
+
+    setActiveTab('memo');
+    setFocusedPaneId(target.pane.id);
+    if (target.editor.memoId) {
+      selectMemoById(target.editor.memoId);
+    } else {
+      setActiveMemoId(null);
+      setActiveMemoCreatedAt(new Date().toISOString());
+      setMemoDraft(target.editor.draftText ?? '');
+      setActiveDraftCategory(target.editor.draftCategory ?? DEFAULT_MEMO_CATEGORY);
+      setSaveState('idle');
+    }
+    setSplitPanes(prev =>
+      prev.map(pane => {
+        if (pane.id !== target.pane.id) {
+          return pane;
+        }
+        return {
+          ...pane,
+          ...mirrorEditorPatchHelper(target.editor),
+          activeEditorId: target.editor.id,
+          editors: getAppPaneEditors(pane),
+          view: target.editor.view,
+        };
+      }),
+    );
   };
 
   const focusRelativePane = (offset: number) => {
@@ -2523,6 +2648,25 @@ const App = () => {
     );
   };
 
+  const deleteInboxItem = (id: string) => {
+    if (!window.confirm('수집한 링크를 삭제하시겠습니까?')) {
+      return;
+    }
+
+    const ownerId = session?.user.id;
+    setInboxItems(previous => previous.filter(item => item.id !== id));
+    // 로컬 캐시/큐 행도 같은 키(id=clientId)로 지운다 — 서버에 없던 큐 전용
+    // 항목은 이걸로 삭제가 끝난다.
+    void removeLocalInboxSession(id, ownerId).catch(() => undefined);
+    void deleteInboxSession(id).catch(caught => {
+      setError(
+        caught instanceof Error ? caught.message : '수집 항목을 삭제하지 못했습니다.',
+      );
+      // 서버 삭제 실패 시 다시 받아와 실제 상태로 되돌린다.
+      void refreshInbox();
+    });
+  };
+
   const saveInboxUrlRef = useRef(saveInboxUrl);
   saveInboxUrlRef.current = saveInboxUrl;
 
@@ -2599,7 +2743,7 @@ const App = () => {
           aria-label="메모"
           className={activeTab === 'memo' ? 'nav-item active' : 'nav-item'}
           delay={300}
-          onClick={() => setActiveTab('memo')}
+          onClick={handleMemoNavClick}
           placement="right"
           tooltip="메모"
         >
@@ -2677,14 +2821,21 @@ const App = () => {
           >
             <MemoWorkspace
               activeMemoId={sidebarActiveMemoId}
-              ambientError={ambientError}
+              ambientError={
+                ambientDisplayEditorId === 'legacy-editor' ? ambientError : null
+              }
               openMemoPaneNumbers={openMemoPaneNumbers}
               isSessionCollapsed={isSessionCollapsed}
               openSearchSignal={searchSignal}
               onToggleSession={() => setSessionCollapsed(value => !value)}
               ambientQueryChunk={ambientQueryChunk}
-              ambientResult={ambientResult}
-              dateMatches={dateMatches}
+              ambientResult={
+                ambientDisplayEditorId === 'legacy-editor' ? ambientResult : null
+              }
+              isAmbientPending={ambientTarget?.editorId === 'legacy-editor'}
+              isAmbientSearching={ambientSearchingEditorId === 'legacy-editor'}
+              showAmbientEmptyNotice={ambientEmptyEditorId === 'legacy-editor'}
+              onRunAmbientSearch={runAmbientSearchNow}
               memoDraft={memoDraft}
               memos={memos}
               networkError={networkError}
@@ -2692,11 +2843,7 @@ const App = () => {
               networkResults={networkResults}
               onChangeDraft={changeMemoDraft}
               onAmbientQuery={queryText =>
-                setAmbientTarget({
-                  editorId: 'legacy-editor',
-                  memoId: activeMemoId,
-                  queryText,
-                })
+                updateAmbientTarget('legacy-editor', activeMemoId, queryText)
               }
               onDeleteMemoById={id => void deleteMemoById(id)}
               onNewMiniMemo={() => openDraftInFocusedSplitPane(MINI_SUBNOTA_CATEGORY)}
@@ -2711,7 +2858,6 @@ const App = () => {
               onOpenNetwork={() => {
                 void openNetwork();
               }}
-              onRetryAmbient={() => setAmbientRetrySignal(value => value + 1)}
               onRegisterSelectionSchedule={() => void registerSelectionSchedule()}
               onRegisterSelectionScheduleAt={(date, allDay) => {
                 void registerSelectionScheduleAt(date, allDay);
@@ -2736,14 +2882,15 @@ const App = () => {
               topicMemberships={topicMemberships}
               workspaceContent={
                 <MemoSplitWorkspace
-                  ambientEditorId={ambientTarget?.editorId ?? null}
+                  ambientEditorId={ambientDisplayEditorId}
+                  ambientEmptyEditorId={ambientEmptyEditorId}
                   ambientError={ambientError}
+                  ambientPendingEditorId={ambientTarget?.editorId ?? null}
                   ambientResult={ambientResult}
+                  ambientSearchingEditorId={ambientSearchingEditorId}
+                  onRunAmbientSearch={runAmbientSearchNow}
                   isTopicsLoading={isRefreshing && topicClusters.length === 0}
-                  onAmbientQuery={(editorId, memoId, queryText) =>
-                    setAmbientTarget({ editorId, memoId, queryText })
-                  }
-                  onRetryAmbient={() => setAmbientRetrySignal(value => value + 1)}
+                  onAmbientQuery={updateAmbientTarget}
                   focusedPaneId={focusedPaneId}
                   initialPaneWidths={paneWidths}
                   isSessionCollapsed={isSessionCollapsed}
@@ -2758,6 +2905,7 @@ const App = () => {
                   canAddPane={splitPanes.length < MAX_SPLIT_PANE_COUNT}
                   memos={memos}
                   onCreateMemo={createMemoFromContent}
+                  onDeleteMemoById={id => void deleteMemoById(id)}
                   onUpdateMemo={(id, nextText) => {
                     if (id === activeMemoId) {
                       changeMemoDraft(nextText);
@@ -2784,6 +2932,7 @@ const App = () => {
                   onRefreshInbox={refreshInbox}
                   onSaveInboxUrl={saveInboxUrl}
                   onToggleInboxLike={toggleInboxLike}
+                  onDeleteInboxItem={deleteInboxItem}
                   briefings={briefings}
                   scheduleInbox={scheduleInbox}
                   onAcceptInbox={acceptInboxItem}
