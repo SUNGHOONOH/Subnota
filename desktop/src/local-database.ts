@@ -374,3 +374,24 @@ ipcMain.handle(
     return result.filePath;
   },
 );
+
+ipcMain.handle(
+  'local-db:export-markdown',
+  async (event, name: unknown, content: unknown) => {
+    assertTrustedSender(event);
+    if (typeof name !== 'string' || typeof content !== 'string') {
+      throw new Error('올바르지 않은 내보내기 요청입니다.');
+    }
+    const safeName =
+      name.replace(/[\\/:*?"<>|\n\r]/g, ' ').trim().slice(0, 60) || '노트';
+    const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const result = await dialog.showSaveDialog(window, {
+      defaultPath: `${safeName}.md`,
+      filters: [{ extensions: ['md'], name: 'Markdown' }],
+      title: 'Markdown 내보내기',
+    });
+    if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    return result.filePath;
+  },
+);

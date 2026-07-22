@@ -64,4 +64,39 @@ describe('workspace session persistence', () => {
     expect(session?.paneWidths).toEqual({});
     expect(normalizeWorkspaceSession({ version: 2 })).toBeNull();
   });
+
+  it('drops malformed persisted view payloads and restores Topics tabs', () => {
+    const session = normalizeWorkspaceSession({
+      activeMemoId: null,
+      activeTab: 'memo',
+      focusedPaneId: 'pane-1',
+      isSessionCollapsed: false,
+      isSplitWorkspaceEnabled: true,
+      paneWidths: {},
+      splitPanes: [
+        {
+          activeEditorId: 'editor-1',
+          editors: [
+            {
+              id: 'editor-1',
+              networkResults: 'not-an-array',
+              sourceResult: 'not-an-object',
+              view: 'topics',
+            },
+          ],
+          id: 'pane-1',
+          networkResults: 'not-an-array',
+          sourceResult: 42,
+          view: 'topics',
+        },
+      ],
+      version: 1,
+    });
+
+    expect(session?.splitPanes[0].view).toBe('topics');
+    expect(session?.splitPanes[0].networkResults).toBeUndefined();
+    expect(session?.splitPanes[0].sourceResult).toBeUndefined();
+    expect(session?.splitPanes[0].editors?.[0].networkResults).toBeUndefined();
+    expect(session?.splitPanes[0].editors?.[0].sourceResult).toBeUndefined();
+  });
 });

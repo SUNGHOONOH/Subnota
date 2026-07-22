@@ -40,7 +40,7 @@ def get_kiwi() -> Kiwi:
 
 def split_memo_chunks(request: MemoChunkRequest) -> MemoChunkResponse:
     sentence_chunks = split_sentences(request.text)
-    network_chunks = build_network_chunks(sentence_chunks)
+    network_chunks = build_network_chunks(sentence_chunks, request.text)
     cursor_sentence_chunk = find_chunk_at_cursor(sentence_chunks, request.cursor_index)
     cursor_network_chunk = find_chunk_at_cursor(network_chunks, request.cursor_index)
     embeddings = None
@@ -224,18 +224,31 @@ def split_sentences(text: str) -> list[MemoChunk]:
     return sentences
 
 
-def build_network_chunks(sentence_chunks: list[MemoChunk]) -> list[MemoChunk]:
+def build_network_chunks(
+    sentence_chunks: list[MemoChunk],
+    text: str = "",
+) -> list[MemoChunk]:
+    """Group sentences into chunks, treating a line break as a block boundary
+    (Obsidian-style): only sentences written on the same line are grouped, and
+    short groups never merge across lines. Pass the source text to enable the
+    boundary check; without it, grouping is length-based only."""
     chunks: list[MemoChunk] = []
     pending: list[MemoChunk] = []
+    merge_with_previous = True
 
     for sentence in sentence_chunks:
+        if pending and "\n" in text[pending[-1].end : sentence.start]:
+            append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
+            pending = []
+            merge_with_previous = False
         pending.append(sentence)
         if should_flush_network_chunk(pending):
-            append_network_chunk(chunks, pending)
+            append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
             pending = []
+            merge_with_previous = True
 
     if pending:
-        append_network_chunk(chunks, pending)
+        append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
 
     return chunks
 
@@ -249,7 +262,12 @@ def should_flush_network_chunk(sentences: list[MemoChunk]) -> bool:
     )
 
 
-def append_network_chunk(chunks: list[MemoChunk], sentences: list[MemoChunk]) -> None:
+def append_network_chunk(
+    chunks: list[MemoChunk],
+    sentences: list[MemoChunk],
+    *,
+    allow_merge: bool = True,
+) -> None:
     if not sentences:
         return
 
@@ -257,7 +275,7 @@ def append_network_chunk(chunks: list[MemoChunk], sentences: list[MemoChunk]) ->
     end = sentences[-1].end
     text = "\n".join(sentence.text for sentence in sentences).strip()
 
-    if len(text) < constants.CHUNK_MIN_CHARS and chunks:
+    if allow_merge and len(text) < constants.CHUNK_MIN_CHARS and chunks:
         previous = chunks[-1]
         merged_text = f"{previous.text}\n{text}".strip()
         chunks[-1] = previous.model_copy(

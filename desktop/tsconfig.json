@@ -14,7 +14,8 @@
     "jsx": "react-jsx",
     "types": ["node", "vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@tiptap/react/menus": ["./node_modules/@tiptap/react/dist/menus/index.d.ts"]
     }
   },
   "exclude": [

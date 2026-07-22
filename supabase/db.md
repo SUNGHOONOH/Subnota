@@ -1,6 +1,6 @@
 # Subnota database handoff
 
-Last verified: 2026-06-23 (Asia/Seoul)
+Last verified: 2026-07-15 (Asia/Seoul)
 
 This document describes the production Supabase database after the security and
 memo graph consistency migration. It is intended as the starting point for any
@@ -27,14 +27,32 @@ Google Secret Manager.
 
 ## Source of truth and migration workflow
 
-Schema source of truth is `supabase/migrations/`. Production migration
-history was initialized on 2026-06-23 after earlier migrations had been applied
-manually. Local and remote history currently match through:
+The production schema was verified from the live catalog on 2026-07-15. The
+canonical production migration history is the 30-row
+`supabase_migrations.schema_migrations` table, whose latest recorded version is
+`20260707190355_topic_memo_inbox_edges`.
 
-`20260623110725_topic_dirty_nonempty_only.sql`
+The local SQL files are the reproducible source for future work, but their
+filenames do not exactly match every production history version. Several SQL
+files were executed manually and later recorded with generated timestamps, and
+the inbox-topic feature was recorded in production as two migrations before the
+final edge migration:
 
-Two same-day migrations were renamed to unique timestamp versions so Supabase
-can track both. Do not rename an already tracked migration again.
+| Local file | Production history entry | Status |
+| --- | --- | --- |
+| `20260624000000_fk_indexes.sql` | `20260626054754_fk_indexes` | reflected in production |
+| `20260624000100_memo_tombstones_and_revision.sql` | `20260626054819_memo_tombstones_and_revision` | reflected in production |
+| `20260624000200_memo_conflict_copy_rpc.sql` | `20260626054838_memo_conflict_copy_rpc` | reflected in production |
+| `20260625000000_calendar_completed_at.sql` | `20260626054851_calendar_completed_at` | reflected in production |
+| `20260626000000_growth_events.sql` | `20260626055812_growth_events` | reflected in production |
+| `20260626000100_trees.sql` | `20260626062143_trees` | reflected in production |
+| `20260708000000_topic_cluster_inbox_items.sql` | `20260707181903_topic_cluster_inbox_items` + `20260707182219_topic_cluster_inbox_items_service_grant` | reflected in production |
+
+The production history is intentionally not duplicated with the local
+filenames. Do not mark these local aliases as new applied migrations and do not
+run a blanket `supabase db push`; that would re-run changes already reflected
+in production. For a future migration, first reconcile the local filename and
+production version mapping, then apply only genuinely new SQL.
 
 For future changes:
 
@@ -51,7 +69,7 @@ reproducible chain; new production changes belong in a new migration.
 
 The project CLI configuration is `supabase/config.toml`.
 
-## Public tables (16)
+## Public tables (23)
 
 All public tables have RLS enabled.
 
@@ -68,6 +86,12 @@ All public tables have RLS enabled.
 - `topic_cluster_memos`: topic membership rows.
 - `topic_memo_edges`: memo relationships inside topics.
 - `topic_memo_embedding_cache`: whole-memo embeddings used by topic discovery.
+- `memo_similarity_edges`: persisted memo-level similarity graph.
+- `topic_cluster_inbox_items`: inbox sessions attached to a topic cluster.
+- `topic_memo_inbox_edges`: memo-to-inbox links inside a topic cluster.
+- `activity_completions`: append-only first-completion ledger.
+- `daily_completions`: append-only fully-completed-day ledger.
+- `trees`: immutable growth-tree snapshots by user and generation.
 
 ### Backend-only, no client policy
 
@@ -76,6 +100,7 @@ All public tables have RLS enabled.
 - `inbox_sessions`: collected inbox content and summaries.
 - `inbox_session_embeddings`: inbox chunk embeddings.
 - `memo_chunk_index_leases`: short-lived per-user maintenance leases.
+- `memo_tombstones`: backend-only delete-wins ledger for memo sync.
 
 Backend-only tables intentionally have RLS enabled with zero policies and no
 `anon`/`authenticated` privileges. The Supabase advisor reports this as INFO;
@@ -96,9 +121,12 @@ have `EXECUTE`; `service_role` must have it. Privileged functions pin their
 - `fetch_dirty_memos`
 - `replace_topic_map`
 - `rebuild_user_memo_chunk_edges`
+- `rebuild_user_memo_similarity_edges`
 - `fetch_memo_chunk_neighbors`
 - `claim_memo_chunk_index_lease`
 - `release_memo_chunk_index_lease`
+- `replace_schedule_inbox_if_current`
+- `purge_old_memo_tombstones`
 
 `rebuild_memo_chunk_edges` is a temporary service-only compatibility wrapper
 for an older backend signature. The deployed backend calls
@@ -123,10 +151,13 @@ through the migration workflow and explicitly hardened.
 ## Triggers
 
 - `auth.users` AFTER INSERT -> `public.handle_new_user()`.
-- Nine public-table BEFORE UPDATE triggers call `public.set_updated_at()`:
-  `calendar_blocks`, `chunk_embedding_cache`, `inbox_session_embeddings`,
-  `memo_chunks`, `memos`, `profiles`, `schedule_inbox`, `topic_clusters`, and
+- Public-table `set_updated_at` triggers exist on `calendar_blocks`,
+  `chunk_embedding_cache`, `inbox_session_embeddings`, `memo_chunks`, `memos`,
+  `profiles`, `schedule_inbox`, `topic_clusters`, and
   `topic_memo_embedding_cache`.
+- `memos` also has revision and tombstone triggers:
+  `memos_bump_revision`, `memos_record_tombstone`,
+  `memos_guard_tombstone_update`, and `memos_block_tombstoned_insert`.
 - Event trigger `ensure_rls` calls `public.rls_auto_enable()` after public table
   creation and enables RLS automatically.
 
@@ -158,12 +189,15 @@ Graph semantics are a persisted approximate **directed** top-K snapshot:
 It is not mutual KNN and is not automatically undirected. Consumers that need
 an undirected graph must define that separately rather than assuming symmetry.
 
-Production verification immediately after migration:
+Production verification on 2026-07-15:
 
-- active chunks: 36
-- rebuilt edges: 189
-- eligible active chunks without outgoing edges: 0
+- active memo chunks: 74
+- memo chunk edges: 392
+- eligible active chunks without outgoing edges: 1; that chunk has zero eligible
+  candidate neighbors at the configured similarity threshold, so this is not a
+  rebuild omission
 - cross-user edge mismatches: 0
+- invalid embedding dimensions: 0
 
 The old state had 7 eligible chunks without outgoing edges. That ordering bug
 is fixed. Do not reintroduce per-memo delete-both-directions/reinsert-outgoing
@@ -200,7 +234,7 @@ because topic discovery intentionally ignores empty content.
 
 `daily-briefing` is intentionally not scheduled.
 
-## Security state after 2026-06-23
+## Security state after 2026-07-15
 
 - `match_memo_chunks` and `match_inbox_session_embeddings` are service-only,
   have empty `search_path`, and include ownership predicates.
@@ -211,8 +245,15 @@ because topic discovery intentionally ignores empty content.
 - The previously exposed backend admin key was rotated; old Secret Manager
   versions 1 and 2 are disabled; version 3 is enabled. Retrieve the current key
   from Secret Manager only when an authorized maintenance call is required.
-- Migration history contains 18 applied versions on remote; local and remote
-  match through `20260623110725_topic_dirty_nonempty_only.sql`.
+- Production migration history contains 30 applied versions through
+  `20260707190355_topic_memo_inbox_edges`.
+- The live schema reflects all current local feature migrations, but several
+  local filenames are aliases of production's generated migration versions;
+  see the mapping table above.
+- Supabase security advisor still reports the three tombstone trigger helpers as
+  publicly executable SECURITY DEFINER functions. They are trigger-only helpers
+  and not intended RPC endpoints, but their EXECUTE privileges should be
+  explicitly revoked in a future hardening migration.
 
 ## Known deferred work
 
@@ -229,7 +270,7 @@ Applied and pushed to production 2026-06-23:
   advisor finding. Confirm HNSW query plans with `EXPLAIN ANALYZE` once data
   reaches representative scale.
 
-Advisor exceptions intentionally left as-is (2026-06-23): `unindexed_foreign_keys`
+Advisor exceptions intentionally left as-is (2026-07-15): `unindexed_foreign_keys`
 (deferred FK work, INFO), `unused_index` (small dataset, INFO), `rls_enabled_no_policy`
 (backend-only deny-by-default, INFO), `auth_leaked_password_protection` (deferred, WARN),
 `extension_in_public` (pgvector move deferred, WARN).
@@ -238,6 +279,11 @@ Still deferred:
 
 - Add missing FK indexes identified by the Supabase performance advisor,
   prioritizing real delete/join paths. Revisit as tables grow.
+- Add explicit `TO authenticated` to the `topic_cluster_inbox_items` read policy.
+- Add ownership validation or composite user-scoped constraints to topic join
+  tables before multiple backend writers are introduced.
+- Add a per-user advisory lock around `replace_topic_map` if topic discovery can
+  overlap across cron, manual, or retry paths.
 - Decide whether `briefings.briefing_date` should be `NOT NULL` and backfill
   before adding the constraint.
 - Serialize `replace_topic_map` per user if concurrent topic jobs become real.

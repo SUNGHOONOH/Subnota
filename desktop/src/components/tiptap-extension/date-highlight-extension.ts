@@ -3,38 +3,45 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 
-import { parseDates } from "@/lib/dateParser"
+import { parseDates } from "../../lib/dateParser"
 
 // Inline decoration that highlights natural-language / numeric dates the same
-// way the legacy editor did. Decorations are derived per text node so string
-// offsets from parseDates map directly to document positions.
+// way the legacy editor did. Decorations are derived per textblock (not per
+// text node) so a date split by marks — e.g. a bold "3월" followed by plain
+// " 6일" — is still recognized as one token. Leaf nodes are replaced with a
+// single placeholder char so string offsets map 1:1 to document positions.
 const dateHighlightKey = new PluginKey("dateHighlight")
 
-const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
+export const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
   const decorations: Decoration[] = []
 
   doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) {
-      return
+    if (!node.isTextblock) {
+      return true
     }
 
-    let matches
-    try {
-      matches = parseDates(node.text)
-    } catch {
-      return
-    }
-
-    for (const match of matches) {
-      const from = pos + match.index
-      const to = from + match.length
-      if (to <= from) {
-        continue
+    const text = node.textBetween(0, node.content.size, undefined, "￼")
+    if (text) {
+      let matches
+      try {
+        matches = parseDates(text)
+      } catch {
+        return false
       }
-      decorations.push(
-        Decoration.inline(from, to, { class: "date-token" }),
-      )
+
+      for (const match of matches) {
+        const from = pos + 1 + match.index
+        const to = from + match.length
+        if (to <= from) {
+          continue
+        }
+        decorations.push(
+          Decoration.inline(from, to, { class: "date-token" }),
+        )
+      }
     }
+
+    return false
   })
 
   return DecorationSet.create(doc, decorations)

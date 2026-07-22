@@ -1,20 +1,21 @@
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.core import constants
-from app.db import (
+from app.db.embeddings import (
     fetch_cached_embedding,
     fetch_memo_chunk_neighbors,
-    fetch_memo_chunk_refs,
     search_similar_chunks,
     search_similar_inbox_embeddings,
     upsert_cached_embedding,
 )
+from app.db.memos import fetch_memo_chunk_refs
 from app.shared.hashing import short_hash
-from app.features.memo.chunking import MemoChunk
+from app.features.memo.chunking import MemoChunk, split_sentences
 from app.features.topics.discovery import encode_texts
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,10 @@ def search_network_chunks(request: NetworkSearchRequest) -> NetworkSearchRespons
     return search_live_network_chunks(request, query_text)
 
 
+def _normalize_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def resolve_indexed_chunk(
     user_id: str,
     memo_id: str,
@@ -100,7 +105,11 @@ def resolve_indexed_chunk(
     query_text: str,
 ) -> dict[str, Any] | None:
     """Map the cursor onto one of the memo's stored chunks, by character offset
-    when available, otherwise by verbatim containment in the cursor paragraph."""
+    when available, otherwise by whitespace-normalized sentence overlap.
+
+    Verbatim containment does not work here: stored chunk_text joins sentences
+    with '\\n' while the editor's cursor paragraph joins them with spaces, so a
+    multi-sentence chunk is never a literal substring of the query."""
     refs = fetch_memo_chunk_refs(user_id, memo_id)
     if not refs:
         return None
@@ -110,12 +119,32 @@ def resolve_indexed_chunk(
             if ref["start_index"] <= cursor_index < ref["end_index"]:
                 return ref
 
+    query_norm = _normalize_ws(query_text)
+    if not query_norm:
+        return None
+    query_sentences = [
+        _normalize_ws(sentence.text) for sentence in split_sentences(query_text)
+    ]
+
     best: dict[str, Any] | None = None
+    best_score = 0
     for ref in refs:
-        text = str(ref["chunk_text"]).strip()
-        if text and text in query_text:
-            if best is None or len(text) > len(str(best["chunk_text"])):
-                best = ref
+        chunk_norm = _normalize_ws(str(ref["chunk_text"]))
+        if not chunk_norm:
+            continue
+        if chunk_norm in query_norm or query_norm in chunk_norm:
+            score = len(chunk_norm)
+        else:
+            # Partial overlap (query window straddling a chunk boundary):
+            # score by the total length of shared sentences.
+            score = sum(
+                len(sentence)
+                for sentence in query_sentences
+                if sentence and sentence in chunk_norm
+            )
+        if score > best_score:
+            best = ref
+            best_score = score
     return best
 
 

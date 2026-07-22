@@ -1,6 +1,7 @@
 export type CloseBehavior = 'quit' | 'tray';
 
 export interface AppSettings {
+  ambientAutoSearchEnabled: boolean;
   autoCheckUpdates: boolean;
   fontSize: number;
   lineHeight: number;
@@ -10,6 +11,7 @@ export interface AppSettings {
 export const APP_SETTINGS_STORAGE_KEY = 'subnota.appSettings.v1';
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
+  ambientAutoSearchEnabled: false,
   autoCheckUpdates: true,
   fontSize: 16,
   lineHeight: 1.7,
@@ -22,6 +24,10 @@ const clamp = (value: number, min: number, max: number) =>
 export const normalizeAppSettings = (
   value?: Partial<AppSettings> | null,
 ): AppSettings => ({
+  ambientAutoSearchEnabled:
+    typeof value?.ambientAutoSearchEnabled === 'boolean'
+      ? value.ambientAutoSearchEnabled
+      : DEFAULT_APP_SETTINGS.ambientAutoSearchEnabled,
   autoCheckUpdates:
     typeof value?.autoCheckUpdates === 'boolean'
       ? value.autoCheckUpdates

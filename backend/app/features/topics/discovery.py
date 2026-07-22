@@ -1,8 +1,17 @@
 import hashlib
 import importlib
+import json
+import logging
 import re
 from collections import defaultdict
 from typing import Any, cast
+
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except Exception:  # pragma: no cover - optional runtime dependency
+    genai = None
+    genai_types = None
 
 from huggingface_hub import InferenceClient
 import numpy as np
@@ -13,22 +22,47 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from app.core import constants
 from app.core.config import settings
-from app.db import (
-    DatabaseRow,
-    MemoRecord,
-    content_hash_for_memo,
+from app.db.embeddings import (
+    fetch_inbox_embeddings_for_user,
     fetch_topic_memo_embeddings,
-    fetch_user_memos,
-    has_topic_dirty_memos,
-    mark_topic_memos_clean,
-    replace_topic_clusters,
+    rebuild_user_memo_similarity_edges,
     upsert_topic_memo_embeddings,
 )
+from app.db.memos import fetch_user_memos
+from app.db.topics import has_topic_dirty_memos, mark_topic_memos_clean, replace_topic_clusters
+from app.db.types import DatabaseRow, MemoRecord
+from app.db.utils import content_hash_for_memo
+
+logger = logging.getLogger(__name__)
 
 DATE_TOKEN_RE = re.compile(
     r"(오늘|내일|모레|글피|\d{1,2}월\s*\d{1,2}일|\d{2,4}[./-]\d{1,2}[./-]\d{1,2})"
 )
 TOKEN_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}")
+TOPIC_LABEL_BLOCKLIST = {
+    "기타",
+    "내용",
+    "메모",
+    "생각",
+    "일반",
+    "정보",
+    "주제",
+    "토픽",
+}
+TOPIC_LABEL_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {
+            "type": "string",
+            "description": (
+                "메모 묶음을 포괄하는 상위 개념 한국어 카테고리명 1개. "
+                "키워드 나열이나 문장이 아니라 폴더명처럼 짧은 명사구여야 한다."
+            ),
+        },
+    },
+    "required": ["label"],
+    "additionalProperties": False,
+}
 
 
 class TopicDiscoveryRequest(BaseModel):
@@ -114,8 +148,36 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
         clustering_method,
     )
 
+    # Saved links decorate the map; a fetch failure must not break discovery.
+    try:
+        inbox_rows = fetch_inbox_embeddings_for_user(request.user_id)
+    except Exception:
+        logger.warning("inbox embeddings fetch failed", exc_info=True)
+        inbox_rows = []
+    inbox_items, inbox_edges = attach_inbox_items_to_clusters(
+        grouped,
+        embeddings,
+        inbox_rows,
+        constants.TOPIC_INBOX_ATTACH_MIN_SIMILARITY,
+        memos,
+        memo_edge_top_k=constants.TOPIC_MEMO_INBOX_EDGE_TOP_K,
+        memo_edge_min_similarity=constants.TOPIC_MEMO_INBOX_EDGE_MIN_SIMILARITY,
+    )
+
     if request.persist:
-        replace_topic_clusters(request.user_id, storage_clusters, memberships, edges)
+        replace_topic_clusters(
+            request.user_id,
+            storage_clusters,
+            memberships,
+            edges,
+            inbox_items_by_cluster_index=inbox_items,
+            inbox_edges_by_cluster_index=inbox_edges,
+        )
+        rebuild_user_memo_similarity_edges(
+            request.user_id,
+            constants.MEMO_SIMILARITY_EDGE_TOP_K,
+            constants.MEMO_SIMILARITY_EDGE_MIN_SIMILARITY,
+        )
         mark_topic_memos_clean(request.user_id, memos)
 
     return TopicDiscoveryResponse(
@@ -257,6 +319,76 @@ def get_sklearn_hdbscan_class() -> Any:
     return hdbscan_class
 
 
+def attach_inbox_items_to_clusters(
+    grouped_indices: list[list[int]],
+    embeddings: FloatArray,
+    inbox_rows: list[DatabaseRow],
+    min_similarity: float,
+    memos: list[MemoRecord] | None = None,
+    memo_edge_top_k: int = constants.TOPIC_MEMO_INBOX_EDGE_TOP_K,
+    memo_edge_min_similarity: float = constants.TOPIC_MEMO_INBOX_EDGE_MIN_SIMILARITY,
+) -> tuple[list[list[DatabaseRow]], list[list[DatabaseRow]]]:
+    """Assign each saved inbox summary to its closest topic centroid.
+
+    Inbox items never influence the clustering itself — they only decorate the
+    resulting map, so a burst of saved links cannot reshape the memo topics."""
+    per_cluster: list[list[DatabaseRow]] = [[] for _ in grouped_indices]
+    per_cluster_edges: list[list[DatabaseRow]] = [[] for _ in grouped_indices]
+    if not inbox_rows or not grouped_indices:
+        return per_cluster, per_cluster_edges
+
+    centroids = normalize_rows(
+        np.asarray(
+            [embeddings[indices].mean(axis=0) for indices in grouped_indices],
+            dtype=np.float64,
+        )
+    )
+
+    for row in inbox_rows:
+        vector = np.asarray(row["embedding"], dtype=np.float64)
+        if embeddings.shape[1] != vector.shape[0]:
+            continue
+        norm = float(np.linalg.norm(vector))
+        if norm == 0:
+            continue
+        normalized_vector = vector / norm
+        similarities = centroids @ normalized_vector
+        best = int(np.argmax(similarities))
+        score = float(similarities[best])
+        if score < min_similarity:
+            continue
+        inbox_session_id = row["inbox_session_id"]
+        per_cluster[best].append(
+            {
+                "inbox_session_id": inbox_session_id,
+                "score": round(score, 4),
+            }
+        )
+
+        if memos is None or memo_edge_top_k <= 0:
+            continue
+        ranked_memos = sorted(
+            (
+                (memo_index, float(embeddings[memo_index] @ normalized_vector))
+                for memo_index in grouped_indices[best]
+            ),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:memo_edge_top_k]
+        for memo_index, similarity in ranked_memos:
+            if similarity < memo_edge_min_similarity:
+                continue
+            per_cluster_edges[best].append(
+                {
+                    "memo_id": memos[memo_index].id,
+                    "inbox_session_id": inbox_session_id,
+                    "similarity": round(similarity, 4),
+                }
+            )
+
+    return per_cluster, per_cluster_edges
+
+
 def group_memos_by_cluster(
     memos: list[MemoRecord],
     labels: list[int],
@@ -305,7 +437,7 @@ def build_topic_results(
     for group_index, indices in enumerate(grouped_indices):
         cluster_memos = [memos[index] for index in indices]
         keywords = keywords_by_group[group_index]
-        label = build_label(keywords)
+        label = build_label(keywords, cluster_memos)
         representative_ids = select_representative_memos(indices, embeddings, memos)
         confidence = cluster_confidence(indices, embeddings)
 
@@ -444,14 +576,181 @@ def select_keywords_for_row(row_scores: Any, terms: list[str]) -> list[str]:
         if not clean or clean in keywords:
             continue
         keywords.append(clean)
-        if len(keywords) >= constants.TOPIC_LABEL_TERMS:
+        if len(keywords) >= constants.TOPIC_KEYWORD_CANDIDATES:
             break
 
     return keywords or ["흩어진", "메모"]
 
 
-def build_label(keywords: list[str]) -> str:
+def build_label(keywords: list[str], memos: list[MemoRecord] | None = None) -> str:
+    llm_label = build_llm_topic_label(keywords, memos or [])
+    if llm_label:
+        return llm_label
+
+    return build_keyword_label(keywords)
+
+
+def build_keyword_label(keywords: list[str]) -> str:
     return " · ".join(keywords[: constants.TOPIC_LABEL_TERMS]) if keywords else "흩어진 메모"
+
+
+def build_llm_topic_label(keywords: list[str], memos: list[MemoRecord]) -> str | None:
+    if not settings.gemini_api_key or genai is None or genai_types is None or not keywords:
+        return None
+
+    client = genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=genai_types.HttpOptions(timeout=constants.TOPIC_LLM_LABEL_TIMEOUT_MS),
+    )
+    config = genai_types.GenerateContentConfig(
+        maxOutputTokens=constants.TOPIC_LLM_LABEL_MAX_OUTPUT_TOKENS,
+        responseMimeType="application/json",
+        responseJsonSchema=TOPIC_LABEL_RESPONSE_SCHEMA,
+        temperature=0.2,
+    )
+    prompt = build_topic_label_prompt(keywords, memos)
+
+    for model in constants.TOPIC_LABEL_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=config,
+            )
+        except Exception:
+            continue
+
+        label = clean_topic_label(extract_topic_label_response(response))
+        if label:
+            return label
+
+    return None
+
+
+def build_topic_label_prompt(keywords: list[str], memos: list[MemoRecord]) -> str:
+    representative_lines = [memo_title(memo) for memo in memos[:5]]
+    keyword_text = ", ".join(keywords[: constants.TOPIC_KEYWORD_CANDIDATES])
+    memo_text = "\n".join(f"- {line}" for line in representative_lines if line)
+
+    return f"""작업: 개인 지식관리 앱의 토픽 그래프 노드 이름을 정한다.
+
+목표: 입력된 메모 묶음을 가장 넓게 포괄하는 상위 개념 카테고리명 1개를 만든다.
+
+판단 기준:
+- 폴더명처럼 짧고 직관적이어야 한다.
+- 세부 사건, 수치, 시간, 오류 증상을 그대로 쓰지 말고 한 단계 위로 추상화한다.
+- 입력에 근거 없는 새 주제는 만들지 않는다.
+- 키워드 나열, 문장, 설명을 쓰지 않는다.
+- 2~8자 한국어 명사 또는 짧은 명사구를 우선한다.
+- UI, API, SQL 같은 보편적 기술 약어는 허용한다.
+- 금지 라벨: 메모, 정보, 기타, 내용, 생각, 일반, 주제, 토픽
+
+좋은 예시:
+- 키워드: 주별 캘린더, 종일 블록, ellipsis, 레이아웃 오류 → {{"label":"캘린더 UI"}}
+- 키워드: 시간, 200도, 2시간, 오븐, 닭가슴살 → {{"label":"요리"}}
+- 키워드: 확률, 분포, 기대값, 베이즈, 문제풀이 → {{"label":"통계학"}}
+- 키워드: WAL, SQLite, 동기화, 검색, 인덱싱 → {{"label":"데이터베이스"}}
+
+나쁜 예시:
+- {{"label":"시간 · 200도 · 2시간"}}
+- {{"label":"종일 블록 오류 수정"}}
+- {{"label":"메모"}}
+
+응답: JSON schema에 맞는 JSON만 반환한다.
+
+입력 키워드:
+{keyword_text}
+
+대표 메모:
+{memo_text or "- 제목 없음"}"""
+
+
+def extract_topic_label_response(response: Any) -> str | None:
+    parsed = getattr(response, "parsed", None)
+    if isinstance(parsed, dict):
+        label = parsed.get("label")
+        return label if isinstance(label, str) else None
+
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        label = extract_label_from_json_text(text)
+        if label:
+            return label
+        return text
+
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return None
+
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        parts = getattr(content, "parts", None)
+        if not parts:
+            continue
+        for part in parts:
+            if getattr(part, "thought", False):
+                continue
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text.strip():
+                return part_text
+
+    return None
+
+
+def extract_label_from_json_text(text: str) -> str | None:
+    stripped = text.strip()
+    json_candidates = [stripped]
+    match = re.search(r"\{.*?\}", stripped, flags=re.DOTALL)
+    if match:
+        json_candidates.append(match.group(0))
+
+    for candidate in json_candidates:
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            label = payload.get("label")
+            if isinstance(label, str):
+                return label
+
+    return None
+
+
+def clean_topic_label(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    label = value.strip()
+    label = label.removeprefix("```").removesuffix("```").strip()
+    label = label.strip("\"'`“”‘’[](){}")
+    label = re.sub(r"^(라벨|카테고리|토픽)\s*[:：]\s*", "", label).strip()
+    label = re.split(r"[\n\r]", label, maxsplit=1)[0].strip()
+    label = label.strip("\"'`“”‘’[](){}.,，。")
+    label = re.sub(r"\s+", " ", label)
+
+    if not label:
+        return None
+    if any(separator in label for separator in ("·", ",", "，", "/", "\\", "|", ";", "；")):
+        return None
+    if len(label) > constants.TOPIC_LLM_LABEL_MAX_CHARS:
+        return None
+    if label in TOPIC_LABEL_BLOCKLIST:
+        return None
+    if not re.search(r"[가-힣A-Za-z]", label):
+        return None
+
+    return label
+
+
+def memo_title(memo: MemoRecord, limit: int = 80) -> str:
+    first_line = next(
+        (line.strip() for line in memo.content.splitlines() if line.strip()),
+        "",
+    )
+    if not first_line:
+        return "제목 없는 메모"
+    return first_line[:limit].strip()
 
 
 def select_representative_memos(

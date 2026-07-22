@@ -14,7 +14,9 @@ import {
   ChevronDoubleRightIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClipboardDocumentIcon,
   Cog6ToothIcon,
+  DocumentDuplicateIcon,
   DocumentTextIcon,
   EllipsisHorizontalIcon,
   EnvelopeIcon,
@@ -137,6 +139,8 @@ export const PinSolid = makePinIcon(true);
 // Closest available Heroicons (no exact equivalent in the set).
 export const CalendarPlus = adapt(CalendarDaysIcon);
 export const Columns2 = adapt(ViewColumnsIcon);
+export const ClipboardCopy = adapt(ClipboardDocumentIcon);
+export const Copy = adapt(DocumentDuplicateIcon);
 export const Download = adapt(ArrowDownTrayIcon);
 export const Link = adapt(LinkIcon);
 export const Network = adapt(ShareIcon);

@@ -2,14 +2,14 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
-from app.db import (
-    content_hash_for_memo,
+from app.db.memos import (
     fetch_memos_needing_schedule_scan,
     mark_memo_schedule_scan_failed,
-    replace_schedule_inbox_if_current,
 )
-from app.features.schedule.parser import extract_schedule_candidates
+from app.db.schedule import replace_schedule_inbox_if_current
 from app.db.types import MemoRecord
+from app.db.utils import content_hash_for_memo
+from app.features.schedule.parser import extract_schedule_candidates
 
 
 class ScheduleInboxRunRequest(BaseModel):

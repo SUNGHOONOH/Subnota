@@ -1,8 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { Editor } from "@tiptap/core"
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
+// moduleResolution:node은 exports 서브패스를 못 읽어 tsconfig paths로 매핑됨.
+import { BubbleMenu } from "@tiptap/react/menus"
 import { useHotkeys } from "react-hotkeys-hook"
 
 // --- Tiptap Core Extensions ---
@@ -24,7 +26,7 @@ import { Spacer } from "@/components/tiptap-ui-primitive/spacer/spacer"
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar/toolbar"
 
 // --- Tiptap Node ---
-import { getCursorContextText } from "@/lib/memoChunker"
+import { attachAmbientIdle } from "@/lib/ambientIdle"
 import { DateHighlight } from "@/components/tiptap-extension/date-highlight-extension"
 import { FormattingShortcuts } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
@@ -46,9 +48,11 @@ import { CopyMarkdownButton } from "@/components/tiptap-ui/copy-markdown-button/
 import { CopyFilePathButton } from "@/components/tiptap-ui/copy-file-path-button/copy-file-path-button"
 import { SaveButton } from "@/components/tiptap-ui/save-button/save-button"
 import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/list-dropdown-menu"
+import { ListButton } from "@/components/tiptap-ui/list-button/list-button"
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button/blockquote-button"
 import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button/code-block-button"
 import { ColorHighlightPopover, ColorHighlightPopoverContent, ColorHighlightPopoverButton } from "@/components/tiptap-ui/color-highlight-popover/color-highlight-popover"
+import { SlashCommandMenu } from "@/components/tiptap-ui/slash-command-menu/slash-command-menu"
 import { LinkPopover, LinkContent, LinkButton } from "@/components/tiptap-ui/link-popover/link-popover"
 import { MarkButton } from "@/components/tiptap-ui/mark-button/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button/text-align-button"
@@ -58,6 +62,9 @@ import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button/undo-red
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
+
+// --- Selection bubble toolbar (responsive with overflow) ---
+import { SelectionBubbleToolbar } from "@/components/tiptap-templates/simple/selection-bubble-toolbar"
 
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
@@ -187,6 +194,8 @@ export interface SimpleEditorProps {
   onEditorFocus?: () => void;
   onEditorReady?: (editor: Editor | null) => void;
   onInsertTextRequestHandled?: (id: string) => void;
+  // 제공되면 드래그 선택 팝업에 "일정 등록" 버튼이 나타난다.
+  onRegisterSchedule?: () => void;
   value: string;
   onChange: (markdown: string) => void;
   onSelectionChange?: (selectedText: string, from: number, to: number) => void;
@@ -195,42 +204,44 @@ export interface SimpleEditorProps {
   showVersionLabel?: boolean;
 }
 
-export function SimpleEditorToolbar({
+// 노트 내부 고정 툴바: B / I / H1⌄ / 목록⌄ / 체크리스트 / 인용 / 코드.
+// 기존 Tiptap UI 컴포넌트(command 포함)를 그대로 재사용한다.
+// children은 오른쪽 끝 노트 도구 슬롯(날짜 선택·연관 문장·네트워크 검색 등).
+export function NoteFixedToolbar({
   editor,
-  disabled = false,
+  children,
 }: {
   editor: Editor | null
-  disabled?: boolean
+  children?: ReactNode
 }) {
-  const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
-    "main"
-  )
-
   return (
     <div
-      aria-disabled={disabled || undefined}
-      className={`simple-editor-toolbar-host${disabled ? " is-disabled" : ""}`}
+      aria-label="본문 서식 도구"
+      className="note-fixed-toolbar"
+      role="toolbar"
     >
       <EditorContext.Provider value={{ editor }}>
-        <Toolbar>
-          {mobileView === "main" ? (
-            <MainToolbarContent
-              onHighlighterClick={() => setMobileView("highlighter")}
-              onLinkClick={() => setMobileView("link")}
-              isMobile={false}
-              onSave={async () => undefined}
-              canSave={false}
-              currentFilePath={null}
-            />
-          ) : (
-            <MobileToolbarContent
-              type={mobileView === "highlighter" ? "highlighter" : "link"}
-              onBack={() => setMobileView("main")}
-              currentFilePath={null}
-            />
-          )}
-        </Toolbar>
+        <MarkButton aria-label="굵게" tooltip="굵게" type="bold" />
+        <MarkButton aria-label="기울임" tooltip="기울임" type="italic" />
+        <HeadingDropdownMenu
+          aria-label="본문 제목"
+          levels={[1, 2, 3, 4]}
+          modal={false}
+          tooltip="본문 제목"
+        />
+        <ListDropdownMenu
+          aria-label="목록"
+          modal={false}
+          tooltip="목록"
+          types={["bulletList", "orderedList"]}
+        />
+        <ListButton aria-label="체크리스트" tooltip="체크리스트" type="taskList" />
+        <BlockquoteButton aria-label="인용" tooltip="인용" />
+        <CodeBlockButton aria-label="코드 블록" tooltip="코드 블록" />
       </EditorContext.Provider>
+      {children && (
+        <div className="note-fixed-toolbar-trailing">{children}</div>
+      )}
     </div>
   )
 }
@@ -242,6 +253,7 @@ export function SimpleEditor({
   onEditorFocus,
   onEditorReady,
   onInsertTextRequestHandled,
+  onRegisterSchedule,
   value,
   onChange,
   onSelectionChange,
@@ -257,8 +269,12 @@ export function SimpleEditor({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const lastInsertTextRequestIdRef = useRef<string | null>(null)
   const lastInjectedTextRef = useRef<string>("")
-  const ambientIdleTimerRef = useRef<number | null>(null)
+  const onAmbientIdleRef = useRef(onAmbientIdle)
   const onEditorReadyRef = useRef(onEditorReady)
+
+  useEffect(() => {
+    onAmbientIdleRef.current = onAmbientIdle
+  }, [onAmbientIdle])
 
   useEffect(() => {
     onEditorReadyRef.current = onEditorReady
@@ -386,38 +402,31 @@ export function SimpleEditor({
   }, [editor, onSelectionChange])
 
   useEffect(() => {
-    if (!editor || !onAmbientIdle) return undefined
+    if (!editor) return undefined
+    // onAmbientIdle을 deps에 두면 인라인 콜백의 새 identity마다 cleanup이
+    // 대기 중인 idle 타이머를 제거해 트리거가 영영 발화하지 않는다.
+    // 핸들러는 ref로 읽고 effect는 editor에만 묶는다.
+    return attachAmbientIdle(editor, () => onAmbientIdleRef.current)
+  }, [editor])
 
-    const scheduleAmbientIdle = () => {
-      if (ambientIdleTimerRef.current) {
-        window.clearTimeout(ambientIdleTimerRef.current)
+  // Escape → 선택 해제(= 선택형 팝업 닫힘). 슬래시 메뉴가 열려 있으면 그쪽
+  // capture 핸들러가 먼저 소비한다.
+  useEffect(() => {
+    if (!editor) return undefined
+
+    const dom = editor.view.dom
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing) return
+      const { empty, to } = editor.state.selection
+      if (!empty) {
+        event.preventDefault()
+        editor.commands.setTextSelection(to)
       }
-
-      ambientIdleTimerRef.current = window.setTimeout(() => {
-        const { $from } = editor.state.selection
-        const paragraph = $from.parent.textContent
-        // Query with the cursor sentence ± 1, not the whole paragraph — the
-        // backend indexes ~3-sentence chunks, so a paragraph-sized query
-        // drags similarity down and floods the "지금 문장" card.
-        const chunkText = getCursorContextText(
-          paragraph,
-          Math.min($from.parentOffset, paragraph.length),
-        ).slice(0, 1000)
-        onAmbientIdle(chunkText)
-      }, 900)
     }
 
-    editor.on('update', scheduleAmbientIdle)
-    editor.on('selectionUpdate', scheduleAmbientIdle)
-
-    return () => {
-      if (ambientIdleTimerRef.current) {
-        window.clearTimeout(ambientIdleTimerRef.current)
-      }
-      editor.off('update', scheduleAmbientIdle)
-      editor.off('selectionUpdate', scheduleAmbientIdle)
-    }
-  }, [editor, onAmbientIdle])
+    dom.addEventListener("keydown", onKeyDown)
+    return () => dom.removeEventListener("keydown", onKeyDown)
+  }, [editor])
 
   const handleSave = useCallback(async () => {
     // PWA 환경에서는 자동 저장이 동작하므로 수동 저장 단축키는 무시
@@ -467,6 +476,28 @@ export function SimpleEditor({
           role="presentation"
           className="simple-editor-content"
         />
+        {editor && (
+          <BubbleMenu
+            className="selection-bubble-menu"
+            editor={editor}
+            options={{ flip: true, offset: 8, placement: "top", shift: true }}
+            shouldShow={({ editor: current }: { editor: Editor }) => {
+              if (!current || !current.isEditable) return false
+              const { from, to } = current.state.selection
+              if (from === to) return false
+              return (
+                current.state.doc.textBetween(from, to, " ").trim().length > 0
+              )
+            }}
+            updateDelay={150}
+          >
+            <SelectionBubbleToolbar
+              editor={editor}
+              onRegisterSchedule={onRegisterSchedule}
+            />
+          </BubbleMenu>
+        )}
+        <SlashCommandMenu editor={editor} />
       </EditorContext.Provider>
       {showVersionLabel && <span className="version-label">v0.1.0</span>}
     </div>

@@ -2152,38 +2152,48 @@ html.dark .date-schedule-meridiem button.active {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow: hidden; /* clip the closed drawer parked off the right edge */
+  overflow: hidden;
   position: relative;
 }
 
-/* Wide mode: toolbar is transparent so views stay centered between title and
-   nav; the drawer toggle + backdrop only exist in the compact container query. */
+/* The toolbar stays transparent so views stay centered between title and nav. */
 .cal-toolbar { display: contents; }
-.cal-burger { display: none; }
-.cal-drawer-backdrop { display: none; }
-.cal-drawer-close { display: none; }
 
-/* Month view: todo + tree sit along the bottom (calendar grid keeps full width). */
+/* Month view: keep the calendar, Todo list, and tree at a stable floor. */
 .cal-layout.view-month {
   flex-direction: column;
+  min-height: 760px;
+  min-width: 820px;
+}
+
+.cal-layout.view-month .cal-month,
+.cal-layout.view-month .cal-weekday-row,
+.cal-layout.view-month .cal-month-grid {
+  min-width: 760px;
+}
+
+.cal-layout.view-month .cal-month {
+  min-height: 430px;
 }
 
 .cal-layout.view-month .cal-side {
   border-left: 0;
   border-top: 1px solid #ececec;
-  flex: 0 0 auto;
+  flex: 0 0 clamp(300px, 32%, 380px);
   flex-direction: row;
-  max-height: 38%;
+  max-height: none;
 }
 
 .cal-layout.view-month .cal-todo-panel {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 440px;
 }
 
 .cal-layout.view-month .tree-card {
   border-left: 1px solid #ececec;
   border-top: 0;
-  flex: 0 0 auto;
+  flex: 0 0 300px;
+  min-width: 300px;
 }
 
 .cal-root {
@@ -2881,9 +2891,7 @@ html.dark .forest-field {
 
 .cal-event:hover .cal-event-resize { opacity: 1; }
 
-/* Compact width: keep header on one line; in week view the side panel collapses
-   into a drawer. Threshold is intentionally small so the inline sidebar persists
-   at larger panes (Obsidian collapses late + manual, not eagerly by width). */
+/* Compact width: keep the header on one line. */
 @container (max-width: 600px) {
   .cal-root {
     padding: 14px 12px 16px;
@@ -2899,7 +2907,7 @@ html.dark .forest-field {
     line-height: 1.15;
   }
 
-  /* Group view-switch + nav + burger so they never wrap apart (one line). */
+  /* Group view-switch + nav so they never wrap apart (one line). */
   .cal-toolbar {
     align-items: center;
     display: flex;
@@ -2921,48 +2929,6 @@ html.dark .forest-field {
     padding: 0 12px;
   }
 
-  /* Drawer is week-only; month view always keeps todo/tree along the bottom. */
-  .cal-layout.view-week .cal-burger {
-    display: inline-flex;
-  }
-
-  .cal-layout.view-week .cal-drawer-close {
-    align-self: flex-end;
-    display: flex;
-    margin: 8px 8px 0;
-  }
-
-  .cal-layout.view-week .cal-side {
-    border-left: 1px solid #ececec;
-    bottom: 0;
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
-    position: absolute;
-    right: 0;
-    top: 0;
-    transform: translateX(101%);
-    transition: transform 0.22s ease;
-    width: min(300px, 86%);
-    z-index: 20;
-    background: var(--legacy-bg-paper);
-  }
-
-  .cal-layout.view-week.drawer-open .cal-side {
-    transform: translateX(0);
-  }
-
-  .cal-layout.view-week.drawer-open .cal-drawer-backdrop {
-    border: 0;
-    bottom: 0;
-    cursor: default;
-    display: block;
-    left: 0;
-    padding: 0;
-    position: absolute;
-    right: 0;
-    top: 0;
-    z-index: 15;
-    background: rgba(0, 0, 0, 0.18);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4449,40 +4415,53 @@ html.dark .forest-field {
 }
 
 .inbox-workspace {
+  --inbox-card-width: 224px;
+  --inbox-card-gap: 12px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: calc(var(--inbox-card-width) + 44px);
+  overflow: hidden;
   padding: 18px 22px;
 }
 
 .inbox-list-header {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: space-between;
+  min-width: var(--inbox-card-width);
+  width: var(--inbox-card-width);
 }
 
-.inbox-list-header strong {
-  color: #1d1d1f;
-  font-size: 14px;
+.inbox-toolbar {
+  flex-wrap: nowrap;
+  min-width: var(--inbox-card-width);
+  width: var(--inbox-card-width);
 }
 
 .inbox-list-header .inbox-search-input {
-  width: 170px;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
 }
 
-/* 카드 폭은 Mantine BadgeCard 데모 비율(~350px)에 맞춰 캡을 둔다 —
-   1fr로 늘어나면 버튼/타이포가 부풀어 보인다. */
+.inbox-list-header .inbox-filter {
+  flex: 0 0 auto;
+}
+
+/* Keep the compact card floor stable. The grid can add a second/third fixed
+   track when the pane is wide enough, but never crushes a card below this
+   width. The workspace clips once its own minimum width is reached. */
 .inbox-workspace .inbox-grid {
   align-content: start;
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(272px, 348px));
+  gap: var(--inbox-card-gap);
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--inbox-card-width), var(--inbox-card-width))
+  );
   justify-content: start;
-  /* ponytail: 카드 전체 균일 축소 노브 — 상대 비율은 그대로 두고 크기만
-     줄인다. (zoom은 Chromium 전용이지만 이 앱은 Electron 전용) */
-  zoom: 0.85;
+  min-width: var(--inbox-card-width);
+  width: 100%;
 }
 
 /* ⋯ 메뉴 안의 링크 저장 폼 */
@@ -4492,7 +4471,7 @@ html.dark .forest-field {
 
 .inbox-workspace .inbox-thumbnail {
   background: #f7f6f4;
-  height: 160px;
+  height: 112px;
   overflow: hidden;
   position: relative;
 }
@@ -4517,24 +4496,24 @@ html.dark .forest-field {
 
 .inbox-workspace .inbox-thumbnail-text {
   color: #6b6b69;
-  font-size: 12.5px;
+  font-size: 11px;
   height: 100%;
-  line-height: 1.5;
+  line-height: 1.4;
   overflow: hidden;
-  padding: 12px 14px;
+  padding: 10px 12px;
   white-space: pre-wrap;
 }
 
 .inbox-workspace .inbox-thumbnail .inbox-duration {
   background: rgba(0, 0, 0, 0.78);
-  border-radius: 6px;
+  border-radius: 5px;
   bottom: 8px;
   color: #fff;
   display: inline-block;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   margin: 0;
-  padding: 3px 7px;
+  padding: 2px 6px;
   position: absolute;
   right: 8px;
 }

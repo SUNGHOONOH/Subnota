@@ -1,5 +1,8 @@
 from app.core import constants
-from app.db import DatabaseRow, format_vector, replace_inbox_session_embedding
+from app.db.inbox import replace_inbox_session_embedding
+from app.db.topics import mark_user_topics_dirty
+from app.db.types import DatabaseRow
+from app.db.utils import format_vector
 from app.features.inbox.utils import optional_str
 from app.features.topics.discovery import encode_texts
 from app.shared.hashing import short_hash
@@ -14,6 +17,7 @@ def replace_inbox_summary_embedding(user_id: str, row: DatabaseRow) -> None:
     status = optional_str(row.get("summary_status"))
     if not summary or status not in {"ready", "partial"}:
         replace_inbox_session_embedding(user_id, inbox_session_id, None)
+        mark_user_topics_dirty(user_id)
         return
 
     embedding = encode_texts([summary])[0]
@@ -32,6 +36,7 @@ def replace_inbox_summary_embedding(user_id: str, row: DatabaseRow) -> None:
             "embedding": format_vector(embedding),
         },
     )
+    mark_user_topics_dirty(user_id)
 
 
 def source_label_for(source_type: str | None) -> str:

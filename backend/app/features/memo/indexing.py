@@ -4,18 +4,16 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from app.core import constants
-from app.db import (
-    DatabaseRow,
+from app.db.embeddings import (
     claim_memo_chunk_index_lease,
-    content_hash_for_memo,
     fetch_cached_embeddings,
-    fetch_memos_needing_chunk_index,
-    format_vector,
     rebuild_user_memo_chunk_edges,
     release_memo_chunk_index_lease,
-    replace_memo_chunks,
     upsert_cached_embeddings,
 )
+from app.db.memos import fetch_memos_needing_chunk_index, replace_memo_chunks
+from app.db.types import DatabaseRow
+from app.db.utils import content_hash_for_memo, format_vector
 from app.shared.hashing import short_hash
 from app.features.memo.chunking import build_network_chunks, split_sentences
 from app.features.topics.discovery import encode_texts
@@ -85,7 +83,7 @@ def _index_dirty_memo_chunks_claimed(
     for memo in memos:
         try:
             content_hash = content_hash_for_memo(memo)
-            chunks = build_network_chunks(split_sentences(memo.content))
+            chunks = build_network_chunks(split_sentences(memo.content), memo.content)
             cache_hashes = [build_embedding_cache_hash(chunk.text) for chunk in chunks]
             cached = fetch_cached_embeddings(request.user_id, cache_hashes)
             missing_hashes = list(dict.fromkeys(

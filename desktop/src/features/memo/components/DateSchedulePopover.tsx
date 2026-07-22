@@ -20,6 +20,10 @@ interface DateSchedulePopoverProps {
   // When provided, the picker seeds its month/time/selection from this date and
   // stays open so the parent can keep editing (used by the inbox edit modal).
   initialDate?: Date;
+  // When set, the picker does NOT commit on each change; the user chooses date
+  // and time, then presses this labeled button to commit once. Used by schedule
+  // registration so a date click alone doesn't save before a time is picked.
+  confirmLabel?: string;
 }
 
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -29,6 +33,7 @@ const DateSchedulePopover = ({
   onApplyDate,
   onClose,
   initialDate,
+  confirmLabel,
 }: DateSchedulePopoverProps) => {
   const seed = useMemo(() => toTimeFields(initialDate), [initialDate]);
   const [time, setTime] = useState(seed.time);
@@ -60,12 +65,24 @@ const DateSchedulePopover = ({
   }, [visibleMonth]);
 
   const applyDate = (date: Date, nextTime = time, nextMeridiem = meridiem) => {
+    // 확인 버튼 모드에서는 매 변경마다 커밋하지 않고 [등록]에서 한 번만 커밋한다.
+    if (confirmLabel) {
+      return;
+    }
     const { date: nextDate, allDay } = composeScheduledDate(
       date,
       nextTime,
       nextMeridiem,
     );
     onApplyDate(nextDate, allDay);
+  };
+
+  const handleConfirm = () => {
+    if (!selectedDay) {
+      return;
+    }
+    const { date, allDay } = composeScheduledDate(selectedDay, time, meridiem);
+    onApplyDate(date, allDay);
   };
 
   const handleDayClick = (date: Date) => {
@@ -241,6 +258,19 @@ const DateSchedulePopover = ({
           </button>
         </div>
       </div>
+
+      {confirmLabel && (
+        <div className="date-schedule-confirm-row">
+          <button
+            className="date-schedule-confirm-btn"
+            disabled={!selectedDay}
+            onClick={handleConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      )}
     </section>
   );
 };

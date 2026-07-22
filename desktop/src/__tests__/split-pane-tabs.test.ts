@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { editorsAfterOpenSource, editorsAfterOpenTab } from '../lib/splitPaneTabs';
+import {
+  editorsAfterNewTab,
+  editorsAfterOpenSource,
+  editorsAfterOpenTab,
+} from '../lib/splitPaneTabs';
 import type { MemoSplitEditorState } from '../features/memo/components/MemoSplitWorkspace';
 import type { NetworkSearchResult } from '../services/backend/networkService';
 
@@ -66,6 +70,15 @@ describe('editorsAfterOpenTab', () => {
     const result = editorsAfterOpenTab([memoTab], 'missing', nextEditor);
 
     expect(result).toEqual([nextEditor]);
+  });
+});
+
+describe('editorsAfterNewTab', () => {
+  it('always preserves the active memo tab and appends the new tab', () => {
+    expect(editorsAfterNewTab([memoTab], nextEditor)).toEqual([
+      memoTab,
+      nextEditor,
+    ]);
   });
 });
 

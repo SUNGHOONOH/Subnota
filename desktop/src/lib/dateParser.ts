@@ -14,7 +14,7 @@ export type DateMatchKind =
   | 'month-day-kr'
   | 'short-date'
   | 'n-days-later'
-  | 'weekend';
+  | 'day-only';
 
 export interface DateMatch {
   text: string;
@@ -22,6 +22,9 @@ export interface DateMatch {
   index: number;
   length: number;
   kind: DateMatchKind;
+  // 시각 표현("3시", "15:30")까지 인식됐는지. allDay 판정은 이 플래그를 쓴다 —
+  // date가 00:00이라는 것만으로는 "24:00 → 익일 자정" 일정과 구분할 수 없다.
+  hasTime: boolean;
 }
 
 // ── Regex patterns ──────────────────────────────────────────────
@@ -30,30 +33,46 @@ export interface DateMatch {
 const NUMERIC_DATE_REGEX =
   /(?<!\d)(\d{2}|\d{4})[./-](\d{1,2})[./-](\d{1,2})(?!\d)/g;
 
-// Relative dates (longer tokens first to avoid partial match)
-const RELATIVE_DATE_REGEX = /내일\s*모레|오늘|내일|모레|글피|어제|엊그제|낼모레|낼/g;
+// Relative dates (longer tokens first to avoid partial match).
+// 낼(내일 준말)은 "보낼/끝낼/낼게" 같은 동사 활용형과 겹쳐 오탐이 많아 제외한다.
+const RELATIVE_DATE_REGEX = /내일\s*모레|오늘|내일|모레|글피|어제|엊그제|그저께/g;
 
-// N일 후 / N일 뒤
-const N_DAYS_LATER_REGEX = /(하루|이틀|사흘|나흘|(?:\d{1,3})일|(?:\d{1,2})주|(?:\d{1,2})달|(?:\d{1,2})개월)\s*(후|뒤|뒤에|후에)/g;
+// N일 후 / N일 뒤. 순우리말 셈(열흘·보름…)과 일주일/이주일도 포함한다.
+// 모두 후/뒤가 붙어야만 매칭되므로 일반 명사와 겹칠 위험이 없다.
+const N_DAYS_LATER_REGEX =
+  /(하루|이틀|사흘|나흘|닷새|엿새|이레|여드레|아흐레|열흘|보름|스무날|일주일|이주일|삼주일|사주일|(?:\d{1,3})일|(?:\d{1,2})주|(?:\d{1,2})달|(?:\d{1,2})개월)\s*(후|뒤|뒤에|후에)/g;
 
-// Weekday with optional 이번주/다음주 prefix
+// Weekday with optional 이번주/다음주/지난주 prefix. 지난주·저번주는 과거를
+// 가리키므로 buildWeekdayDate에서 매치를 버린다(미래로 오인 방지).
+// 뒤 조사("월요일까지/화요일에")는 허용하되, 다른 단어에 붙은 경우("월급")는
+// 막는다: 요일 뒤 한글이 흔한 조사로 시작할 때만 통과시킨다.
 const WEEKDAY_REGEX =
-  /(?<![가-힣\d])(이번\s*주|다음\s*주|다다음\s*주|이번주|다음주|다다음주|담주)?\s*(일요일|월요일|화요일|수요일|목요일|금요일|토요일|일욜|월욜|화욜|수욜|목욜|금욜|토욜|일|월|화|수|목|금|토)(?![가-힣])/g;
+  /(?<![가-힣\d])(이번\s*주|다음\s*주|다다음\s*주|지난\s*주|저번\s*주|이번주|다음주|다다음주|지난주|저번주|담주)?\s*(일요일|월요일|화요일|수요일|목요일|금요일|토요일|일욜|월욜|화욜|수욜|목욜|금욜|토욜|일|월|화|수|목|금|토)(?!(?!에|엔|은|는|이|가|을|를|도|만|까|부|께|경|쯤|날|마|밖)[가-힣])/g;
 
-// Weekend: 이번 주말, 다음 주말
-const WEEKEND_REGEX = /(이번|다음|다다음)\s*주말/g;
+// 주말은 토/일 어느 날인지 특정할 수 없어(모호) 인식하지 않는다.
+
+// Bare day-of-month: 24일 (월 없이 일자만). 앞에 숫자가 있으면(연·월의 일부)
+// 제외하고, 뒤에 기간·순번 표현이 오면 날짜가 아니므로 제외한다.
+// ponytail: 기간어 목록(정도/만/동안…)은 대표 케이스만 막는 한계가 있음.
+const BARE_DAY_REGEX =
+  /(?<!\d)(?<!월\s?)(\d{1,2})일(?!\s*(?:후|뒤|동안|정도|만|가량|째))(?![간째차치만\d])/g;
 
 // Korean month-day: N월 N일 or (이번 달|다음 달) N일
 const MONTH_DAY_KR_REGEX =
   /(?:(이번\s*달|다음\s*달|다다음\s*달|이번달|다음달|다다음달)\s*(\d{1,2})일|(\d{1,2})월\s*(\d{1,2})일)/g;
 
-// Short date without year: M.D or MM.DD (must not be part of Y.M.D)
-const SHORT_DATE_REGEX =
-  /(?<!\d[./-])(?<!\d)(\d{1,2})[./-](\d{1,2})(?![./-]\d)(?!\d)/g;
+// Year-explicit Korean date: 2025년 7월 20일
+const YEAR_MONTH_DAY_KR_REGEX = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/g;
 
-// Time expression that may follow a date token
+// Short date without year: 슬래시 형식만 (M/D). 점 형식(3.6)은 소수·버전·수치와
+// 구분이 불가능해 제외한다. 연도 포함 점 형식(26.3.6)은 NUMERIC_DATE_REGEX가 잡는다.
+const SHORT_DATE_REGEX = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])/g;
+
+// Time expression that may follow a date token. 맨 숫자("내일 100개")를
+// 시각으로 오인하지 않도록 시 / : 표지를 요구한다.
+// "3시간"의 시(時)는 시각이 아니므로 시(?!간)으로 제외한다.
 const TIME_AFTER_REGEX =
-  /^\s*(오전|오후|아침|점심|저녁|낮|밤|새벽)?\s*(\d{1,2})(?:(?::|시\s*)(\d{1,2})?)?\s*(반)?(?:\s*분)?/;
+  /^\s*(오전|오후|아침|점심|저녁|낮|밤|새벽)?\s*(\d{1,2})(?:시(?!간)(?:\s*(\d{1,2})(?:\s*분)?|\s*(반))?|:(\d{1,2}))(?!\d)/;
 
 // ── Lookup tables ───────────────────────────────────────────────
 
@@ -82,16 +101,35 @@ const WEEKDAY_INDEX: Record<string, number> = {
 };
 
 const RELATIVE_DAYS: Record<string, number> = {
+  그저께: -2,
   엊그제: -2,
   어제: -1,
   오늘: 0,
   내일: 1,
-  낼: 1,
   모레: 2,
   내일모레: 2,
   '내일 모레': 2,
-  낼모레: 2,
   글피: 3,
+};
+
+// 순우리말 날 셈: "열흘 뒤", "보름 후" 등. 후/뒤와만 결합해 쓰인다.
+const NATIVE_DAY_COUNTS: Record<string, number> = {
+  하루: 1,
+  이틀: 2,
+  사흘: 3,
+  나흘: 4,
+  닷새: 5,
+  엿새: 6,
+  이레: 7,
+  여드레: 8,
+  아흐레: 9,
+  열흘: 10,
+  보름: 15,
+  스무날: 20,
+  일주일: 7,
+  이주일: 14,
+  삼주일: 21,
+  사주일: 28,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -122,10 +160,28 @@ const buildMonthDayDate = (month: number, day: number, baseDate: Date) => {
   }
 
   if (isBefore(date, startOfDay(baseDate))) {
-    date.setFullYear(year + 1);
+    // 내년으로 넘길 때 2월 29일이 3월 1일로 밀리는 것을 막는다.
+    const nextYear = new Date(year + 1, month - 1, day);
+    if (nextYear.getMonth() !== month - 1 || nextYear.getDate() !== day) {
+      return null;
+    }
+    return nextYear;
   }
 
   return date;
+};
+
+// 월 없는 단독 일자(24일): 이번 달 N일. 오늘 날짜 이하(당일 포함)면 다음 달로
+// 넘긴다("오늘 마감"은 보통 "오늘"이라 쓰므로 지난 것으로 간주). 대상 달에 그
+// 날이 없으면(2월 30일 등) 무효.
+const buildBareDayDate = (day: number, baseDate: Date) => {
+  const base = startOfDay(baseDate);
+  const target =
+    day <= base.getDate()
+      ? new Date(base.getFullYear(), base.getMonth() + 1, day)
+      : new Date(base.getFullYear(), base.getMonth(), day);
+
+  return target.getDate() === day ? target : null;
 };
 
 const buildWeekdayDate = (
@@ -141,32 +197,21 @@ const buildWeekdayDate = (
     return null;
   }
 
+  const normalizedPrefix = prefix?.replace(/\s/g, '');
+  // 과거 방향은 미래 날짜로 오인하지 않도록 인식에서 제외한다.
+  if (normalizedPrefix === '지난주' || normalizedPrefix === '저번주') {
+    return null;
+  }
+
   let dayDelta = (targetDay - currentDay + 7) % 7;
 
-  const normalizedPrefix = prefix?.replace(/\s/g, '');
   if (normalizedPrefix === '다음주' || normalizedPrefix === '담주') {
     dayDelta = dayDelta === 0 ? 7 : dayDelta + 7;
   } else if (normalizedPrefix === '다다음주') {
     dayDelta = dayDelta === 0 ? 14 : dayDelta + 14;
-  }
-
-  return addDays(today, dayDelta);
-};
-
-const buildWeekendDate = (prefix: string, baseDate: Date) => {
-  const today = startOfDay(baseDate);
-  const currentDay = today.getDay();
-  // Saturday
-  let dayDelta = (6 - currentDay + 7) % 7;
-
-  const normalizedPrefix = prefix.replace(/\s/g, '');
-  if (normalizedPrefix === '다음') {
-    dayDelta += 7;
-  } else if (normalizedPrefix === '다다음') {
-    dayDelta += 14;
-  }
-
-  if (dayDelta === 0) {
+  } else if (!normalizedPrefix && dayDelta === 0) {
+    // 접두사 없는 단독 요일이 오늘 요일과 같으면 돌아오는 다음 주로 본다.
+    // ("이번 주 수요일"처럼 접두사가 있으면 오늘 그대로.)
     dayDelta = 7;
   }
 
@@ -182,16 +227,17 @@ const withParsedTime = (
   const remainingText = text.slice(matchIndex + matchLength);
   const timeMatch = TIME_AFTER_REGEX.exec(remainingText);
 
-  if (!timeMatch || !timeMatch[0].trim()) {
-    return { date, length: matchLength };
+  if (!timeMatch) {
+    return { date, length: matchLength, hasTime: false };
   }
 
   let hour = Number(timeMatch[2]);
   const isHalf = timeMatch[4] === '반';
-  const minute = isHalf ? 30 : timeMatch[3] ? Number(timeMatch[3]) : 0;
+  const minuteText = timeMatch[3] ?? timeMatch[5];
+  const minute = isHalf ? 30 : minuteText ? Number(minuteText) : 0;
 
   if (hour > 24 || minute > 59) {
-    return { date, length: matchLength };
+    return { date, length: matchLength, hasTime: false };
   }
 
   const ampm = timeMatch[1];
@@ -208,7 +254,7 @@ const withParsedTime = (
   }
 
   if (hour === 24 && minute !== 0) {
-    return { date, length: matchLength };
+    return { date, length: matchLength, hasTime: false };
   }
 
   const scheduledDate = new Date(date);
@@ -220,6 +266,7 @@ const withParsedTime = (
   return {
     date: scheduledDate,
     length: matchLength + timeMatch[0].length,
+    hasTime: true,
   };
 };
 
@@ -245,6 +292,25 @@ export const parseDates = (
         index: m.index,
         length: scheduled.length,
         kind: 'numeric-date',
+        hasTime: scheduled.hasTime,
+      });
+    }
+  }
+
+  // 1-1. Year-explicit Korean dates: 2025년 7월 20일 — 연도가 명시되면 그대로
+  // 존중한다. (겹치는 "7월 20일" month-day 매치는 overlap 필터가 걸러낸다.)
+  YEAR_MONTH_DAY_KR_REGEX.lastIndex = 0;
+  while ((m = YEAR_MONTH_DAY_KR_REGEX.exec(text)) !== null) {
+    const date = buildFullDate(m[1], m[2], m[3]);
+    if (date) {
+      const scheduled = withParsedTime(text, date, m.index, m[0].length);
+      matches.push({
+        text: text.slice(m.index, m.index + scheduled.length),
+        date: scheduled.date,
+        index: m.index,
+        length: scheduled.length,
+        kind: 'numeric-date',
+        hasTime: scheduled.hasTime,
       });
     }
   }
@@ -283,6 +349,7 @@ export const parseDates = (
         index: m.index,
         length: scheduled.length,
         kind: 'month-day-kr',
+        hasTime: scheduled.hasTime,
       });
     }
   }
@@ -290,7 +357,8 @@ export const parseDates = (
   // 3. Relative dates: 오늘, 내일, 모레, 글피, 내일모레
   RELATIVE_DATE_REGEX.lastIndex = 0;
   while ((m = RELATIVE_DATE_REGEX.exec(text)) !== null) {
-    const delta = RELATIVE_DAYS[m[0]];
+    const delta =
+      RELATIVE_DAYS[m[0]] ?? RELATIVE_DAYS[m[0].replace(/\s+/g, '')];
     if (delta === undefined) {
       continue;
     }
@@ -302,6 +370,7 @@ export const parseDates = (
       index: m.index,
       length: scheduled.length,
       kind: 'relative',
+      hasTime: scheduled.hasTime,
     });
   }
 
@@ -315,13 +384,14 @@ export const parseDates = (
       const months = Number(val.replace(/달|개월/, ''));
       targetDate = addMonths(baseDate, months);
     } else {
-      let n = 0;
-      if (val === '하루') n = 1;
-      else if (val === '이틀') n = 2;
-      else if (val === '사흘') n = 3;
-      else if (val === '나흘') n = 4;
-      else if (val.endsWith('주')) n = Number(val.replace('주', '')) * 7;
-      else n = Number(val.replace('일', ''));
+      let n: number;
+      if (NATIVE_DAY_COUNTS[val] !== undefined) {
+        n = NATIVE_DAY_COUNTS[val];
+      } else if (val.endsWith('주')) {
+        n = Number(val.replace('주', '')) * 7;
+      } else {
+        n = Number(val.replace('일', ''));
+      }
 
       if (n > 365) continue;
       targetDate = addDays(baseDate, n);
@@ -334,12 +404,18 @@ export const parseDates = (
       index: m.index,
       length: scheduled.length,
       kind: 'n-days-later',
+      hasTime: scheduled.hasTime,
     });
   }
 
-  // 5. Weekday: 월, 화요일, 이번 주 금, 다음 주 월요일
+  // 5. Weekday: 월요일, 이번 주 금, 다음 주 월
   WEEKDAY_REGEX.lastIndex = 0;
   while ((m = WEEKDAY_REGEX.exec(text)) !== null) {
+    // 접두사 없는 한 글자("일 시작", "금 시세")는 요일보다 일반 명사일
+    // 가능성이 높아 제외한다. "다음주 월", "월요일", "월욜"은 그대로 인식.
+    if (!m[1] && m[2].length === 1) {
+      continue;
+    }
     const date = buildWeekdayDate(m[2], baseDate, m[1]);
     if (date) {
       const scheduled = withParsedTime(text, date, m.index, m[0].length);
@@ -349,25 +425,12 @@ export const parseDates = (
         index: m.index,
         length: scheduled.length,
         kind: 'weekday',
+        hasTime: scheduled.hasTime,
       });
     }
   }
 
-  // 6. Weekend: 이번 주말, 다음 주말
-  WEEKEND_REGEX.lastIndex = 0;
-  while ((m = WEEKEND_REGEX.exec(text)) !== null) {
-    const date = buildWeekendDate(m[1], baseDate);
-    const scheduled = withParsedTime(text, date, m.index, m[0].length);
-    matches.push({
-      text: text.slice(m.index, m.index + scheduled.length),
-      date: scheduled.date,
-      index: m.index,
-      length: scheduled.length,
-      kind: 'weekend',
-    });
-  }
-
-  // 7. Short date without year: 3.6, 03.06
+  // 6. Short date without year: 3/6, 12/25
   SHORT_DATE_REGEX.lastIndex = 0;
   while ((m = SHORT_DATE_REGEX.exec(text)) !== null) {
     const month = Number(m[1]);
@@ -384,6 +447,29 @@ export const parseDates = (
         index: m.index,
         length: scheduled.length,
         kind: 'short-date',
+        hasTime: scheduled.hasTime,
+      });
+    }
+  }
+
+  // 7. Bare day-of-month: 24일 (월 없이). month-day/n-days-later와 겹치면
+  // overlap 필터가 정리하므로 뒤에 둔다.
+  BARE_DAY_REGEX.lastIndex = 0;
+  while ((m = BARE_DAY_REGEX.exec(text)) !== null) {
+    const day = Number(m[1]);
+    if (day < 1 || day > 31) {
+      continue;
+    }
+    const date = buildBareDayDate(day, baseDate);
+    if (date) {
+      const scheduled = withParsedTime(text, date, m.index, m[0].length);
+      matches.push({
+        text: text.slice(m.index, m.index + scheduled.length),
+        date: scheduled.date,
+        index: m.index,
+        length: scheduled.length,
+        kind: 'day-only',
+        hasTime: scheduled.hasTime,
       });
     }
   }

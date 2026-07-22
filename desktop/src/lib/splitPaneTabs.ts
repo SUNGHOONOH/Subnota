@@ -23,6 +23,13 @@ export const editorsAfterOpenTab = (
   return editors.map(editor => (editor.id === active.id ? nextEditor : editor));
 };
 
+// Explicitly creating a new tab must never consume the active tab, including
+// when that tab is a memo. This is used by the memo rail's second click.
+export const editorsAfterNewTab = (
+  editors: MemoSplitEditorState[],
+  nextEditor: MemoSplitEditorState,
+): MemoSplitEditorState[] => [...editors, nextEditor];
+
 // Web-summary (source) detail tabs never consume the tab they were opened
 // from — not even a memo tab — and clicking the same saved link twice focuses
 // the already-open tab instead of stacking duplicates.

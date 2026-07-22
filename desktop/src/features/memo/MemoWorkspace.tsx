@@ -39,7 +39,6 @@ import {
   TOPIC_TIME_FILTERS,
   TopicTimeFilterKey,
 } from '../../lib/constants';
-import { DateMatch, formatRelativeDisplayDate } from '../../lib/dateParser';
 import { formatMemoDate } from '../../lib/date';
 import { MemoChunk } from '../../lib/memoChunker';
 import { getSections } from '../../lib/memoSections';
@@ -71,7 +70,10 @@ interface MemoWorkspaceProps {
   ambientError?: string | null;
   ambientQueryChunk: MemoChunk | null;
   ambientResult: NetworkSearchResult | null;
-  dateMatches: DateMatch[];
+  isAmbientPending?: boolean;
+  isAmbientSearching?: boolean;
+  showAmbientEmptyNotice?: boolean;
+  onRunAmbientSearch?: () => void;
   memoDraft: string;
   memos: MemoRow[];
   networkError: string | null;
@@ -89,7 +91,6 @@ interface MemoWorkspaceProps {
   onNewMiniMemo: () => void;
   onNewMemo: () => void;
   onOpenNetwork: () => void;
-  onRetryAmbient?: () => void;
   onRegisterSelectionSchedule: () => void;
   onRegisterSelectionScheduleAt: (date: Date, allDay: boolean) => void;
   onSelectMemo: (memo: MemoRow) => void;
@@ -439,7 +440,10 @@ const MemoWorkspace = ({
   ambientError = null,
   ambientQueryChunk,
   ambientResult,
-  dateMatches,
+  isAmbientPending = false,
+  isAmbientSearching = false,
+  showAmbientEmptyNotice = false,
+  onRunAmbientSearch,
   memoDraft,
   memos,
   networkError,
@@ -457,7 +461,6 @@ const MemoWorkspace = ({
   onNewMiniMemo,
   onNewMemo,
   onOpenNetwork,
-  onRetryAmbient,
   onRegisterSelectionSchedule,
   onRegisterSelectionScheduleAt,
   onSelectMemo,
@@ -492,6 +495,7 @@ const MemoWorkspace = ({
   );
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const topicMemoRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const searchIndexRef = useRef(buildMemoSearchIndex([]));
   const indexedMemoVersionsRef = useRef(new Map<string, string>());
   const [searchIndexVersion, setSearchIndexVersion] = useState(0);
@@ -503,7 +507,6 @@ const MemoWorkspace = ({
   const [topicFilterKey, setTopicFilterKey] = useState<TopicTimeFilterKey>(
     DEFAULT_TOPIC_TIME_FILTER,
   );
-  const firstDateMatch = dateMatches[0] ?? null;
   const activeTopicMemoIds = useMemo(() => {
     return new Set(
       topicMemberships
@@ -969,6 +972,26 @@ const MemoWorkspace = ({
   };
 
   useEffect(() => {
+    if (sidebarMode !== 'folders' || !selectedTopicMemoId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      topicMemoRowRefs.current
+        .get(selectedTopicMemoId)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeTopicId,
+    expandedTopicIds,
+    isSessionCollapsed,
+    selectedTopicMemoId,
+    sidebarMode,
+  ]);
+
+  useEffect(() => {
     const handleShowTopicFolder = (event: Event) => {
       const detail = (event as CustomEvent<{ memoId?: string; topicId?: string }>).detail;
       if (detail?.topicId) {
@@ -1130,7 +1153,6 @@ const MemoWorkspace = ({
                       : '최근 메모'}
                 </p>
               </div>
-              <span>{visibleMemos.length}</span>
             </div>
 
             {activeTopic && sidebarMode !== 'mini' && (
@@ -1195,7 +1217,6 @@ const MemoWorkspace = ({
                     : '아직 토픽이 없습니다'}
                 </p>
               </div>
-              <span>{topicFolders.length}</span>
             </div>
             <div className="topic-folder-list">
               {topicFolders.length === 0 ? (
@@ -1239,6 +1260,16 @@ const MemoWorkspace = ({
                                   : 'memo-row'
                               }
                               key={memo.id}
+                              ref={element => {
+                                if (element) {
+                                  topicMemoRowRefs.current.set(memo.id, element);
+                                } else {
+                                  topicMemoRowRefs.current.delete(memo.id);
+                                }
+                              }}
+                              aria-current={
+                                memo.id === selectedTopicMemoId ? 'true' : undefined
+                              }
                               onClick={() => {
                                 setSelectedTopicMemoId(memo.id);
                                 onSelectMemo(memo);
@@ -1301,7 +1332,6 @@ const MemoWorkspace = ({
                 <h2>Topics</h2>
                 <p>State A topic discovery</p>
               </div>
-              <span>{topicClusters.length}</span>
             </div>
             <div className="topic-filter-row">
               {TOPIC_TIME_FILTERS.map(filter => (
@@ -1318,7 +1348,13 @@ const MemoWorkspace = ({
             {topicNodes.length > 0 ? (
               <>
                 <KnowledgeGraphView
-                  activeNodeId={activeTopicId ? `topic:${activeTopicId}` : null}
+                  activeNodeId={
+                    selectedTopicMemoId
+                      ? `memo:${selectedTopicMemoId}`
+                      : activeTopicId
+                        ? `topic:${activeTopicId}`
+                        : null
+                  }
                   ariaLabel="토픽 지식 그래프"
                   className="topic-graph-shell"
                   edges={topicGraphEdges}
@@ -1456,9 +1492,23 @@ const MemoWorkspace = ({
           >
             날짜 선택
           </button>
-          {firstDateMatch && (
-            <span className="date-detect-chip">
-              {firstDateMatch.text} → {formatRelativeDisplayDate(firstDateMatch.date)}
+          <TooltipIconButton
+            aria-busy={isAmbientSearching || undefined}
+            aria-label={isAmbientSearching ? '연관 문장 검색 중' : '연관 문장'}
+            className="ghost-button ambient-search-button"
+            disabled={isAmbientSearching || !isAmbientPending}
+            onClick={() => onRunAmbientSearch?.()}
+            tooltip={isAmbientSearching ? '연관 문장 검색 중' : '연관 문장'}
+          >
+            {isAmbientSearching ? (
+              <span aria-hidden className="ambient-search-spinner" />
+            ) : (
+              <span aria-hidden>🔍</span>
+            )}
+          </TooltipIconButton>
+          {showAmbientEmptyNotice && (
+            <span className="ambient-empty-notice">
+              유사한 문장이 아직은 없습니다
             </span>
           )}
           {ambientResult && (
@@ -1472,12 +1522,7 @@ const MemoWorkspace = ({
             </button>
           )}
           {ambientError && (
-            <span className="ambient-inline-error">
-              {ambientError}
-              {isNetworkSearchRetryableMessage(ambientError) && (
-                <button onClick={onRetryAmbient} type="button">다시 시도</button>
-              )}
-            </span>
+            <span className="ambient-inline-error">{ambientError}</span>
           )}
         </div>
         {isDatePickerOpen && (
@@ -1636,6 +1681,7 @@ const MemoWorkspace = ({
                     className="topic-memo-card"
                     key={memo.id}
                     onClick={() => {
+                      showTopicFolder(selectedTopic.id, memo.id);
                       onSelectMemo(memo);
                       setSelectedTopicId(null);
                     }}
@@ -1670,7 +1716,7 @@ const MemoWorkspace = ({
                     const row = selectedTopicRows.find(item => item.memo.id === memoId);
 
                     if (row) {
-                      onSelectMemo(row.memo);
+                      showTopicFolder(selectedTopic.id, row.memo.id);
                       setSelectedTopicId(null);
                     }
                   }}

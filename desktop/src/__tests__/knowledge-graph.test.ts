@@ -47,6 +47,30 @@ describe('buildKnowledgeGraph', () => {
     const graph = buildKnowledgeGraph(nodes, [{ source: 'a', target: 'missing' }]);
     expect(graph.size).toBe(0);
   });
+
+  it('ignores duplicate node and edge ids instead of crashing the view', () => {
+    const graph = buildKnowledgeGraph(
+      [nodes[0], { ...nodes[0], label: 'Duplicate' }, nodes[1]],
+      [
+        { id: 'same-edge', source: 'a', target: 'b' },
+        { id: 'same-edge', source: 'a', target: 'b' },
+      ],
+    );
+
+    expect(graph.order).toBe(2);
+    expect(graph.size).toBe(1);
+    expect(graph.getNodeAttribute('a', 'label')).toBe('A');
+  });
+
+  it('normalizes invalid node coordinates', () => {
+    const graph = buildKnowledgeGraph(
+      [{ id: 'invalid', label: 'Invalid', x: Number.NaN, y: Infinity }],
+      [],
+    );
+
+    expect(graph.getNodeAttribute('invalid', 'x')).toBe(0);
+    expect(graph.getNodeAttribute('invalid', 'y')).toBe(0);
+  });
 });
 
 describe('selection reducers', () => {

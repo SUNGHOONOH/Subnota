@@ -1,0 +1,6 @@
+# Keep the Cloud Build upload small — the image installs deps from pyproject.toml.
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.git/

@@ -1742,6 +1742,9 @@ const MemoSplitWorkspace = ({
   };
 
   const canUseMemoActions = Boolean(focusedPane && focusedEditor?.view === 'memo');
+  const canPinMemo = Boolean(
+    focusedEditor?.view === 'memo' && focusedEditor.memoId,
+  );
 
   return (
     <div className="split-workspace-shell">
@@ -1791,16 +1794,18 @@ const MemoSplitWorkspace = ({
               duplicate it. It now pins/unpins the focused memo instead. */}
           <TooltipIconButton
             className="split-command-button"
-            disabled={!focusedEditor?.memoId}
+            disabled={!canPinMemo}
             onClick={() => {
-              if (focusedEditor?.memoId) {
+              if (canPinMemo && focusedEditor?.memoId) {
                 onTogglePinMemo?.(focusedEditor.memoId);
               }
             }}
             tooltip={
-              focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
-                ? '메모 고정 해제'
-                : '메모 고정'
+              !canPinMemo
+                ? '노트 탭에서만 메모 고정 가능'
+                : focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId)
+                  ? '메모 고정 해제'
+                  : '메모 고정'
             }
           >
             {focusedEditor?.memoId && pinnedMemoIds.includes(focusedEditor.memoId) ? (
@@ -1863,15 +1868,15 @@ const MemoSplitWorkspace = ({
                       </span>
                     </button>
                   ))}
-                  <TooltipIconButton
-                    className="split-editor-tab-add"
-                    onClick={() => handleAddEditor(pane)}
-                    tooltip="새 탭"
-                  >
-                    <Plus size={15} strokeWidth={2.4} />
-                  </TooltipIconButton>
                 </div>
               </div>
+              <TooltipIconButton
+                className="split-editor-tab-add"
+                onClick={() => handleAddEditor(pane)}
+                tooltip="새 탭"
+              >
+                <Plus size={15} strokeWidth={2.4} />
+              </TooltipIconButton>
               <div
                 className="split-pane-actions"
                 ref={isMenuOpen ? setMenuActionsEl : undefined}

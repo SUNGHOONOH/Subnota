@@ -962,6 +962,22 @@ export default function SettingsModal(props: SettingsModalProps) {
               description="새 버전이 있으면 알려줍니다."
               label="업데이트 자동 확인"
             />
+            <Row
+              action={
+                <Switch
+                  checked={props.appSettings.ambientAutoSearchEnabled}
+                  className="settings-reference-switch"
+                  onChange={event =>
+                    updateAppSettings({
+                      ambientAutoSearchEnabled: event.currentTarget.checked,
+                    })
+                  }
+                  size="md"
+                />
+              }
+              description="입력을 멈추면 자동으로 연관 문장을 검색합니다. 꺼져 있으면 편집기 하단 버튼으로 직접 검색합니다."
+              label="연관 문장 자동 검색"
+            />
           </Section>
         </div>
       )}
