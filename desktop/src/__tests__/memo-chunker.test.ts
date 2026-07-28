@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { chunkMemoText, getCursorContextText } from '../lib/memoChunker';
+import {
+  chunkMemoText,
+  getCursorContextText,
+  isMeaningfulChunk,
+} from '../lib/memoChunker';
 
 // 회귀 재현: 한 문단(줄바꿈 없음)에 여러 문장이 들어있는 노트. 네트워크 검색
 // 쿼리가 문단 전체(=노트 전체)로 나가면 통짜 블록으로 임베딩되는 버그가 있었다.
@@ -124,5 +128,22 @@ describe('memoChunker line-block window', () => {
     expect(getCursorContextText(MULTILINE_MEMO, cursor)).toBe(
       '지도 앱 미리 받아두기',
     );
+  });
+});
+
+// 구분선/빈 체크박스는 임베딩해도 의미 없는 벡터가 되어 검색을 오염시킨다.
+// 반대로 '리팩토링' 같은 짧은 실제 단어는 반드시 살아야 한다 — 그래서
+// 길이가 아니라 "글자·숫자가 있는가"로 판정한다. 백엔드 is_meaningful_chunk와 동일.
+describe('memoChunker meaningless chunk filter', () => {
+  it('rejects separators and empty markdown skeletons', () => {
+    for (const noise of ['─────────', '---', '***', '- [ ]', '| --- |', '   ', '...']) {
+      expect(isMeaningfulChunk(noise), noise).toBe(false);
+    }
+  });
+
+  it('keeps short but real words', () => {
+    for (const real of ['리팩토링', '각 기능:', 'TODO', '2026', '会議', '- B: 굵게']) {
+      expect(isMeaningfulChunk(real), real).toBe(true);
+    }
   });
 });

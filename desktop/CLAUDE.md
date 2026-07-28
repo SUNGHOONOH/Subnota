@@ -85,8 +85,23 @@ changes require the matching real platform build.
   desktop workspace and its editor/view tabs.
 - `src/components/tiptap-templates/simple/simple-editor.tsx` is the shared
   Tiptap editor shell.
+- `src/local-embedding.ts` runs on-device embeddings (ONNX Runtime via
+  Transformers.js) and owns the `local-embed:*` IPC.
+- `src/features/preview/PreviewPanel.tsx` is the read-only preview surface for
+  *reference* opens; it is a sibling of `.workspace`, not a split pane.
 
 See `docs/CODEMAP.md` for the full path map and data flows.
+
+## Two invariants that are easy to break silently
+
+- **Never batch embeddings.** Passing an array to Transformers.js lets padding
+  leak into the CLS position, so the same sentence produces a different vector.
+  Index and query vectors must come from one implementation, one model, one
+  quantization — otherwise similarity ranking degrades without any error.
+- **Reference opens must not take over the focused pane.** Ambient results,
+  graph nodes, Topics chips and the calendar's source note open in the preview
+  panel. Opening them as tabs hides the very thing the user was comparing
+  against. `docs/CODEMAP.md` lists which call sites are which.
 
 ## UI and styling rules
 

@@ -27,9 +27,10 @@ export interface NetworkSearchResponse {
   results: NetworkSearchResult[];
 }
 
-export const NETWORK_SEARCH_EMPTY_MESSAGE = '비슷한 문장이 아직은 없네요!';
+export const NETWORK_SEARCH_EMPTY_MESSAGE =
+  '연결된 메모나 저장한 링크가 아직은 없네요!';
 export const NETWORK_SEARCH_RETRY_MESSAGE =
-  '네트워크 검색에 실패했습니다. 다시 시도해 주세요.';
+  '주변 메모를 찾지 못했습니다. 다시 시도해 주세요.';
 
 export const isNetworkSearchRetryableMessage = (message?: string | null) =>
   Boolean(
@@ -64,7 +65,7 @@ export const formatNetworkSearchErrorMessage = (
   options: { isOnline?: boolean } = {},
 ) => {
   if (options.isOnline === false) {
-    return '네트워크에 연결하면 검색할 수 있어요.';
+    return '네트워크에 연결하면 주변 메모를 찾을 수 있어요.';
   }
 
   if (error instanceof NetworkRequestError) {
@@ -73,7 +74,7 @@ export const formatNetworkSearchErrorMessage = (
     }
 
     if (error.status === 401 || error.status === 403) {
-      return '네트워크 검색은 로그인 후 사용할 수 있습니다.';
+      return '주변 메모는 로그인 후 찾을 수 있습니다.';
     }
 
     if (error.retryable || error.status === null) {
@@ -85,11 +86,11 @@ export const formatNetworkSearchErrorMessage = (
 
   if (error instanceof Error) {
     if (error.message.includes('login')) {
-      return '네트워크 검색은 로그인 후 사용할 수 있습니다.';
+      return '주변 메모는 로그인 후 찾을 수 있습니다.';
     }
 
     if (error.message.includes('configured')) {
-      return '네트워크 검색 설정이 필요합니다.';
+      return '주변 메모 검색 설정이 필요합니다.';
     }
   }
 
@@ -138,11 +139,10 @@ const getAccessToken = async (refresh = false) => {
   return session?.access_token ?? null;
 };
 
-export const searchCursorNetwork = async ({
+export const searchStateB = async ({
   limit,
   minimumSimilarity,
   memoId,
-  cursorIndex,
   queryText,
   signal,
   timeoutMs = 20000,
@@ -150,10 +150,6 @@ export const searchCursorNetwork = async ({
   limit?: number;
   minimumSimilarity?: number;
   memoId: string | null;
-  // Markdown char offset of the cursor in the active memo. When provided the
-  // backend can snap to the exact indexed chunk and serve precomputed
-  // neighbours; omit it to let the backend fall back to text matching.
-  cursorIndex?: number | null;
   queryText: string;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -188,11 +184,10 @@ export const searchCursorNetwork = async ({
       `${backendUrl.replace(/\/$/, '')}/network/search`,
       {
         body: JSON.stringify({
-          cursor_index: cursorIndex ?? null,
           limit,
           memo_id: memoId,
           minimum_similarity: minimumSimilarity,
-          query_text: queryText,
+          query_text: queryText.trim().slice(0, 20_000),
         }),
         headers: {
           Authorization: `Bearer ${token}`,
@@ -216,14 +211,14 @@ export const searchCursorNetwork = async ({
     if (controller.signal.aborted) {
       if (didTimeout) {
         throw new NetworkRequestError(
-          '네트워크 검색 시간이 초과되었습니다.',
+          '주변 메모 검색 시간이 초과되었습니다.',
           { retryable: true },
         );
       }
       throw new DOMException('Network search was cancelled.', 'AbortError');
     }
     throw new NetworkRequestError(
-      error instanceof Error ? error.message : '네트워크 검색에 실패했습니다.',
+      error instanceof Error ? error.message : '주변 메모 검색에 실패했습니다.',
       { retryable: true },
     );
   } finally {
@@ -248,7 +243,7 @@ export const searchCursorNetwork = async ({
       detail ||
         (response.status === 429
           ? '요청이 많습니다. 잠시 후 다시 시도해 주세요.'
-          : `네트워크 검색에 실패했습니다. (${response.status})`),
+          : `주변 메모 검색에 실패했습니다. (${response.status})`),
       {
         retryAfterSeconds:
           Number.isFinite(retryAfterSeconds) && retryAfterSeconds !== null

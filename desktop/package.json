@@ -61,6 +61,7 @@
   "dependencies": {
     "@floating-ui/react": "^0.27.19",
     "@heroicons/react": "^2.2.0",
+    "@huggingface/transformers": "^4.2.0",
     "@mantine/core": "^9.3.2",
     "@mantine/hooks": "^9.3.2",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -91,7 +92,6 @@
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "graphology-layout-noverlap": "^0.4.2",
-    "highlight.js": "^11.11.1",
     "lodash.throttle": "^4.1.1",
     "lowlight": "^3.3.0",
     "minisearch": "7.2.0",
@@ -101,14 +101,6 @@
     "sigma": "^3.0.3"
   },
   "pnpm": {
-    "blockExoticSubdeps": false,
-    "onlyBuiltDependencies": [
-      "@parcel/watcher",
-      "electron-winstaller",
-      "esbuild",
-      "fs-xattr",
-      "macos-alias",
-      "unrs-resolver"
-    ]
+    "blockExoticSubdeps": false
   }
 }

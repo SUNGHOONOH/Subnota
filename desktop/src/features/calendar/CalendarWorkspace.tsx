@@ -1,4 +1,11 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   addDays,
   addMonths,
@@ -192,7 +199,7 @@ const CalendarWorkspace = ({
     setAnchor(date);
   };
 
-  const openEditor = (date: Date, block?: CalendarBlockRow) => {
+  const openEditor = useCallback((date: Date, block?: CalendarBlockRow) => {
     setEditingBlock(block ?? null);
     setTitle(block?.title ?? '');
     setSourceMemoId(parseScheduleNoteMemoId(block?.note));
@@ -201,7 +208,28 @@ const CalendarWorkspace = ({
     setSelectedDate(toLocalInputDate(base));
     setTime(block?.all_day ? '' : format(base, 'HH:mm'));
     setEditorOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenCalendarBlock = (event: Event) => {
+      const { blockId } = (
+        event as CustomEvent<{ blockId?: string }>
+      ).detail ?? { blockId: undefined };
+      const block = blocks.find(candidate => candidate.id === blockId);
+      if (!block) return;
+      const date = getBlockStart(block);
+      setAnchor(date);
+      setSelectedDay(date);
+      openEditor(date, block);
+    };
+
+    window.addEventListener('subnota:open-calendar-block', handleOpenCalendarBlock);
+    return () =>
+      window.removeEventListener(
+        'subnota:open-calendar-block',
+        handleOpenCalendarBlock,
+      );
+  }, [blocks, openEditor]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -651,8 +679,9 @@ const CalendarWorkspace = ({
               <button
                 className="cal-btn ghost cal-source-note-btn"
                 onClick={() => {
+                  // 캘린더를 보면서 출처를 확인하는 흐름이라 미리보기로 연다.
                   window.dispatchEvent(
-                    new CustomEvent('subnota:open-memo', {
+                    new CustomEvent('subnota:preview-memo', {
                       detail: { memoId: sourceMemoId },
                     }),
                   );

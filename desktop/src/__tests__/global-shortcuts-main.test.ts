@@ -149,8 +149,11 @@ describe('macOS global shortcut main process wiring', () => {
       toggleMini: 'Alt+N',
     });
 
+    // 설정은 이전 값으로 되돌아가지만 registered는 실패한 쪽(capture)을
+    // 그대로 보고해야 한다. 롤백 등록 결과(전부 true)를 돌려주면 호출자가
+    // 실패를 성공으로 읽고 "저장했습니다"를 띄운다.
     expect(fallback).toEqual({
-      registered: { capture: true, toggle: true },
+      registered: { capture: false, toggle: true },
       settings: {
         capturePage: 'CommandOrControl+Shift+Y',
         openSearch: 'CommandOrControl+K',
@@ -158,5 +161,25 @@ describe('macOS global shortcut main process wiring', () => {
       },
     });
     expect(mockUnregisterAll).toHaveBeenCalled();
+    // 롤백은 말뿐이 아니라 이전 조합을 실제로 다시 등록해야 한다.
+    expect(mockRegister).toHaveBeenLastCalledWith(
+      'CommandOrControl+Shift+Y',
+      expect.any(Function),
+    );
+  });
+
+  it('suspends and restores global shortcuts while a shortcut is being recorded', () => {
+    const suspend = ipcHandlers['suspend-global-shortcuts'];
+    expect(suspend).toBeTypeOf('function');
+
+    mockUnregisterAll.mockClear();
+    mockRegister.mockClear();
+
+    suspend({}, true);
+    expect(mockUnregisterAll).toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
+
+    suspend({}, false);
+    expect(mockRegister).toHaveBeenCalledWith('Alt+Y', expect.any(Function));
   });
 });

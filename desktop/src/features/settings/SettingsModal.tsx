@@ -31,12 +31,18 @@ import {
   UserCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { APP_HOTKEYS } from '../../hooks/useAppHotkeys';
 import { AppSettings, CloseBehavior } from '../../lib/appSettings';
 import { DARK_MODE_ENABLED } from '../../lib/constants';
 import {
+  APP_SHORTCUT_FIELDS,
+  APP_SHORTCUT_LABELS,
+  AppShortcutSettings,
+  DEFAULT_APP_SHORTCUT_SETTINGS,
   DEFAULT_SHORTCUT_SETTINGS,
+  findShortcutConflictsForFields,
+  SHORTCUT_LABELS,
   ShortcutSettings,
+  keyboardEventToAccelerator,
 } from '../../lib/shortcutSettings';
 
 interface ShortcutSaveResult {
@@ -46,6 +52,7 @@ interface ShortcutSaveResult {
 
 interface SettingsModalProps {
   appSettings: AppSettings;
+  appShortcuts: AppShortcutSettings;
   desktopPreferences: {
     closeBehavior: CloseBehavior;
     launchAtLogin: boolean;
@@ -76,15 +83,20 @@ interface SettingsModalProps {
   onOpenStorage: () => Promise<void>;
   onPasswordReset: () => Promise<void>;
   onResetShortcuts: () => Promise<ShortcutSaveResult | void>;
+  onResetAppShortcuts: () => Promise<AppShortcutSettings | void>;
   onRestore: (file: File) => Promise<void>;
   onSaveShortcuts: (
     settings: ShortcutSettings,
   ) => Promise<ShortcutSaveResult | void>;
+  onSaveAppShortcuts: (
+    settings: AppShortcutSettings,
+  ) => Promise<AppShortcutSettings | void>;
   onSignOut: () => void;
   onSync: () => void;
 }
 
 type IconComponent = typeof Cog6ToothIcon;
+type EditableShortcutField = keyof ShortcutSettings | keyof AppShortcutSettings;
 
 const REFERENCE_CSS = `
 .settings-reference-frame {
@@ -375,6 +387,12 @@ const REFERENCE_CSS = `
   background: #f3f3f3;
 }
 
+/* Mantine 기본 lg 라벨은 9px인데, 이 화면 전체가 --ref-scale(0.76)로 축소돼
+   실효 7px가 된다. 다른 텍스트와 같은 기준으로 키워 둔다. */
+.settings-reference-switch {
+  --switch-label-font-size: 12px;
+}
+
 .settings-reference-shortcut-record {
   display: flex;
   align-items: center;
@@ -396,6 +414,15 @@ const REFERENCE_CSS = `
 .settings-reference-shortcut-record[data-recording] {
   border-color: var(--ref-text);
   box-shadow: 0 0 0 1px var(--ref-text);
+}
+
+.settings-reference-shortcut-record[data-conflict] {
+  border-color: #d64545;
+  box-shadow: 0 0 0 1px #d64545;
+}
+
+.settings-reference-shortcut-conflict {
+  color: #d64545;
 }
 
 .settings-reference-feedback {
@@ -476,18 +503,35 @@ const EDITABLE_SHORTCUTS: Array<{
   {
     description: '어디서든 빠른 메모 패널을 엽니다.',
     field: 'toggleMini',
-    label: 'Mini Subnota 열기',
+    label: SHORTCUT_LABELS.toggleMini,
   },
   {
     description: '현재 브라우저 페이지를 웹 Inbox로 보냅니다.',
     field: 'capturePage',
-    label: '현재 페이지 저장',
+    label: SHORTCUT_LABELS.capturePage,
   },
   {
     description: '앱 안에서 메모 검색을 엽니다.',
     field: 'openSearch',
-    label: '메모 검색',
+    label: SHORTCUT_LABELS.openSearch,
   },
+];
+
+const EDITABLE_APP_SHORTCUTS: Array<{
+  description: string;
+  field: keyof AppShortcutSettings;
+  label: string;
+}> = [
+  { description: '새 메모 초안을 엽니다.', field: 'createMemo', label: APP_SHORTCUT_LABELS.createMemo },
+  { description: '설정 화면을 엽니다.', field: 'openSettings', label: APP_SHORTCUT_LABELS.openSettings },
+  { description: '메모 탭으로 이동합니다.', field: 'openMemos', label: APP_SHORTCUT_LABELS.openMemos },
+  { description: '캘린더 탭으로 이동합니다.', field: 'openCalendar', label: APP_SHORTCUT_LABELS.openCalendar },
+  { description: 'Inbox 탭으로 이동합니다.', field: 'openInbox', label: APP_SHORTCUT_LABELS.openInbox },
+  { description: '이전 분할 패널로 이동합니다.', field: 'focusPreviousPane', label: APP_SHORTCUT_LABELS.focusPreviousPane },
+  { description: '다음 분할 패널로 이동합니다.', field: 'focusNextPane', label: APP_SHORTCUT_LABELS.focusNextPane },
+  { description: '새 분할 패널을 엽니다.', field: 'createSplitPane', label: APP_SHORTCUT_LABELS.createSplitPane },
+  { description: '추천된 문장을 미리보기 패널에서 엽니다.', field: 'openAmbientDetail', label: APP_SHORTCUT_LABELS.openAmbientDetail },
+  { description: '연결된 문장 목록을 미리보기 패널에서 엽니다.', field: 'openAmbientList', label: APP_SHORTCUT_LABELS.openAmbientList },
 ];
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -672,6 +716,7 @@ function ExpandableRow({
   children,
   expanded,
   label,
+  onCancel,
   onClose,
   onOpen,
   value,
@@ -679,6 +724,7 @@ function ExpandableRow({
   children: ReactNode;
   expanded: boolean;
   label: string;
+  onCancel: () => void;
   onClose: () => void;
   onOpen: () => void;
   value: string;
@@ -695,7 +741,16 @@ function ExpandableRow({
 
   return (
     <>
-      <Stack className="settings-reference-expanded" gap={16}>
+      <Stack
+        className="settings-reference-expanded"
+        gap={16}
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+      >
         <Text className="settings-reference-row-label">{label}</Text>
         {children}
         <Group gap={8}>
@@ -704,7 +759,7 @@ function ExpandableRow({
           </Button>
           <Button
             className="settings-reference-cancel"
-            onClick={onClose}
+            onClick={onCancel}
             variant="transparent"
           >
             취소
@@ -762,22 +817,59 @@ export default function SettingsModal(props: SettingsModalProps) {
   const [mobileView, setMobileView] = useState<'nav' | 'detail'>('nav');
   const [active, setActive] = useState(SECTIONS[0].id);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [expandedSnapshot, setExpandedSnapshot] = useState<AppSettings | null>(
+    null,
+  );
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isWorking, setWorking] = useState(false);
   const [shortcutDraft, setShortcutDraft] = useState(props.shortcuts);
-  const [recording, setRecording] = useState<keyof ShortcutSettings | null>(null);
+  const [appShortcutDraft, setAppShortcutDraft] = useState(props.appShortcuts);
+  const [recording, setRecording] = useState<EditableShortcutField | null>(null);
   const viewportRef = useRef<HTMLElement>(null);
+  const shortcutValues = { ...appShortcutDraft, ...shortcutDraft };
+  const shortcutLabels = { ...APP_SHORTCUT_LABELS, ...SHORTCUT_LABELS };
+  const shortcutFields = [
+    ...APP_SHORTCUT_FIELDS,
+    ...editableShortcuts.map(item => item.field),
+  ];
+  const shortcutConflicts = findShortcutConflictsForFields(
+    shortcutValues,
+    { fields: shortcutFields, labels: shortcutLabels },
+  );
+  const hasShortcutConflict = Object.keys(shortcutConflicts).length > 0;
 
   useEffect(() => {
     if (props.isOpen) {
       setActive(SECTIONS[0].id);
       setExpandedRow(null);
       setFeedback(null);
-      setShortcutDraft(props.shortcuts);
       setMobileView('nav');
+      setRecording(null);
       viewportRef.current?.scrollTo({ top: 0 });
     }
-  }, [props.isOpen, props.shortcuts]);
+  }, [props.isOpen]);
+
+  // 저장·복원·다른 창의 변경이 반영될 때만 draft를 맞춘다. 열림 초기화
+  // 효과에 묶어 두면 저장 직후 탭이 첫 섹션으로 튀고 결과 메시지가 지워진다.
+  useEffect(() => {
+    setShortcutDraft(props.shortcuts);
+    setAppShortcutDraft(props.appShortcuts);
+  }, [props.appShortcuts, props.shortcuts]);
+
+  // 녹화 중에는 OS 글로벌 단축키를 내려 둔다. 켜져 있으면 Alt+S 같은 조합이
+  // 렌더러에 오기 전에 Mini 창을 띄우고, 포커스를 뺏겨 녹화가 취소된다.
+  // isOpen도 함께 본다. 녹화 중에 모달을 닫으면 버튼만 언마운트되고 이
+  // 효과는 살아 있어서, 조건이 recording뿐이면 글로벌 단축키가 내려간 채로
+  // 남는다.
+  useEffect(() => {
+    if (!recording || !props.isOpen) {
+      return;
+    }
+    void window.electronAPI?.suspendGlobalShortcuts?.(true);
+    return () => {
+      void window.electronAPI?.suspendGlobalShortcuts?.(false);
+    };
+  }, [props.isOpen, recording]);
 
   useEffect(() => {
     setExpandedRow(null);
@@ -832,29 +924,51 @@ export default function SettingsModal(props: SettingsModalProps) {
 
   const expandable = (row: string) => ({
     expanded: expandedRow === row,
-    onClose: () => setExpandedRow(null),
-    onOpen: () => setExpandedRow(row),
+    onCancel: () => {
+      if (expandedSnapshot) {
+        props.onAppSettingsChange(expandedSnapshot);
+      }
+      setExpandedSnapshot(null);
+      setExpandedRow(null);
+    },
+    onClose: () => {
+      setExpandedSnapshot(null);
+      setExpandedRow(null);
+    },
+    onOpen: () => {
+      setExpandedSnapshot(props.appSettings);
+      setExpandedRow(row);
+    },
   });
 
   const captureShortcut =
-    (field: keyof ShortcutSettings) => (event: React.KeyboardEvent) => {
+    (field: EditableShortcutField) => (event: React.KeyboardEvent) => {
       event.preventDefault();
+      // preventDefault는 기본 동작만 막는다. 전파를 끊지 않으면 window에 붙은
+      // 앱 단축키 리스너가 녹화 중인 키를 그대로 실행한다.
+      event.stopPropagation();
       if (event.key === 'Escape') {
         setRecording(null);
         return;
       }
-      if (['Meta', 'Control', 'Shift', 'Alt'].includes(event.key)) {
+
+      const accelerator = keyboardEventToAccelerator(event, {
+        requireModifier: true,
+      });
+      if (!accelerator) {
+        // 조합 키 단독(⌘만 누름)은 아직 입력 중이므로 조용히 넘긴다.
+        if (!['Alt', 'Control', 'Meta', 'Shift'].includes(event.key)) {
+          setFeedback('⌘/Ctrl · ⌥ · ⇧ 중 하나를 함께 눌러 주세요.');
+        }
         return;
       }
 
-      const parts: string[] = [];
-      if (event.metaKey || event.ctrlKey) parts.push('CommandOrControl');
-      if (event.shiftKey) parts.push('Shift');
-      if (event.altKey) parts.push('Alt');
-      if (parts.length === 0) return;
-
-      const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
-      setShortcutDraft(current => ({ ...current, [field]: [...parts, key].join('+') }));
+      setFeedback(null);
+      if (field in DEFAULT_SHORTCUT_SETTINGS) {
+        setShortcutDraft(current => ({ ...current, [field]: accelerator }));
+      } else {
+        setAppShortcutDraft(current => ({ ...current, [field]: accelerator }));
+      }
       setRecording(null);
     };
 
@@ -901,7 +1015,10 @@ export default function SettingsModal(props: SettingsModalProps) {
                       launchAtLogin: event.currentTarget.checked,
                     })
                   }
-                  size="md"
+                  offLabel="OFF"
+                  onLabel="ON"
+                  size="lg"
+                  withThumbIndicator={false}
                 />
               }
               description="로그인할 때 Subnota를 자동으로 엽니다."
@@ -940,7 +1057,10 @@ export default function SettingsModal(props: SettingsModalProps) {
                       restoreWorkspace: event.currentTarget.checked,
                     })
                   }
-                  size="md"
+                  offLabel="OFF"
+                  onLabel="ON"
+                  size="lg"
+                  withThumbIndicator={false}
                 />
               }
               description="앱을 열 때 마지막 작업 공간으로 돌아갑니다."
@@ -956,7 +1076,10 @@ export default function SettingsModal(props: SettingsModalProps) {
                       autoCheckUpdates: event.currentTarget.checked,
                     })
                   }
-                  size="md"
+                  offLabel="OFF"
+                  onLabel="ON"
+                  size="lg"
+                  withThumbIndicator={false}
                 />
               }
               description="새 버전이 있으면 알려줍니다."
@@ -972,7 +1095,10 @@ export default function SettingsModal(props: SettingsModalProps) {
                       ambientAutoSearchEnabled: event.currentTarget.checked,
                     })
                   }
-                  size="md"
+                  offLabel="OFF"
+                  onLabel="ON"
+                  size="lg"
+                  withThumbIndicator={false}
                 />
               }
               description="입력을 멈추면 자동으로 연관 문장을 검색합니다. 꺼져 있으면 편집기 하단 버튼으로 직접 검색합니다."
@@ -1176,10 +1302,52 @@ export default function SettingsModal(props: SettingsModalProps) {
       {active === 'hotkeys' && (
         <div className="settings-reference-sections">
           <Section title="앱 단축키">
-            {APP_HOTKEYS.map(item => (
+            {EDITABLE_APP_SHORTCUTS.map(item => (
               <Row
-                action={<Hotkey value={item.accelerator} />}
-                key={item.accelerator}
+                action={
+                  <button
+                    aria-label={`${item.label} 단축키 변경`}
+                    className="settings-reference-shortcut-record"
+                    data-conflict={
+                      shortcutConflicts[item.field] ? '' : undefined
+                    }
+                    data-recording={recording === item.field ? '' : undefined}
+                    onBlur={() =>
+                      setRecording(current =>
+                        current === item.field ? null : current,
+                      )
+                    }
+                    onClick={() => setRecording(item.field)}
+                    onKeyDown={
+                      recording === item.field
+                        ? captureShortcut(item.field)
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    {recording === item.field ? (
+                      <Text c="dimmed" size="sm">
+                        키를 누르세요...
+                      </Text>
+                    ) : (
+                      <Hotkey value={appShortcutDraft[item.field]} />
+                    )}
+                  </button>
+                }
+                description={
+                  shortcutConflicts[item.field] ? (
+                    <Text
+                      className="settings-reference-shortcut-conflict"
+                      component="span"
+                      size="sm"
+                    >
+                      {`'${shortcutConflicts[item.field]}'에 이미 할당된 조합입니다.`}
+                    </Text>
+                  ) : (
+                    item.description
+                  )
+                }
+                key={item.field}
                 label={item.label}
               />
             ))}
@@ -1194,6 +1362,9 @@ export default function SettingsModal(props: SettingsModalProps) {
                   <button
                     aria-label={`${item.label} 단축키 변경`}
                     className="settings-reference-shortcut-record"
+                    data-conflict={
+                      shortcutConflicts[item.field] ? '' : undefined
+                    }
                     data-recording={recording === item.field ? '' : undefined}
                     onBlur={() =>
                       setRecording(current =>
@@ -1217,7 +1388,19 @@ export default function SettingsModal(props: SettingsModalProps) {
                     )}
                   </button>
                 }
-                description={item.description}
+                description={
+                  shortcutConflicts[item.field] ? (
+                    <Text
+                      className="settings-reference-shortcut-conflict"
+                      component="span"
+                      size="sm"
+                    >
+                      {`'${shortcutConflicts[item.field]}'에 이미 할당된 조합입니다.`}
+                    </Text>
+                  ) : (
+                    item.description
+                  )
+                }
                 key={item.field}
                 label={item.label}
               />
@@ -1227,7 +1410,9 @@ export default function SettingsModal(props: SettingsModalProps) {
                 className="settings-reference-cancel"
                 onClick={() =>
                   void run(async () => {
+                    await props.onResetAppShortcuts();
                     await props.onResetShortcuts();
+                    setAppShortcutDraft(DEFAULT_APP_SHORTCUT_SETTINGS);
                     setShortcutDraft(DEFAULT_SHORTCUT_SETTINGS);
                   }, '기본 단축키로 복원했습니다.')
                 }
@@ -1237,12 +1422,24 @@ export default function SettingsModal(props: SettingsModalProps) {
               </Button>
               <Button
                 className="settings-reference-save"
-                onClick={() =>
-                  void run(
-                    () => props.onSaveShortcuts(shortcutDraft),
-                    '단축키를 저장했습니다.',
-                  )
-                }
+                  disabled={hasShortcutConflict || isWorking}
+                  onClick={() =>
+                    void run(async () => {
+                    const result = await props.onSaveShortcuts(shortcutDraft);
+                    // main이 등록에 실패하면 이전 설정으로 롤백된다.
+                    // 그 사실을 알리지 않으면 화면의 draft와 실제가 어긋난다.
+                    if (result && (!result.capture || !result.toggle)) {
+                      setShortcutDraft(props.shortcuts);
+                      const failed = result.toggle
+                        ? SHORTCUT_LABELS.capturePage
+                        : SHORTCUT_LABELS.toggleMini;
+                      throw new Error(
+                        `'${failed}' 단축키를 운영체제에 등록하지 못했습니다. 다른 조합을 선택해 주세요.`,
+                      );
+                    }
+                    await props.onSaveAppShortcuts(appShortcutDraft);
+                  }, '단축키를 저장했습니다.')
+                  }
               >
                 단축키 저장
               </Button>

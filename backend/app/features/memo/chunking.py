@@ -262,6 +262,16 @@ def should_flush_network_chunk(sentences: list[MemoChunk]) -> bool:
     )
 
 
+# 글자·숫자가 하나도 없는 조각(구분선 '─────', 빈 체크박스 '- [ ]', 표 구분행
+# 등)은 임베딩해도 의미 없는 벡터가 되어 검색 결과에 무작위로 섞인다.
+# 길이로 거르면 안 된다 — '리팩토링'처럼 짧아도 의미 있는 청크가 훨씬 많다.
+MEANINGFUL_RE = re.compile(r"[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ぀-ヿ一-鿿]")
+
+
+def is_meaningful_chunk(text: str) -> bool:
+    return bool(MEANINGFUL_RE.search(text))
+
+
 def append_network_chunk(
     chunks: list[MemoChunk],
     sentences: list[MemoChunk],
@@ -274,6 +284,9 @@ def append_network_chunk(
     start = sentences[0].start
     end = sentences[-1].end
     text = "\n".join(sentence.text for sentence in sentences).strip()
+
+    if not is_meaningful_chunk(text):
+        return
 
     if allow_merge and len(text) < constants.CHUNK_MIN_CHARS and chunks:
         previous = chunks[-1]

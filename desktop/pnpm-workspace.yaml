@@ -5,4 +5,9 @@ allowBuilds:
   esbuild: true
   fs-xattr: true
   macos-alias: true
+  # onnxruntime-node는 전 플랫폼 프리빌트 바이너리를 패키지에 이미 포함한다.
+  # postinstall은 CUDA용 추가 다운로드라 우리에겐 불필요하다.
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
   unrs-resolver: true

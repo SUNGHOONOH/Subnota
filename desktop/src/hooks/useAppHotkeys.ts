@@ -1,7 +1,14 @@
 import { useHotkeys } from '@mantine/hooks';
+import {
+  AppShortcutSettings,
+  DEFAULT_APP_SHORTCUT_SETTINGS,
+  toMantineHotkey,
+} from '../lib/shortcutSettings';
 
 export interface AppHotkeyHandlers {
   createMemo: () => void;
+  openAmbientDetail: () => void;
+  openAmbientList: () => void;
   createSplitPane: () => void;
   focusNextPane: () => void;
   focusPreviousPane: () => void;
@@ -20,21 +27,28 @@ export const APP_HOTKEYS = [
   { accelerator: 'mod+Alt+ArrowLeft', label: '이전 분할 패널 포커스' },
   { accelerator: 'mod+Alt+ArrowRight', label: '다음 분할 패널 포커스' },
   { accelerator: 'mod+\\', label: '새 분할 패널' },
+  { accelerator: 'mod+Enter', label: '연결된 문장 미리보기' },
+  { accelerator: 'mod+Shift+Enter', label: '연결된 문장 목록' },
 ] as const;
 
-export const useAppHotkeys = (handlers: AppHotkeyHandlers) => {
+export const useAppHotkeys = (
+  handlers: AppHotkeyHandlers,
+  shortcuts: AppShortcutSettings = DEFAULT_APP_SHORTCUT_SETTINGS,
+) => {
   useHotkeys(
     [
-      ['mod+N', handlers.createMemo],
-      ['mod+,', handlers.openSettings],
-      ['mod+1', handlers.openMemos],
-      ['mod+2', handlers.openCalendar],
-      ['mod+3', handlers.openInbox],
-      ['mod+Alt+ArrowLeft', handlers.focusPreviousPane],
-      ['mod+Alt+ArrowRight', handlers.focusNextPane],
-      ['mod+\\', handlers.createSplitPane],
+      [toMantineHotkey(shortcuts.createMemo), handlers.createMemo],
+      [toMantineHotkey(shortcuts.openSettings), handlers.openSettings],
+      [toMantineHotkey(shortcuts.openMemos), handlers.openMemos],
+      [toMantineHotkey(shortcuts.openCalendar), handlers.openCalendar],
+      [toMantineHotkey(shortcuts.openInbox), handlers.openInbox],
+      [toMantineHotkey(shortcuts.focusPreviousPane), handlers.focusPreviousPane],
+      [toMantineHotkey(shortcuts.focusNextPane), handlers.focusNextPane],
+      [toMantineHotkey(shortcuts.createSplitPane), handlers.createSplitPane],
+      [toMantineHotkey(shortcuts.openAmbientDetail), handlers.openAmbientDetail],
+      [toMantineHotkey(shortcuts.openAmbientList), handlers.openAmbientList],
     ],
-    [],
+    Object.values(shortcuts),
     true,
   );
 };

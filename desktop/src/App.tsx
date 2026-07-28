@@ -13,6 +13,10 @@ import TooltipIconButton from './components/TooltipIconButton';
 
 import AuthScreen from './features/auth/AuthScreen';
 import { decideAuthEvent } from './features/auth/authEventDecision';
+import GlobalSearchOverlay from './features/search/GlobalSearchOverlay';
+import LocalIndexProgress, {
+  isEmptyLocalIndexCompletion,
+} from './features/search/LocalIndexProgress';
 import MemoWorkspace from './features/memo/MemoWorkspace';
 import MemoSplitWorkspace, {
   MemoSplitEditorState,
@@ -26,7 +30,6 @@ import {
   AMBIENT_MAX_RESULT_COUNT,
   AMBIENT_MIN_CHARS,
   AMBIENT_MIN_SIMILARITY,
-  NETWORK_MIN_SIMILARITY,
 } from './lib/constants';
 import {
   AmbientSearchTarget,
@@ -34,14 +37,17 @@ import {
   createAmbientSearchRunner,
 } from './lib/ambientSearch';
 import { createUuid } from './lib/contentHash';
-import { parseDates } from './lib/dateParser';
 import {
   loadPinnedMemoIds,
   savePinnedMemoIds,
   togglePinnedMemoId,
 } from './lib/pinnedMemos';
-import { MemoChunk, getCursorContextText } from './lib/memoChunker';
+import { MemoChunk } from './lib/memoChunker';
 import { decideMemoNavAction } from './lib/memoNavAction';
+import {
+  buildGlobalSearchItems,
+  type GlobalSearchItem,
+} from './lib/globalSearch';
 import { registerReconnectSync } from './lib/reconnectSync';
 import { editorsAfterNewTab, editorsAfterOpenTab } from './lib/splitPaneTabs';
 import { useOnlineStatus } from './lib/useOnlineStatus';
@@ -52,18 +58,18 @@ import {
   saveAppSettings,
 } from './lib/appSettings';
 import {
+  AppShortcutSettings,
+  DEFAULT_APP_SHORTCUT_SETTINGS,
   DEFAULT_SHORTCUT_SETTINGS,
   ShortcutSettings,
+  loadAppShortcutSettings,
   loadShortcutSettings,
   matchesKeyboardShortcut,
+  saveAppShortcutSettings,
   normalizeShortcutSettings,
   saveShortcutSettings,
 } from './lib/shortcutSettings';
-import {
-  DEFAULT_MEMO_CATEGORY,
-  MINI_SUBNOTA_CATEGORY,
-  getMemoCategory,
-} from './lib/memoCategory';
+import { DEFAULT_MEMO_CATEGORY, getMemoCategory } from './lib/memoCategory';
 import {
   loadWorkspaceSession,
   saveWorkspaceSession,
@@ -112,16 +118,26 @@ import {
   upsertLocalTree,
 } from './services/local/offlineStore';
 import {
-  NETWORK_SEARCH_EMPTY_MESSAGE,
-  NetworkSearchResult,
-  formatNetworkSearchErrorMessage,
-  searchCursorNetwork,
+  cancelLocalMemoIndexing,
+  scheduleLocalMemoIndexReconcile,
+  subscribeLocalMemoIndexProgress,
+  type LocalMemoIndexProgress,
+} from './services/local/localMemoIndexer';
+import {
+  cancelLocalInboxIndexing,
+  scheduleLocalInboxIndexReconcile,
+} from './services/local/localInboxIndexer';
+import {
+  type NetworkSearchResult,
 } from './services/backend/networkService';
+import {
+  formatLocalMemoSearchErrorMessage,
+  searchLocalMemoChunks,
+} from './services/local/localMemoSearch';
 import {
   archiveMemo,
   deleteCalendarBlock,
   ensureProfile,
-  fetchBriefings,
   fetchCalendarBlocks,
   fetchMemos,
   fetchScheduleInbox,
@@ -144,22 +160,27 @@ import {
   isDayComplete,
 } from './features/tree/model/dayCompletion';
 import { deriveGrowingTree } from './features/tree/model/deriveGrowingTree';
+import PreviewPanel, {
+  type PreviewPanelState,
+} from './features/preview/PreviewPanel';
+import {
+  clampPreviewPanelWidth,
+  loadPreviewPanelWidth,
+  savePreviewPanelWidth,
+} from './lib/previewPanelWidth';
 import {
   ActivityCompletion,
   DailyCompletion,
   ForestTree,
 } from './features/tree/model/treeTypes';
 import {
-  BriefingRow,
   CalendarBlockRow,
   MemoRow,
-  MemoSaveState,
   ScheduleInboxRow,
   TabKey,
   TopicCluster,
   MemoSimilarityEdge,
   TopicMemoInboxEdge,
-  TopicMemoEdge,
   TopicInboxMembership,
   TopicMembership,
 } from './types';
@@ -190,43 +211,8 @@ const BOOT_MESSAGES = [
 const SUBNOTA_MARK_PATH =
   'M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4V6a4 4 0 0 1 4-4zm0 20a4 4 0 0 1-4-4v-2a4 4 0 0 1 4-4 4 4 0 0 1 4 4v2a4 4 0 0 1-4 4zm-8-8a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4 4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zm16 0a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4 4 4 0 0 1 4-4h2a4 4 0 0 1 4 4z';
 
-const getMemoTitle = (content: string) => {
-  const firstLine = content
-    .split('\n')
-    .map(line => line.trim())
-    .find(Boolean);
-
-  if (!firstLine) {
-    return '새 메모';
-  }
-
-  return firstLine.length > 28 ? `${firstLine.slice(0, 28).trimEnd()}...` : firstLine;
-};
-
 const createSplitPaneId = () =>
   `split-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const isSplitPaneBlankMemoDraft = (pane: MemoSplitPaneState) => {
-  const activeEditor =
-    pane.editors?.find(editor => editor.id === pane.activeEditorId) ??
-    pane.editors?.[0];
-
-  if (activeEditor) {
-    return (
-      activeEditor.view === 'memo' &&
-      !activeEditor.memoId &&
-      !activeEditor.sourceResult &&
-      !(activeEditor.draftText ?? '').trim()
-    );
-  }
-
-  return (
-    pane.view === 'memo' &&
-    !pane.memoId &&
-    !pane.sourceResult &&
-    !(pane.draftText ?? '').trim()
-  );
-};
 
 const getAppPaneEditors = (pane: MemoSplitPaneState) =>
   pane.editors && pane.editors.length > 0 ? pane.editors : [pane];
@@ -270,6 +256,23 @@ const waitForBootSync = async (syncPromise: Promise<void>) => {
   }
 };
 
+const getInitialSession = async () => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // Auth storage/네트워크가 지연돼도 로컬 우선 화면 진입을 막지 않는다.
+    return await Promise.race([
+      getSession(),
+      new Promise<Session | null>(resolve => {
+        timeoutId = setTimeout(() => resolve(null), BOOT_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const App = () => {
   const [appSettings, setAppSettings] = useState(loadAppSettings);
   const [restoredWorkspace] = useState(() =>
@@ -289,9 +292,6 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<TabKey>(
     restoredWorkspace?.activeTab ?? 'memo',
   );
-  const [ambientQueryChunk, setAmbientQueryChunk] = useState<MemoChunk | null>(
-    null,
-  );
   const [ambientResult, setAmbientResult] = useState<NetworkSearchResult | null>(
     null,
   );
@@ -307,7 +307,6 @@ const App = () => {
   >(null);
   const [ambientTarget, setAmbientTarget] =
     useState<AmbientSearchTarget | null>(null);
-  const [briefings, setBriefings] = useState<BriefingRow[]>([]);
   const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlockRow[]>([]);
   const [activityCompletions, setActivityCompletions] = useState<ActivityCompletion[]>([]);
   const [dailyCompletions, setDailyCompletions] = useState<DailyCompletion[]>([]);
@@ -325,27 +324,14 @@ const App = () => {
   const [pinnedMemoIds, setPinnedMemoIds] = useState<string[]>(() =>
     loadPinnedMemoIds(getLocalWorkspaceOwner()),
   );
-  const [memoDraft, setMemoDraft] = useState('');
-  const [networkError, setNetworkError] = useState<string | null>(null);
-  const [networkQueryChunk, setNetworkQueryChunk] = useState<MemoChunk | null>(
-    null,
-  );
-  const [networkResults, setNetworkResults] = useState<NetworkSearchResult[]>(
-    [],
-  );
   const [scheduleInbox, setScheduleInbox] = useState<ScheduleInboxRow[]>([]);
-  const [saveState, setSaveState] = useState<MemoSaveState>('idle');
   const [session, setSession] = useState<Session | null>(null);
   const treeUserId = session?.user.id ?? 'local';
   const growingTree = useMemo(
     () => deriveGrowingTree(treeUserId, forestTrees, activityCompletions, dailyCompletions),
     [treeUserId, forestTrees, activityCompletions, dailyCompletions],
   );
-  const [selectedTextState, setSelectedTextState] = useState('');
-  const [selectionEnd, setSelectionEnd] = useState(0);
-  const [selectionStart, setSelectionStart] = useState(0);
   const [topicClusters, setTopicClusters] = useState<TopicCluster[]>([]);
-  const [topicEdges, setTopicEdges] = useState<TopicMemoEdge[]>([]);
   const [topicGlobalEdges, setTopicGlobalEdges] = useState<MemoSimilarityEdge[]>([]);
   const [topicInboxEdges, setTopicInboxEdges] = useState<TopicMemoInboxEdge[]>([]);
   const [topicMemberships, setTopicMemberships] = useState<TopicMembership[]>(
@@ -366,12 +352,18 @@ const App = () => {
   const [paneWidths, setPaneWidths] = useState<Record<string, number>>(
     restoredWorkspace?.paneWidths ?? {},
   );
-  const [searchSignal, setSearchSignal] = useState(0);
+  const [isGlobalSearchOpen, setGlobalSearchOpen] = useState(false);
+  // 미리보기 패널 — 참조 성격의 열기(ambient 추천, Topics/주변메모 그래프,
+  // 캘린더 원본 노트)가 여기로 들어온다. 이동 성격의 열기는 지금처럼
+  // 포커스 패널의 새 탭을 쓴다.
+  const [previewPanel, setPreviewPanel] = useState<PreviewPanelState | null>(null);
+  const [previewPanelWidth, setPreviewPanelWidth] = useState(loadPreviewPanelWidth);
   const [isSessionCollapsed, setSessionCollapsed] = useState(
     restoredWorkspace?.isSessionCollapsed ?? false,
   );
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState(loadShortcutSettings);
+  const [appShortcuts, setAppShortcuts] = useState(loadAppShortcutSettings);
   const [desktopPreferences, setDesktopPreferences] = useState<{
     closeBehavior: 'quit' | 'tray';
     launchAtLogin: boolean;
@@ -383,22 +375,53 @@ const App = () => {
     databasePath: string;
     size: number;
   } | null>(null);
+  const [localIndexProgress, setLocalIndexProgress] =
+    useState<LocalMemoIndexProgress | null>(null);
+  const globalSearchItems = useMemo(
+    () =>
+      buildGlobalSearchItems({
+        calendarBlocks,
+        inboxItems,
+        memos,
+        scheduleInbox,
+        topicClusters,
+      }),
+    [calendarBlocks, inboxItems, memos, scheduleInbox, topicClusters],
+  );
   const isOnline = useOnlineStatus();
 
   const activeMemoIdRef = useRef<string | null>(null);
+  const ambientTargetRef = useRef<AmbientSearchTarget | null>(null);
   const hasHydratedActiveMemoRef = useRef(false);
   const ambientEmptyNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const localIndexNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const ambientRunnerRef = useRef(
     createAmbientSearchRunner({
-      search: target =>
-        searchCursorNetwork({
-          limit: AMBIENT_MAX_RESULT_COUNT,
-          memoId: target.memoId,
-          minimumSimilarity: AMBIENT_MIN_SIMILARITY,
-          queryText: target.queryText,
-        }),
+      search: async target => {
+        const ownerId = getLocalWorkspaceOwner();
+        try {
+          const response = await searchLocalMemoChunks({
+            limit: AMBIENT_MAX_RESULT_COUNT,
+            memoId: target.memoId,
+            minimumSimilarity: AMBIENT_MIN_SIMILARITY,
+            ownerId,
+            queryText: target.queryText,
+          });
+          if (getLocalWorkspaceOwner() !== ownerId) {
+            throw new DOMException('Local workspace changed.', 'AbortError');
+          }
+          return response;
+        } catch (error) {
+          if (getLocalWorkspaceOwner() !== ownerId) {
+            throw new DOMException('Local workspace changed.', 'AbortError');
+          }
+          throw error;
+        }
+      },
     }),
   );
   const memoSyncChainsRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -406,7 +429,6 @@ const App = () => {
   const deletingMemoIdsRef = useRef<Set<string>>(new Set());
   const memoSyncRevisionsRef = useRef<Map<string, number>>(new Map());
   const memoSyncTimersRef = useRef<Map<string, number>>(new Map());
-  const networkControllerRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const sessionActivationIdRef = useRef(0);
   const workspaceLoadIdRef = useRef(0);
@@ -424,12 +446,67 @@ const App = () => {
   }, [activeMemoId]);
 
   useEffect(() => {
+    ambientTargetRef.current = ambientTarget;
+  }, [ambientTarget]);
+
+  useEffect(() => {
     sessionRef.current = session;
   }, [session]);
 
   useEffect(() => {
     applyEditorSettings(appSettings);
   }, [appSettings]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeLocalMemoIndexProgress(progress => {
+      const ownerId = sessionRef.current?.user.id ?? null;
+      if (progress.ownerId !== ownerId) return;
+
+      if (localIndexNoticeTimerRef.current) {
+        clearTimeout(localIndexNoticeTimerRef.current);
+        localIndexNoticeTimerRef.current = null;
+      }
+      if (isEmptyLocalIndexCompletion(progress)) {
+        setLocalIndexProgress(null);
+        return;
+      }
+      setLocalIndexProgress(progress);
+      if (progress.stage === 'complete') {
+        localIndexNoticeTimerRef.current = setTimeout(() => {
+          setLocalIndexProgress(null);
+          localIndexNoticeTimerRef.current = null;
+        }, AMBIENT_EMPTY_NOTICE_MS);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (localIndexNoticeTimerRef.current) {
+        clearTimeout(localIndexNoticeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const localIndexOwnerId = session?.user.id ?? null;
+
+  useEffect(() => {
+    cancelLocalMemoIndexing();
+    cancelLocalInboxIndexing();
+    setLocalIndexProgress(null);
+    return () => {
+      cancelLocalMemoIndexing();
+      cancelLocalInboxIndexing();
+    };
+  }, [localIndexOwnerId]);
+
+  useEffect(() => {
+    if (isBooting) return;
+    scheduleLocalMemoIndexReconcile(memos, localIndexOwnerId);
+  }, [isBooting, localIndexOwnerId, memos]);
+
+  useEffect(() => {
+    if (isBooting) return;
+    scheduleLocalInboxIndexReconcile(inboxItems, localIndexOwnerId);
+  }, [inboxItems, isBooting, localIndexOwnerId]);
 
   useEffect(() => {
     if (
@@ -478,12 +555,6 @@ const App = () => {
           return;
         }
 
-        if (
-          activeMemoIdRef.current === memo.id &&
-          memoSyncRevisionsRef.current.get(memo.id) === revision
-        ) {
-          setSaveState('syncing');
-        }
 
         try {
           // Resolve the concurrency base at push time from the local DB: the
@@ -511,9 +582,6 @@ const App = () => {
               return;
             }
             setMemos(previous => previous.filter(item => item.id !== memo.id));
-            if (activeMemoIdRef.current === memo.id) {
-              setSaveState('synced');
-            }
             return;
           }
 
@@ -577,7 +645,6 @@ const App = () => {
 
           if (activeMemoIdRef.current === memo.id) {
             setActiveMemoCreatedAt(savedMemo.created_at);
-            setSaveState('synced');
           }
         } catch {
           if (
@@ -609,7 +676,6 @@ const App = () => {
             } catch {
               // Keep the original local write; it remains retryable as pending.
             }
-            if (activeMemoIdRef.current === memo.id) setSaveState('failed');
           }
         }
       });
@@ -742,9 +808,7 @@ const App = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (matchesKeyboardShortcut(event, shortcuts.openSearch)) {
         event.preventDefault();
-        setActiveTab('memo');
-        setSessionCollapsed(false);
-        setSearchSignal(value => value + 1);
+        setGlobalSearchOpen(true);
       }
     };
 
@@ -762,6 +826,9 @@ const App = () => {
     () => memos.find(memo => memo.id === activeMemoId) ?? null,
     [activeMemoId, memos],
   );
+  // 포커스된 탭이 있으면 그 탭이 곧 정답이다. 새 초안(memoId 없음)이나
+  // 캘린더·Topics 탭이면 "선택된 메모 없음"이 맞고, 여기서 activeMemoId로
+  // 폴백하면 사이드바가 직전 메모를 계속 선택된 것처럼 표시한다.
   const focusedSplitMemoId = useMemo(() => {
     const focusedPane =
       splitPanes.find(pane => pane.id === focusedPaneId) ?? splitPanes[0];
@@ -770,8 +837,13 @@ const App = () => {
       focusedPane?.editors?.[0] ??
       focusedPane;
 
-    return focusedEditor?.view === 'memo' ? focusedEditor.memoId ?? null : null;
+    if (!focusedEditor) {
+      return undefined;
+    }
+
+    return focusedEditor.view === 'memo' ? focusedEditor.memoId ?? null : null;
   }, [focusedPaneId, splitPanes]);
+  // undefined = 참고할 탭 자체가 없음(split 미사용) → 기존 activeMemoId 사용.
   const sidebarActiveMemoId = focusedSplitMemoId ?? activeMemoId;
   // Map each memo currently open in a split pane to its 1-based pane number so
   // the sidebar can show which panes (1/2/3) a memo is active in.
@@ -793,16 +865,6 @@ const App = () => {
     });
     return map;
   }, [splitPanes]);
-  const selectedText = useMemo(() => {
-    if (selectedTextState) {
-      return selectedTextState.trim();
-    }
-    const start = Math.min(selectionStart, selectionEnd);
-    const end = Math.max(selectionStart, selectionEnd);
-
-    return memoDraft.slice(start, end).trim();
-  }, [memoDraft, selectionEnd, selectionStart, selectedTextState]);
-
   const hydrateActiveMemo = useCallback((nextMemos: MemoRow[]) => {
     if (hasHydratedActiveMemoRef.current) {
       return;
@@ -817,12 +879,13 @@ const App = () => {
 
     hasHydratedActiveMemoRef.current = true;
     setActiveMemoId(selectedMemo.id);
-    setMemoDraft(selectedMemo.content);
     setActiveMemoCreatedAt(selectedMemo.created_at);
     setActiveDraftCategory(getMemoCategory(selectedMemo.category));
   }, []);
 
   const applyLocalWorkspace = useCallback(async (ownerId?: string) => {
+    const effectiveOwnerId = ownerId ?? getLocalWorkspaceOwner() ?? undefined;
+    const expectedWorkspaceLoadId = workspaceLoadIdRef.current;
     const [
       localMemos,
       localBlocks,
@@ -833,17 +896,24 @@ const App = () => {
       localSchedule,
       localTopicMap,
     ] = await Promise.all([
-      loadVisibleLocalMemos(ownerId),
-      loadVisibleLocalCalendarBlocks(ownerId),
+      loadVisibleLocalMemos(effectiveOwnerId),
+      loadVisibleLocalCalendarBlocks(effectiveOwnerId),
       // 캐시 + 대기 큐 — 네트워크 없이도 웹 인박스가 즉시 보인다.
-      loadLocalInboxItems(ownerId),
-      loadLocalActivityCompletions(ownerId),
-      loadLocalDailyCompletions(ownerId),
-      loadLocalTrees(ownerId),
+      loadLocalInboxItems(effectiveOwnerId),
+      loadLocalActivityCompletions(effectiveOwnerId),
+      loadLocalDailyCompletions(effectiveOwnerId),
+      loadLocalTrees(effectiveOwnerId),
       // 일정 inbox / Topics 지도도 마지막 서버 결과를 즉시 보여준다.
-      loadLocalScheduleInbox(ownerId),
-      loadLocalTopicMap(ownerId),
+      loadLocalScheduleInbox(effectiveOwnerId),
+      loadLocalTopicMap(effectiveOwnerId),
     ]);
+
+    if (
+      expectedWorkspaceLoadId !== workspaceLoadIdRef.current ||
+      getLocalWorkspaceOwner() !== (effectiveOwnerId ?? null)
+    ) {
+      return;
+    }
 
     setMemos(localMemos);
     setCalendarBlocks(localBlocks);
@@ -851,10 +921,8 @@ const App = () => {
     setActivityCompletions(localActivities);
     setDailyCompletions(localDailies);
     setForestTrees([...localTrees].sort((a, b) => a.generation - b.generation));
-    setBriefings([]);
     setScheduleInbox(localSchedule);
     setTopicClusters(localTopicMap?.clusters ?? []);
-    setTopicEdges(localTopicMap?.edges ?? []);
     setTopicGlobalEdges(localTopicMap?.globalEdges ?? []);
     setTopicInboxEdges(localTopicMap?.inboxEdges ?? []);
     setTopicMemberships(localTopicMap?.memberships ?? []);
@@ -979,12 +1047,11 @@ const App = () => {
           return;
         }
 
-        const [nextMemos, nextBlocks, nextInbox, nextBriefings, nextLinkInbox] =
+        const [nextMemos, nextBlocks, nextInbox, nextLinkInbox] =
           await Promise.all([
             fetchMemos(currentSession),
             fetchCalendarBlocks(currentSession),
             fetchScheduleInbox(currentSession),
-            fetchBriefings(currentSession),
             // 실패는 null — 빈 목록으로 로컬 캐시 표시를 덮어쓰지 않는다
             // (부팅 직후 토큰 하이드레이션/백엔드 콜드스타트로 잘 실패한다).
             fetchInboxSessions().catch(() => null),
@@ -1006,7 +1073,6 @@ const App = () => {
         setCalendarBlocks(mergedBlocks);
         setScheduleInbox(nextInbox);
         await replaceLocalScheduleInbox(nextInbox, ownerId);
-        setBriefings(nextBriefings);
         if (nextLinkInbox) {
           await replaceLocalInboxCache(nextLinkInbox, ownerId);
           setInboxItems(mergeInboxItems(nextLinkInbox, localInbox));
@@ -1014,7 +1080,6 @@ const App = () => {
         if (nextTopicMap) {
           await saveLocalTopicMap(nextTopicMap, ownerId);
           setTopicClusters(nextTopicMap.clusters);
-          setTopicEdges(nextTopicMap.edges);
           setTopicGlobalEdges(nextTopicMap.globalEdges);
           setTopicInboxEdges(nextTopicMap.inboxEdges);
           setTopicMemberships(nextTopicMap.memberships);
@@ -1071,12 +1136,8 @@ const App = () => {
     activeMemoIdRef.current = restored?.activeMemoId ?? null;
     setActiveMemoId(restored?.activeMemoId ?? null);
     setActiveTab(restored?.activeTab ?? 'memo');
-    setMemoDraft('');
     setActiveMemoCreatedAt(new Date().toISOString());
     setActiveDraftCategory(DEFAULT_MEMO_CATEGORY);
-    setSelectionStart(0);
-    setSelectionEnd(0);
-    setSelectedTextState('');
     setSplitPanes(restored?.splitPanes ?? []);
     setFocusedPaneId(restored?.focusedPaneId ?? null);
     setPaneWidths(restored?.paneWidths ?? {});
@@ -1160,7 +1221,7 @@ const App = () => {
       };
     }
 
-    getSession()
+    getInitialSession()
       .then(async nextSession => {
         if (!mounted) {
           return;
@@ -1168,7 +1229,9 @@ const App = () => {
         if (nextSession) {
           // 첫 데이터 로드(로컬 + 서버 동기화)가 끝날 때까지 로딩화면을 유지한다.
           // 단, 느리거나 끊긴 네트워크에 갇히지 않도록 타임아웃을 두고 진입한다.
-          await activateSession(nextSession, { migrateLegacy: true });
+          // 첫 동기화가 콜드 스타트/네트워크 지연으로 오래 걸려도
+          // 로딩 화면에 갇히지 않고 로컬 작업 공간으로 진입한다.
+          await activateSession(nextSession, { migrateLegacy: true, showBoot: true });
         } else {
           deactivateSession();
         }
@@ -1240,8 +1303,8 @@ const App = () => {
     [syncPendingLocalWorkspace],
   );
 
-  // idle 후에는 pending query만 준비한다. 네트워크 요청은 하단 "연관 문장"
-  // 버튼 클릭 또는 자동 검색 설정(고급 옵션)이 켜진 경우에만 나간다.
+  // idle 후에는 pending query만 준비한다. 로컬 검색은 하단 "연관 문장"
+  // 버튼 클릭 또는 자동 검색 설정(고급 옵션)이 켜진 경우에만 실행한다.
   // 동일한 타겟이면 기존 객체를 유지하고, 12자 미만이면 pending을 비워
   // 버튼을 숨긴다.
   const updateAmbientTarget = (
@@ -1276,24 +1339,20 @@ const App = () => {
   };
 
   // 결과·오류는 검색을 시작한 편집기(snapshot의 editorId)에만 바인딩한다.
-  // 로그아웃 뒤 도착한 응답은 무시한다.
+  // 계정 전환 뒤 도착한 응답은 search wrapper에서 취소한다.
   const ambientSearchHandlers = {
     onEmpty: (target: AmbientSearchTarget) => {
-      if (!sessionRef.current) return;
-      setAmbientQueryChunk(null);
       setAmbientResult(null);
       setAmbientError(null);
       setAmbientDisplayEditorId(target.editorId);
       showAmbientEmptyNotice(target.editorId);
     },
     onError: (target: AmbientSearchTarget, error: unknown) => {
-      if (!sessionRef.current) return;
-      setAmbientQueryChunk(null);
+      const message = formatLocalMemoSearchErrorMessage(error);
+      if (!message) return;
       setAmbientResult(null);
       setAmbientDisplayEditorId(target.editorId);
-      setAmbientError(
-        formatNetworkSearchErrorMessage(error, { isOnline: navigator.onLine }),
-      );
+      setAmbientError(message);
     },
     onFinish: () => {
       setAmbientSearchingEditorId(null);
@@ -1303,8 +1362,6 @@ const App = () => {
       queryChunk: MemoChunk | null,
       result: NetworkSearchResult,
     ) => {
-      if (!sessionRef.current) return;
-      setAmbientQueryChunk(queryChunk);
       setAmbientResult(result);
       setAmbientError(null);
       setAmbientDisplayEditorId(target.editorId);
@@ -1315,10 +1372,41 @@ const App = () => {
   };
 
   const runAmbientSearchNow = () => {
-    if (!session) {
-      return;
-    }
     ambientRunnerRef.current.run(ambientTarget, ambientSearchHandlers);
+  };
+
+  // 더보기는 에디터 아래 인라인 목록이 아니라 미리보기 패널의 목록 모드로
+  // 연다. 고스트 줄 옆에 목록이 펼쳐지면 무크롬 원칙이 깨지고, 여러 결과를
+  // 연달아 확인하는 흐름에는 재사용되는 패널이 더 맞다.
+  const openAmbientListInPreview = async () => {
+    const target = ambientTarget;
+    if (!target) return;
+    const ownerId = getLocalWorkspaceOwner();
+    try {
+      const response = await searchLocalMemoChunks({
+        limit: 8,
+        memoId: target.memoId,
+        minimumSimilarity: AMBIENT_MIN_SIMILARITY,
+        ownerId,
+        queryText: target.queryText,
+      });
+      if (
+        getLocalWorkspaceOwner() !== ownerId ||
+        ambientTargetRef.current?.editorId !== target.editorId ||
+        ambientTargetRef.current?.queryText !== target.queryText
+      ) {
+        return;
+      }
+      setAmbientError(null);
+      if (response.results.length === 0) {
+        showAmbientEmptyNotice(target.editorId);
+      } else {
+        handleOpenPreview(response.results, 'list');
+      }
+    } catch (caught) {
+      const message = formatLocalMemoSearchErrorMessage(caught);
+      if (message) setAmbientError(message);
+    }
   };
 
   useEffect(() => {
@@ -1380,10 +1468,6 @@ const App = () => {
       );
     });
 
-    if (activeMemoIdRef.current === id) {
-      setSaveState('saving-local');
-    }
-
     const localRevision = (memoLocalWriteRevisionsRef.current.get(id) ?? 0) + 1;
     memoLocalWriteRevisionsRef.current.set(id, localRevision);
     memoSyncRevisionsRef.current.set(
@@ -1393,7 +1477,6 @@ const App = () => {
     void persistLocalMemo(localMemo, ownerId)
       .then(() => {
         if (memoLocalWriteRevisionsRef.current.get(id) !== localRevision) return;
-        if (activeMemoIdRef.current === id) setSaveState('local');
         if (currentSession && isCurrentSession(currentSession)) {
           scheduleMemoCloudSync(currentSession, {
             baseHash: existingMemo?.synced_content_hash ?? null,
@@ -1406,12 +1489,8 @@ const App = () => {
         }
       })
       .catch(() => {
-        if (
-          memoLocalWriteRevisionsRef.current.get(id) === localRevision &&
-          activeMemoIdRef.current === id
-        ) {
-          setSaveState('local-failed');
-        }
+        // 로컬 쓰기 실패는 저장 상태 표시에만 쓰였다. 표시가 사라진 지금은
+        // 거부만 삼킨다 — 메모는 pending으로 남아 다음 동기화에서 재시도된다.
       });
 
     return localMemo;
@@ -1428,13 +1507,8 @@ const App = () => {
       setActiveMemoCreatedAt(createdAt);
     }
 
-    setMemoDraft(value);
-    setAmbientQueryChunk(null);
     setAmbientResult(null);
     setAmbientError(null);
-    setNetworkError(null);
-    setNetworkQueryChunk(null);
-    setNetworkResults([]);
 
     if (memoId) {
       saveMemoContent(memoId, value, {
@@ -1476,10 +1550,8 @@ const App = () => {
       const nextMemos = memos.filter(memo => memo.id !== id);
       const nextActive = nextMemos[0] ?? null;
       setActiveMemoId(nextActive?.id ?? null);
-      setMemoDraft(nextActive?.content ?? '');
       setActiveMemoCreatedAt(nextActive?.created_at ?? new Date().toISOString());
       setActiveDraftCategory(getMemoCategory(nextActive?.category));
-      setSaveState('idle');
     }
 
     await markLocalMemoDeleted(id, 'pending_delete', ownerId);
@@ -1505,25 +1577,8 @@ const App = () => {
     setActiveMemoId(memo.id);
     setActiveMemoCreatedAt(memo.created_at);
     setActiveDraftCategory(getMemoCategory(memo.category));
-    setMemoDraft(memo.content);
-    setAmbientQueryChunk(null);
     setAmbientResult(null);
-    setNetworkError(null);
-    setNetworkQueryChunk(null);
-    setNetworkResults([]);
-    setSelectionEnd(0);
-    setSelectionStart(0);
-    setSelectedTextState('');
     setActiveTab('memo');
-    setSaveState(
-      memo.local_sync_status === 'synced'
-        ? 'synced'
-        : memo.local_sync_status === 'failed'
-          ? 'failed'
-          : memo.local_sync_status
-            ? 'local'
-            : 'idle',
-    );
   };
 
   const selectMemoById = (memoId: string) => {
@@ -1538,14 +1593,6 @@ const App = () => {
     const next = togglePinnedMemoId(pinnedMemoIds, memoId);
     setPinnedMemoIds(next);
     savePinnedMemoIds(session?.user.id ?? null, next);
-  };
-
-  const selectTextRange = (start: number, end: number, text?: string) => {
-    setSelectionStart(start);
-    setSelectionEnd(end);
-    if (text !== undefined) {
-      setSelectedTextState(text);
-    }
   };
 
   const saveCalendarBlock = async (draft: {
@@ -1775,45 +1822,6 @@ const App = () => {
     })();
   };
 
-  const registerSelectionSchedule = async () => {
-    if (!selectedText.trim()) {
-      return;
-    }
-
-    const selectedMatch = parseDates(selectedText, Date.now())[0];
-    const containedMatch = selectedMatch;
-
-    if (!containedMatch) {
-      window.alert('선택한 문장 안에 날짜 표현이 필요합니다.');
-      return;
-    }
-
-    await saveCalendarBlock({
-      allDay: !containedMatch.hasTime,
-      color: '#66705A',
-      note: selectedText,
-      startDate: containedMatch.date.toISOString(),
-      title: selectedText,
-    });
-    window.alert('일정이 등록되었습니다.');
-  };
-
-  const registerSelectionScheduleAt = async (date: Date, allDay: boolean) => {
-    const content = selectedText.trim();
-    if (!content) {
-      return;
-    }
-
-    await saveCalendarBlock({
-      allDay,
-      color: '#66705A',
-      note: content,
-      startDate: date.toISOString(),
-      title: content,
-    });
-    window.alert('일정이 등록되었습니다.');
-  };
-
   const removeCalendarBlock = async (blockId: string) => {
     if (!window.confirm('블럭을 삭제하시겠습니까?')) {
       return;
@@ -1885,7 +1893,7 @@ const App = () => {
       return;
     }
 
-    const nextEditor = createEditorHelper('memo');
+    const nextEditor = createEditorHelper('memo', { isViewPicker: true });
     const nextPane: MemoSplitPaneState = {
       id: createSplitPaneId(),
       activeEditorId: nextEditor.id,
@@ -1959,6 +1967,7 @@ const App = () => {
     draftCategory: editor.draftCategory,
     draftText: editor.draftText,
     highlight: editor.highlight,
+    isViewPicker: editor.isViewPicker,
     memoId: editor.memoId,
     mode: editor.mode,
     networkErrorMessage: editor.networkErrorMessage,
@@ -2037,52 +2046,6 @@ const App = () => {
     setFocusedPaneId(targetId);
   };
 
-  const handleOpenSplitPane = (
-    view: MemoSplitPaneView,
-    memoId?: string,
-    patch: Partial<MemoSplitEditorState> = {},
-  ) => {
-    const nextEditor = createEditorHelper(view, { memoId, ...patch });
-    const nextPane: MemoSplitPaneState = {
-      id: createSplitPaneId(),
-      activeEditorId: nextEditor.id,
-      editors: [nextEditor],
-      ...mirrorEditorPatchHelper(nextEditor),
-      view: nextEditor.view,
-    };
-    const lastPane = splitPanes[splitPanes.length - 1];
-    const nextFocusPaneId =
-      lastPane && isSplitPaneBlankMemoDraft(lastPane) ? lastPane.id : nextPane.id;
-
-    setIsSplitWorkspaceEnabled(true);
-    setFocusedPaneId(nextFocusPaneId);
-    setSplitPanes(prev => {
-      if (prev.length === 0) {
-        return [nextPane];
-      }
-
-      const lastPane = prev[prev.length - 1];
-      if (isSplitPaneBlankMemoDraft(lastPane)) {
-        return prev.map((pane, index) =>
-          index === prev.length - 1
-            ? {
-                ...nextPane,
-                id: pane.id,
-              }
-            : pane,
-        );
-      }
-
-      if (prev.length < MAX_SPLIT_PANE_COUNT) {
-        return [...prev, nextPane];
-      }
-
-      return prev.map((pane, index) =>
-        index === prev.length - 1 ? nextPane : pane,
-      );
-    });
-  };
-
   const openMemoInFocusedSplitPane = (memo: MemoRow) => {
     const nextEditor = createEditorHelper('memo', {
       memoId: memo.id,
@@ -2144,6 +2107,139 @@ const App = () => {
     });
   };
 
+  // 왼쪽 가장자리를 끌면 폭이 커지므로 delta 부호를 뒤집는다.
+  const handlePreviewResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = previewPanelWidth;
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        setPreviewPanelWidth(
+          clampPreviewPanelWidth(startWidth - (moveEvent.clientX - startX)),
+        );
+      };
+      const handleUp = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+        setPreviewPanelWidth(current => {
+          savePreviewPanelWidth(current);
+          return current;
+        });
+      };
+
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    },
+    [previewPanelWidth],
+  );
+
+  // 참조 열기: 패널이 닫혀 있으면 열고, 열려 있으면 내용만 갈아끼운다.
+  // 패널이 늘어나지 않으므로 그래프 노드를 연달아 눌러도 누적되지 않는다.
+  const handleOpenPreview = useCallback(
+    (results: NetworkSearchResult[], mode: 'detail' | 'list' = 'detail') => {
+      if (results.length === 0) return;
+      setPreviewPanel({
+        mode,
+        result: mode === 'detail' ? results[0] : null,
+        results,
+      });
+    },
+    [],
+  );
+
+  /**
+   * 미리보기 → 실물 탭 승격.
+   *
+   * 패널이 2개면 포커스되지 않은 쪽에 연다. 포커스 패널에 열면 쓰던
+   * 초안이 배경 탭으로 밀려 동시 작업이 깨지기 때문이다. 패널이 1개면
+   * 그 패널에 새 탭으로 연다 — 사용자가 단일 패널을 선택한 것이므로
+   * 앱이 멋대로 split을 만들지 않는다.
+   *
+   * 포커스는 옮기지 않는다. 승격 버튼을 누를 때 손은 키보드에 있어서,
+   * 포커스가 넘어가면 다음 타이핑이 엉뚱한 곳으로 들어간다.
+   */
+  const promotePreviewResult = useCallback(
+    (result: NetworkSearchResult) => {
+      const beside =
+        splitPanes.length > 1 &&
+        splitPanes.some(pane => pane.id !== focusedPaneId);
+      const detail = { target: beside ? 'beside' : 'focused' } as const;
+
+      if (result.sourceKind === 'inbox' && result.inboxSessionId) {
+        window.dispatchEvent(
+          new CustomEvent('subnota:open-inbox-source', {
+            detail: { ...detail, inboxSessionId: result.inboxSessionId },
+          }),
+        );
+      } else if (result.memoId) {
+        window.dispatchEvent(
+          new CustomEvent('subnota:open-memo', {
+            detail: { ...detail, memoId: result.memoId },
+          }),
+        );
+      }
+      setPreviewPanel(null);
+    },
+    [focusedPaneId, splitPanes],
+  );
+
+  const openGlobalSearchResult = (item: GlobalSearchItem) => {
+    if (item.kind === 'memo') {
+      const memo = memos.find(candidate => candidate.id === item.id);
+      if (memo) {
+        selectMemo(memo);
+        openMemoInFocusedSplitPane(memo);
+      }
+      return;
+    }
+
+    if (item.kind === 'topic') {
+      openViewAsTab('topics');
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(
+          new CustomEvent('subnota:show-topic-folder', {
+            detail: { topicId: item.id },
+          }),
+        );
+      });
+      return;
+    }
+
+    if (item.kind === 'inbox') {
+      openViewAsTab('inbox');
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('subnota:open-inbox-source', {
+            detail: { inboxSessionId: item.id },
+          }),
+        );
+      }, 0);
+      return;
+    }
+
+    if (item.kind === 'calendar') {
+      openViewAsTab('calendar');
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('subnota:open-calendar-block', {
+            detail: { blockId: item.id },
+          }),
+        );
+      }, 0);
+      return;
+    }
+
+    openViewAsTab('briefing');
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent('subnota:open-schedule-inbox-item', {
+          detail: { itemId: item.id },
+        }),
+      );
+    }, 0);
+  };
+
   const openDraftInFocusedSplitPane = (
     category = DEFAULT_MEMO_CATEGORY,
     forceNewTab = false,
@@ -2157,17 +2253,8 @@ const App = () => {
     setActiveTab('memo');
     setActiveMemoId(null);
     setActiveMemoCreatedAt(new Date().toISOString());
-    setMemoDraft('');
     setActiveDraftCategory(category);
-    setAmbientQueryChunk(null);
     setAmbientResult(null);
-    setNetworkError(null);
-    setNetworkQueryChunk(null);
-    setNetworkResults([]);
-    setSelectionEnd(0);
-    setSelectionStart(0);
-    setSelectedTextState('');
-    setSaveState('idle');
     setIsSplitWorkspaceEnabled(true);
     setSplitPanes(prev => {
       if (prev.length === 0) {
@@ -2250,9 +2337,7 @@ const App = () => {
     } else {
       setActiveMemoId(null);
       setActiveMemoCreatedAt(new Date().toISOString());
-      setMemoDraft(target.editor.draftText ?? '');
       setActiveDraftCategory(target.editor.draftCategory ?? DEFAULT_MEMO_CATEGORY);
-      setSaveState('idle');
     }
     setSplitPanes(prev =>
       prev.map(pane => {
@@ -2289,8 +2374,16 @@ const App = () => {
     openCalendar: () => openViewAsTab('calendar'),
     openInbox: () => openViewAsTab('inbox'),
     openMemos: () => setActiveTab('memo'),
+    // 추천이 떠 있을 때만 반응한다. 안 떠 있으면 조용히 무시해서
+    // 다른 곳에서 누른 Mod+Enter를 삼키지 않는다.
+    openAmbientDetail: () => {
+      if (ambientResult) handleOpenPreview([ambientResult], 'detail');
+    },
+    openAmbientList: () => {
+      if (ambientResult) void openAmbientListInPreview();
+    },
     openSettings: () => setSettingsOpen(true),
-  });
+  }, appShortcuts);
 
   useEffect(
     () =>
@@ -2358,141 +2451,6 @@ const App = () => {
     setFocusedPaneId(nextPane.id);
   }, [activeMemo, activeTab, memos, splitPanes.length]);
 
-  const patchNetworkSplitEditor = (
-    networkRequestId: string,
-    patch: Partial<MemoSplitEditorState>,
-  ) => {
-    setSplitPanes(prev =>
-      prev.map(pane => {
-        const editors = pane.editors || [
-          {
-            draftCategory: pane.draftCategory,
-            draftText: pane.draftText,
-            highlight: pane.highlight,
-            id: pane.activeEditorId || `${pane.id}-editor`,
-            memoId: pane.memoId,
-            mode: pane.mode,
-            networkErrorMessage: pane.networkErrorMessage,
-            networkIsLoading: pane.networkIsLoading,
-            networkQueryChunk: pane.networkQueryChunk,
-            networkRequestId: pane.networkRequestId,
-            networkResults: pane.networkResults,
-            selectionEnd: pane.selectionEnd,
-            selectionStart: pane.selectionStart,
-            selectedText: pane.selectedText,
-            sourceResult: pane.sourceResult,
-            view: pane.view,
-          },
-        ];
-        const nextEditors = editors.map(editor =>
-          editor.networkRequestId === networkRequestId
-            ? { ...editor, ...patch }
-            : editor,
-        );
-        const activeEditor =
-          nextEditors.find(editor => editor.id === pane.activeEditorId) ||
-          nextEditors[0];
-
-        return {
-          ...pane,
-          ...(activeEditor ? mirrorEditorPatchHelper(activeEditor) : {}),
-          editors: nextEditors,
-        };
-      }),
-    );
-  };
-
-  const openNetwork = async () => {
-    if (!session) {
-      // Surface the requirement instead of silently doing nothing.
-      handleOpenSplitPane('network', undefined, {
-        networkErrorMessage: '네트워크 검색은 로그인 후 사용할 수 있습니다.',
-        networkIsLoading: false,
-        networkQueryChunk: null,
-        networkRequestId: `network-${Date.now()}`,
-        networkResults: [],
-      });
-      return;
-    }
-
-    const networkRequestId = `network-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    networkControllerRef.current?.abort();
-    const networkController = new AbortController();
-    networkControllerRef.current = networkController;
-    // 폴백은 첫 줄이 아니라 문서 앞머리의 문장 컨텍스트로 — 한 문단짜리
-    // 노트에서 첫 "줄"은 노트 전체가 되어 통짜 블록으로 검색된다.
-    const queryText = (
-      ambientTarget?.memoId === activeMemoId
-        ? ambientTarget.queryText
-        : selectedTextState || getCursorContextText(memoDraft, 0)
-    ).trim().slice(0, 1000);
-    if (!queryText) {
-      networkController.abort();
-      setNetworkError('검색할 문단을 먼저 선택하거나 작성해 주세요.');
-      return;
-    }
-    const initialQueryChunk: MemoChunk | null = queryText
-      ? { end: queryText.length, id: networkRequestId, index: 0, start: 0, text: queryText }
-      : null;
-
-    setNetworkError(null);
-    setNetworkQueryChunk(initialQueryChunk);
-    setNetworkResults([]);
-    handleOpenSplitPane('network', undefined, {
-      networkErrorMessage: null,
-      networkIsLoading: true,
-      networkQueryChunk: initialQueryChunk,
-      networkRequestId,
-      networkResults: [],
-    });
-
-    try {
-      const result = await searchCursorNetwork({
-        limit: 5,
-        minimumSimilarity: NETWORK_MIN_SIMILARITY,
-        memoId: activeMemoId,
-        queryText,
-        signal: networkController.signal,
-      });
-      if (networkControllerRef.current !== networkController) {
-        return;
-      }
-      const message =
-        result.results.length === 0
-          ? result.message ?? NETWORK_SEARCH_EMPTY_MESSAGE
-          : null;
-      setNetworkError(message);
-      setNetworkQueryChunk(result.queryChunk);
-      setNetworkResults(result.results);
-      patchNetworkSplitEditor(networkRequestId, {
-        networkErrorMessage: message,
-        networkIsLoading: false,
-        networkQueryChunk: result.queryChunk,
-        networkResults: result.results,
-      });
-    } catch (caught) {
-      if (networkController.signal.aborted) {
-        return;
-      }
-      const message = formatNetworkSearchErrorMessage(caught, {
-        isOnline: navigator.onLine,
-      });
-      setNetworkError(message);
-      patchNetworkSplitEditor(networkRequestId, {
-        networkErrorMessage: message,
-        networkIsLoading: false,
-        networkQueryChunk: initialQueryChunk,
-        networkResults: [],
-      });
-    } finally {
-      if (networkControllerRef.current === networkController) {
-        networkControllerRef.current = null;
-      }
-    }
-  };
-
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -2520,6 +2478,12 @@ const App = () => {
   };
 
   const resetShortcutSettings = () => applyShortcutSettings(DEFAULT_SHORTCUT_SETTINGS);
+
+  const applyAppShortcutSettings = async (nextSettings: AppShortcutSettings) => {
+    const accepted = saveAppShortcutSettings(nextSettings);
+    setAppShortcuts(accepted);
+    return accepted;
+  };
 
   const refreshInbox = async () => {
     const currentSession = session;
@@ -2737,7 +2701,16 @@ const App = () => {
   }
 
   return (
-    <div className="app-shell">
+    <div
+      className={previewPanel ? 'app-shell preview-open' : 'app-shell'}
+      style={
+        previewPanel
+          ? ({
+              '--preview-panel-width': `${previewPanelWidth}px`,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <aside className="nav-rail">
         <TooltipIconButton
           aria-label="메모"
@@ -2821,62 +2794,19 @@ const App = () => {
           >
             <MemoWorkspace
               activeMemoId={sidebarActiveMemoId}
-              ambientError={
-                ambientDisplayEditorId === 'legacy-editor' ? ambientError : null
-              }
               openMemoPaneNumbers={openMemoPaneNumbers}
               isSessionCollapsed={isSessionCollapsed}
-              openSearchSignal={searchSignal}
               onToggleSession={() => setSessionCollapsed(value => !value)}
-              ambientQueryChunk={ambientQueryChunk}
-              ambientResult={
-                ambientDisplayEditorId === 'legacy-editor' ? ambientResult : null
-              }
-              isAmbientPending={ambientTarget?.editorId === 'legacy-editor'}
-              isAmbientSearching={ambientSearchingEditorId === 'legacy-editor'}
-              showAmbientEmptyNotice={ambientEmptyEditorId === 'legacy-editor'}
-              onRunAmbientSearch={runAmbientSearchNow}
-              memoDraft={memoDraft}
               memos={memos}
-              networkError={networkError}
-              networkQueryChunk={networkQueryChunk}
-              networkResults={networkResults}
-              onChangeDraft={changeMemoDraft}
-              onAmbientQuery={queryText =>
-                updateAmbientTarget('legacy-editor', activeMemoId, queryText)
-              }
               onDeleteMemoById={id => void deleteMemoById(id)}
-              onNewMiniMemo={() => openDraftInFocusedSplitPane(MINI_SUBNOTA_CATEGORY)}
               onNewMemo={() => openDraftInFocusedSplitPane()}
-              onAddSplitPane={handleAddSplitPane}
-              canAddSplitPane={
-                isSplitWorkspaceEnabled
-                  ? splitPanes.length < MAX_SPLIT_PANE_COUNT
-                  : true
-              }
-              isSplitWorkspaceEnabled={isSplitWorkspaceEnabled}
-              onOpenNetwork={() => {
-                void openNetwork();
-              }}
-              onRegisterSelectionSchedule={() => void registerSelectionSchedule()}
-              onRegisterSelectionScheduleAt={(date, allDay) => {
-                void registerSelectionScheduleAt(date, allDay);
-              }}
               onSelectMemo={memo => {
                 selectMemo(memo);
                 openMemoInFocusedSplitPane(memo);
               }}
-              onSelectMemoById={selectMemoById}
-              onSelectRange={selectTextRange}
               onTogglePinMemo={togglePinnedMemo}
               pinnedMemoIds={pinnedMemoIds}
-              saveState={saveState}
-              selectedText={selectedText}
-              title={getMemoTitle(memoDraft)}
               topicClusters={topicClusters}
-              topicEdges={topicEdges}
-              topicGlobalEdges={topicGlobalEdges}
-              topicInboxEdges={topicInboxEdges}
               topicInboxItems={inboxItems}
               topicInboxMemberships={topicInboxMemberships}
               topicMemberships={topicMemberships}
@@ -2891,10 +2821,13 @@ const App = () => {
                   onRunAmbientSearch={runAmbientSearchNow}
                   isTopicsLoading={isRefreshing && topicClusters.length === 0}
                   onAmbientQuery={updateAmbientTarget}
+                  appShortcuts={appShortcuts}
+                  onOpenPreview={handleOpenPreview}
                   focusedPaneId={focusedPaneId}
                   initialPaneWidths={paneWidths}
                   isSessionCollapsed={isSessionCollapsed}
                   onToggleSession={() => setSessionCollapsed(value => !value)}
+                  onOpenGlobalSearch={() => setGlobalSearchOpen(true)}
                   panes={splitPanes}
                   onChangePane={handleChangePane}
                   onClosePane={handleClosePane}
@@ -2933,7 +2866,6 @@ const App = () => {
                   onSaveInboxUrl={saveInboxUrl}
                   onToggleInboxLike={toggleInboxLike}
                   onDeleteInboxItem={deleteInboxItem}
-                  briefings={briefings}
                   scheduleInbox={scheduleInbox}
                   onAcceptInbox={acceptInboxItem}
                   onDismissInbox={dismissInboxItem}
@@ -2949,8 +2881,36 @@ const App = () => {
         )}
 
       </section>
+      {previewPanel && (
+        <PreviewPanel
+          inboxItems={inboxItems}
+          memos={memos}
+          onClose={() => setPreviewPanel(null)}
+          onPromote={promotePreviewResult}
+          onResizeStart={handlePreviewResizeStart}
+          onSelectResult={result =>
+            setPreviewPanel(prev =>
+              prev ? { ...prev, mode: 'detail', result } : prev,
+            )
+          }
+          onShowList={() =>
+            setPreviewPanel(prev => (prev ? { ...prev, mode: 'list' } : prev))
+          }
+          state={previewPanel}
+        />
+      )}
+      <GlobalSearchOverlay
+        isOpen={isGlobalSearchOpen}
+        items={globalSearchItems}
+        onClose={() => setGlobalSearchOpen(false)}
+        onSelect={openGlobalSearchResult}
+      />
+      {localIndexProgress && (
+        <LocalIndexProgress progress={localIndexProgress} />
+      )}
       <SettingsModal
         appSettings={appSettings}
+        appShortcuts={appShortcuts}
         desktopPreferences={desktopPreferences}
         email={session?.user?.email}
         failedSyncCount={failedSyncCount}
@@ -2994,12 +2954,14 @@ const App = () => {
           await sendPasswordResetOtp(session.user.email);
         }}
         onResetShortcuts={resetShortcutSettings}
+        onResetAppShortcuts={() => applyAppShortcutSettings(DEFAULT_APP_SHORTCUT_SETTINGS)}
         onRestore={file =>
           window.electronAPI.restoreLocalData(
             window.electronAPI.getFilePath(file),
           )
         }
         onSaveShortcuts={applyShortcutSettings}
+        onSaveAppShortcuts={applyAppShortcutSettings}
         onSignOut={() => {
           setSettingsOpen(false);
           void handleSignOut();

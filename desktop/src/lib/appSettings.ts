@@ -11,7 +11,7 @@ export interface AppSettings {
 export const APP_SETTINGS_STORAGE_KEY = 'subnota.appSettings.v1';
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  ambientAutoSearchEnabled: false,
+  ambientAutoSearchEnabled: true,
   autoCheckUpdates: true,
   fontSize: 16,
   lineHeight: 1.7,

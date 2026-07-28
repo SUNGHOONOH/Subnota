@@ -1,15 +1,26 @@
 EMBEDDING_MODEL = "dragonkue/BGE-m3-ko"
 EMBEDDING_BATCH_SIZE = 16
 
+# 청킹 단위는 "한 문장 = 한 청크". 실제 경계는 줄바꿈이 정하고
+# (build_network_chunks의 블록 규칙), 아래 값들은 줄바꿈 없이 길게 쓴 글에서만
+# 작동하는 안전장치다. 한국어 문장 길이 연구값 기준으로 검증했다:
+#   일상/구어 22.8~23.9자(6.5~7.3어절) · 문어/전문 58.6~60.5자(16.7~17.3어절)
+#   → MAX_SENTENCES=3 은 일상 69자 / 문어 177자 ≈ TARGET_CHARS 와 맞는다.
+#
+# CHUNK_MIN_CHARS(짧으면 앞 청크와 병합)는 현재 한 번도 발동하지 않는다.
+# 하한 30자가 한 문장(23자)보다 커서 모든 문장이 병합 대상이 되는데, 줄바꿈
+# 블록 규칙이 전부 막기 때문이다. 실측: 병합 시도 280회, 발동 0회.
+# 되살리지 말 것 — 줄을 넘어 병합하게 하면 무관한 주제가 한 벡터에 섞인다.
+# (실제 사례: "리팩토링" + "내일 2시 축구"가 한 청크로 합쳐짐)
 CHUNK_MIN_CHARS = 30
 CHUNK_TARGET_CHARS = 180
 CHUNK_MAX_CHARS = 350
 CHUNK_MAX_SENTENCES = 3
 
-NETWORK_QUERY_MAX_CHARS = 4_000
-NETWORK_DEFAULT_MIN_SIMILARITY = 0.35
-
 MEMO_CHUNK_SPLIT_MAX_CHARS = 20_000
+# State B embeds the current memo as one whole document, matching Topics.
+NETWORK_QUERY_MAX_CHARS = MEMO_CHUNK_SPLIT_MAX_CHARS
+NETWORK_DEFAULT_MIN_SIMILARITY = 0.35
 NETWORK_CACHE_MAX_AGE_DAYS = 60
 NETWORK_CACHE_MAX_ROWS_PER_USER = 500
 

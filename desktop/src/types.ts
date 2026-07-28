@@ -56,15 +56,6 @@ export interface ScheduleInboxRow {
   title: string;
 }
 
-export interface BriefingRow {
-  briefing_date: string | null;
-  content: string;
-  created_at: string;
-  id: string;
-  metadata: Record<string, unknown> | null;
-  type: 'daily' | 'weekly';
-}
-
 export interface TopicCluster {
   confidence: number | null;
   id: string;

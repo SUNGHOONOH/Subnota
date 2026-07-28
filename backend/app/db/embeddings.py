@@ -148,6 +148,26 @@ def search_similar_chunks(
     return cast(list[DatabaseRow], response.data or [])
 
 
+def search_similar_topic_memos(
+    user_id: str,
+    query_embedding: Any,
+    exclude_memo_id: str | None,
+    limit: int,
+) -> list[DatabaseRow]:
+    client = get_supabase()
+    response = client.rpc(
+        "match_topic_memo_embeddings",
+        {
+            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_user_id": user_id,
+            "p_query_embedding": format_vector(query_embedding),
+            "p_match_count": limit,
+            "p_exclude_memo_id": exclude_memo_id,
+        },
+    ).execute()
+    return cast(list[DatabaseRow], response.data or [])
+
+
 def search_similar_inbox_embeddings(
     user_id: str,
     query_embedding: Any,

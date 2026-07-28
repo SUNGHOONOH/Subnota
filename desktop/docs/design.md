@@ -176,6 +176,37 @@ Do not alter editor typography on only one operating system.
   do not introduce blue as a generic action color.
 - Destructive actions use semantic danger tokens.
 
+## Preview panel and ambient ghost line
+
+Two surfaces intentionally break the usual card treatment. Both exist to be
+read *while the user keeps writing*, so they must stay quiet.
+
+**Preview panel** — a read-only reference surface docked as the third
+`.app-shell` grid column. It pushes the workspace rather than overlapping it:
+body text is capped at 860px and centred, so an overlay would clip the right
+edge of real text.
+
+- Distinguish it from a split pane with three signals: recessed `bg-muted`
+  background, **no tab strip**, and no caret. The missing tab strip is the
+  strongest signal — read it before reaching for colour.
+- Do **not** dim the text to express read-only. Dimming is the *disabled*
+  pattern; a preview exists to be read, so contrast matches body text and only
+  the editing affordances are removed.
+- Width is user-resizable (280–600px) and remembered. Do not pin it — no
+  comparable app ships a fixed-width side panel.
+- It closes on `Esc` or `✕` only. Never close it on outside click or on
+  typing: the whole point is referencing something while writing.
+
+**Ambient ghost line** — the recommendation under the editor. No border, no
+background; a thin left rule marks it as "not your text".
+
+- It must keep a metadata prefix (`7일 전 ·`). Without it, grey text next to a
+  cursor reads as an insertable completion, which is a promise this feature
+  cannot keep — it is a reference, not a suggestion.
+- Express muting with a muted text token, not element `opacity`; opacity dims
+  the background too and turns the surface muddy.
+- The shortcut hint stays hidden until hover or focus.
+
 ## Mini Subnota
 
 Mini is a compact shared renderer with the same SCSS on both platforms:
@@ -217,6 +248,11 @@ manual Inbox flows.
 - Common motion durations are 140–200ms; long motion is reserved for meaningful
   transitions.
 - Respect `prefers-reduced-motion` rules already present in shared SCSS.
+- Enter/exit pairs use `framer-motion` with `{ type: 'spring', duration: 0.3,
+  bounce: 0 }`. Exits are shorter and quieter than enters (~0.15s) — attention
+  is already moving on.
+- `AnimatePresence` must sit **outside** the conditional it animates. Placing it
+  inside unmounts the whole tree and silently skips the exit animation.
 - Icon-only controls require accessible labels.
 - Focus must remain visible using the shared coral focus ring.
 - Do not reduce target sizes or hide keyboard focus to make Windows look more

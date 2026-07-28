@@ -91,6 +91,19 @@ const isFalseBoundary = (text: string, match: RegExpExecArray): boolean => {
   return false;
 };
 
+export const endsAtBoundary = (text: string): boolean => {
+  const trimmed = text.trimEnd();
+  if (!trimmed) return false;
+
+  BOUNDARY_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = BOUNDARY_REGEX.exec(trimmed)) !== null) {
+    if (isFalseBoundary(trimmed, match)) continue;
+    if (match.index + match[0].length === trimmed.length) return true;
+  }
+  return false;
+};
+
 export const chunkMemoText = (
   text: string,
   options: ChunkMemoOptions = {},
@@ -183,6 +196,15 @@ export const getCursorChunkWindow = (
     chunks: chunks.slice(startIndex, endIndex),
   };
 };
+
+// 글자·숫자가 하나도 없는 조각(구분선 '─────', 빈 체크박스 '- [ ]', 표 구분행)은
+// 임베딩해도 의미 없는 벡터가 되어 검색 결과에 무작위로 섞인다. 백엔드
+// chunking.py의 is_meaningful_chunk와 같은 판정을 써서 색인·질의를 일치시킨다.
+// 길이로 거르면 안 된다 — '리팩토링'처럼 짧아도 의미 있는 청크가 훨씬 많다.
+const MEANINGFUL_PATTERN = /[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ぀-ヿ一-鿿]/;
+
+export const isMeaningfulChunk = (text: string): boolean =>
+  MEANINGFUL_PATTERN.test(text);
 
 export const getCursorContextText = (
   text: string,

@@ -468,6 +468,184 @@ html.dark .session-rail {
   overflow: hidden;
 }
 
+/* ── 미리보기 패널 ──────────────────────────────────────────────────────
+   .app-shell grid의 세 번째 컬럼. `.workspace`의 형제라서 split 패널
+   개수와 무관하게 동작한다. 열리면 워크스페이스를 밀어내며(push) 겹치지
+   않는다 — 본문이 max-width 860px 가운데 정렬이라 겹치면 텍스트 오른쪽이
+   잘린다.
+
+   split 패널과 구분되는 신호 세 가지: 눌린 배경, 탭바 없음, 캐럿 없음.
+   읽기 전용이지만 텍스트 대비는 본문과 동일하게 유지한다 — 흐리게 처리하는
+   것은 disabled 패턴이고, 미리보기는 읽으라고 있는 표면이다. */
+.app-shell.preview-open {
+  grid-template-columns:
+    var(--legacy-size-nav-rail)
+    minmax(0, 1fr)
+    var(--preview-panel-width, 360px);
+}
+
+.preview-panel {
+  position: relative;
+  background: var(--legacy-bg-muted);
+  border-left: 1px solid var(--legacy-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-panel-header {
+  align-items: center;
+  border-bottom: 1px solid var(--legacy-border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.preview-panel-title {
+  color: var(--legacy-ink);
+  font-size: 12px;
+  font-weight: var(--legacy-weight-black);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-panel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.preview-action-btn,
+.preview-back-btn {
+  background: transparent;
+  border: 0;
+  border-radius: var(--legacy-radius-chip);
+  color: var(--legacy-ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  /* 보이는 크기는 작지만 클릭 영역은 40px를 확보한다. */
+  min-height: 40px;
+  min-width: 40px;
+  transition-duration: 150ms;
+  transition-property: background-color, color, scale;
+  transition-timing-function: ease-out;
+}
+
+.preview-action-btn:hover,
+.preview-back-btn:hover {
+  background: var(--legacy-bg-surface);
+  color: var(--legacy-ink);
+}
+
+.preview-action-btn:active,
+.preview-back-btn:active {
+  scale: 0.96;
+}
+
+.preview-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.preview-body {
+  color: var(--legacy-ink);
+  font-size: 13px;
+  line-height: 1.62;
+  margin: 0;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 찾아온 청크를 잠깐 강조했다가 옅게 남긴다. 완전히 사라지면 스크롤을
+   내렸다 올라왔을 때 어디였는지 다시 못 찾는다. */
+.preview-highlight {
+  animation: preview-highlight-settle 1600ms ease-out forwards;
+  background: var(--legacy-accent-soft);
+  border-radius: 3px;
+  color: inherit;
+  padding: 1px 2px;
+}
+
+@keyframes preview-highlight-settle {
+  0%,
+  40% {
+    background: var(--legacy-accent-soft);
+  }
+  100% {
+    background: rgba(var(--legacy-accent-soft-rgb), 0.4);
+  }
+}
+
+.preview-empty {
+  color: var(--legacy-ink-soft);
+  font-size: 12px;
+  margin: 0;
+}
+
+.preview-list {
+  display: grid;
+  gap: 6px;
+}
+
+.preview-list-row {
+  background: var(--legacy-bg-surface);
+  border: 1px solid var(--legacy-border);
+  border-radius: var(--legacy-radius-panel);
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  text-align: left;
+  transition-duration: 150ms;
+  transition-property: background-color, scale;
+  transition-timing-function: ease-out;
+}
+
+.preview-list-row:hover {
+  background: var(--legacy-bg-muted);
+}
+
+.preview-list-row:active {
+  scale: 0.96;
+}
+
+.preview-list-meta {
+  color: var(--legacy-ink-soft);
+  font-size: 10px;
+  font-weight: var(--legacy-weight-black);
+}
+
+.preview-list-text {
+  color: var(--legacy-ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* 드래그로 폭을 조절한다. Notion·VS Code·Obsidian 모두 사이드 패널을
+   고정폭으로 두지 않는다. */
+.preview-resizer {
+  cursor: col-resize;
+  flex: 0 0 auto;
+  inset-block: 0;
+  inset-inline-start: -3px;
+  position: absolute;
+  width: 6px;
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-highlight {
+    animation: none;
+  }
+}
+
 .topbar {
   align-items: center;
   border-bottom: 1px solid var(--legacy-border);
@@ -626,107 +804,91 @@ html.dark .session-rail {
   width: var(--legacy-size-session-rail);
 }
 
-/* Clean horizontal icon toolbar at the top-left (memo / mini / search / collapse). */
-.segment-control {
+/* 사이드바 소스 탭(노트 / 미니 / 폴더) + 새 메모.
+   탭 이름이 목록 제목을 겸하므로 아래 session-header에는 부제만 남는다. */
+.session-tabs {
   align-items: center;
   display: flex;
   gap: 2px;
   padding: 2px 0;
 }
 
-.segment-control button {
+/* 내용 크기로만. 사이드바 폭을 꽉 채우면 컨트롤이 화면을 지배해
+   목록보다 눈에 먼저 들어온다. */
+.session-tabs-control {
+  background: var(--legacy-bg-muted);
+  border-radius: var(--legacy-radius-control);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+}
+
+.session-tab {
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--legacy-radius-control) - 2px);
+  color: var(--legacy-muted);
+  padding: 3px 8px;
+  position: relative;
+  transition: color 160ms ease;
+}
+
+.session-tab.active {
+  color: var(--legacy-ink);
+}
+
+.session-tab:not(.active):hover {
+  color: var(--legacy-ink);
+}
+
+.session-tab-indicator {
+  background: var(--legacy-bg-canvas);
+  border-radius: inherit;
+  box-shadow: var(--legacy-shadow-button);
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+
+.session-tab-label {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--legacy-font-size-xs);
+  font-weight: var(--legacy-weight-bold);
+  gap: 5px;
+  justify-content: center;
+  position: relative;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+/* 버튼 기본 chrome(테두리·회색 배경)을 끄지 않으면 브라우저 기본 스타일이
+   그대로 보인다. .icon-button 계열은 의도적으로 테두리가 있어 여기선 안 쓴다. */
+.session-tabs .session-new-memo {
   align-items: center;
   background: transparent;
   border: 0;
   border-radius: var(--legacy-radius-card);
   color: var(--legacy-muted);
   display: flex;
-  height: 32px;
+  height: 26px;
   justify-content: center;
+  margin-left: auto;
   padding: 0;
   transition-duration: 140ms;
   transition-property: background-color, color, transform;
   transition-timing-function: ease;
-  width: 32px;
-
-  svg {
-    height: 18px;
-    width: 18px;
-  }
+  width: 26px;
 }
 
-.segment-control button.active {
-  background: var(--legacy-bg-active);
+.session-tabs .session-new-memo:hover {
+  background: var(--legacy-bg-active-soft);
   color: var(--legacy-coral-500);
 }
 
-.segment-control button:not(.active):hover {
-  background: var(--legacy-bg-active-soft);
-  color: var(--legacy-ink);
-}
-
-.segment-control button:active {
+.session-tabs .session-new-memo:active {
   transform: scale(var(--legacy-press-scale));
-}
-
-/* Inline search inside the session rail (replaces the centered modal). */
-.rail-search {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.rail-search-row {
-  align-items: center;
-  background: var(--legacy-bg-canvas);
-  border: 1px solid var(--legacy-border);
-  border-radius: var(--legacy-radius-card);
-  display: flex;
-  gap: 8px;
-  margin: 10px 6px 6px;
-  padding: 8px 10px;
-
-  svg {
-    color: var(--legacy-muted);
-    flex-shrink: 0;
-  }
-}
-
-.rail-search-row input {
-  background: transparent;
-  border: 0;
-  color: var(--legacy-ink);
-  flex: 1;
-  font-size: 14px;
-  min-width: 0;
-  outline: none;
-}
-
-.rail-search-clear {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--legacy-muted);
-  cursor: pointer;
-  display: flex;
-  flex-shrink: 0;
-  padding: 2px;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.rail-search-clear:hover {
-  background: var(--legacy-bg-active-soft);
-  color: var(--legacy-ink);
-}
-
-.rail-search-results {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 2px 2px 28px;
 }
 
 .session-header {
@@ -768,25 +930,6 @@ html.dark .session-rail {
   padding-top: 14px;
 }
 
-.filter-clear-row {
-  align-items: center;
-  background: rgba(var(--legacy-bg-muted-rgb), 0.9);
-  border: 0;
-  border-radius: var(--legacy-radius-filter);
-  box-shadow: 0 0 0 1px rgba(92, 77, 60, 0.12);
-  color: var(--legacy-olive);
-  display: inline-flex;
-  font-size: var(--legacy-font-size-sm);
-  font-weight: var(--legacy-weight-black);
-  gap: 6px;
-  justify-content: center;
-  margin: 0 8px 10px;
-  min-height: 34px;
-  transition-duration: 140ms;
-  transition-property: background-color, box-shadow, transform;
-  transition-timing-function: ease;
-}
-
 .new-memo-row {
   align-items: center;
   background: var(--legacy-bg-surface);
@@ -808,16 +951,14 @@ html.dark .session-rail {
   transition-timing-function: ease;
 }
 
-.new-memo-row:hover,
-.filter-clear-row:hover {
+.new-memo-row:hover {
   background: var(--legacy-bg-muted);
   box-shadow:
     0 0 0 1px rgba(var(--legacy-accent-dark-rgb), 0.16),
     0 2px 5px rgba(var(--legacy-ink-rgb), 0.05);
 }
 
-.new-memo-row:active,
-.filter-clear-row:active {
+.new-memo-row:active {
   transform: scale(var(--legacy-press-scale));
 }
 
@@ -832,6 +973,40 @@ html.dark .session-rail {
   font-weight: var(--legacy-weight-black);
   margin: 16px 10px 6px;
   text-transform: uppercase;
+}
+
+/* 접을 수 있는 섹션 제목. h3와 같은 자리·타이포를 쓰되 chevron만 더 얹는다. */
+.session-section-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--legacy-accent);
+  display: flex;
+  font-size: var(--legacy-font-size-xxs);
+  font-weight: var(--legacy-weight-black);
+  gap: 4px;
+  margin: 16px 10px 6px;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.session-section-toggle svg {
+  flex: 0 0 auto;
+  transform: rotate(90deg);
+  transition: transform 160ms ease;
+}
+
+.session-section-toggle.collapsed svg {
+  transform: rotate(0deg);
+}
+
+.session-section-toggle:hover {
+  color: var(--legacy-ink);
+}
+
+.session-section-count {
+  color: var(--legacy-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Topic clusters (State A) shown as collapsible folders in the session rail. */
@@ -888,17 +1063,12 @@ html.dark .session-rail {
 }
 
 .topic-folder-count {
-  background: var(--legacy-bg-active);
-  border-radius: var(--legacy-radius-pill);
   color: var(--legacy-muted);
   flex-shrink: 0;
   font-size: var(--legacy-font-size-xxs);
   font-style: normal;
   font-variant-numeric: tabular-nums;
   font-weight: var(--legacy-weight-semibold);
-  min-width: 18px;
-  padding: 1px 6px;
-  text-align: center;
 }
 
 .topic-folder-memos {
@@ -1470,71 +1640,69 @@ html.dark .date-schedule-meridiem button.active {
   color: var(--legacy-accent-dark);
 }
 
-.ambient-card {
-  background: rgba(var(--legacy-accent-soft-rgb), 0.62);
-  border: 1px solid rgba(var(--legacy-border-warm-rgb), 0.76);
-  border-radius: var(--legacy-radius-panel);
-  color: var(--legacy-ink);
-  margin-top: 12px;
-  max-width: 860px;
-  opacity: 0.62;
-  padding: 12px 14px;
-  text-align: left;
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
-  width: 100%;
-}
+/* ── Ambient 고스트 줄 ─────────────────────────────────────────────────
+   Cursor의 인라인 제안처럼 크롬 없이 조용히 나타난다. 카드 테두리·배경을
+   두지 않는 대신 왼쪽 세로선으로 "본문이 아님"을 표시한다.
 
-.ambient-card:hover {
-  opacity: 0.94;
-  transform: translateY(-1px);
-}
-
-.ambient-card span,
-.ambient-card strong {
-  display: block;
-}
-
-.ambient-card span {
-  color: var(--legacy-accent);
-  font-size: var(--legacy-font-size-xs);
-  font-weight: var(--legacy-weight-black);
-  margin-bottom: 5px;
-}
-
-.ambient-card strong {
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.editor-assist-row .ambient-card-compact,
-.split-editor-assist-row .ambient-card-compact {
-  align-items: center;
+   흐리게 만들 때 요소 전체 opacity를 쓰지 않는다 — 배경까지 흐려져 탁해진다.
+   텍스트 색만 muted 토큰을 쓴다. */
+.ambient-ghost {
+  align-items: baseline;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--legacy-border-warm);
+  border-radius: 0;
+  cursor: pointer;
   display: flex;
-  flex: 1 1 260px;
   gap: 7px;
   margin: 0 0 0 auto;
-  max-width: 460px;
-  min-width: 180px;
-  padding: 4px 8px;
-  width: auto;
+  max-width: 520px;
+  min-width: 0;
+  padding: 2px 0 2px 9px;
+  text-align: left;
+  transition-duration: 150ms;
+  transition-property: border-color, scale;
+  transition-timing-function: ease-out;
 }
 
-.editor-assist-row .ambient-card-compact span,
-.split-editor-assist-row .ambient-card-compact span {
+.ambient-ghost:hover {
+  border-left-color: var(--legacy-accent);
+}
+
+.ambient-ghost:active {
+  scale: 0.96;
+}
+
+.ambient-ghost-meta {
+  color: var(--legacy-accent);
   flex: 0 0 auto;
   font-size: 10px;
-  margin: 0;
+  font-weight: var(--legacy-weight-black);
 }
 
-.editor-assist-row .ambient-card-compact strong,
-.split-editor-assist-row .ambient-card-compact strong {
+.ambient-ghost-text {
+  color: var(--legacy-ink-soft);
+  flex: 1 1 auto;
   font-size: 11px;
-  font-weight: 500;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 단축키 힌트는 평소 숨어 있다가 관심을 보일 때만 드러난다.
+   ambient의 성격상 평소에는 조용해야 한다. */
+.ambient-ghost-hint {
+  color: var(--legacy-ink-soft);
+  flex: 0 0 auto;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.ambient-ghost:hover .ambient-ghost-hint,
+.ambient-ghost:focus-visible .ambient-ghost-hint {
+  opacity: 0.7;
 }
 
 .ambient-inline-error,
@@ -1612,6 +1780,70 @@ html.dark .date-schedule-meridiem button.active {
   padding: 0;
 }
 
+.local-index-progress {
+  align-items: center;
+  background: var(--app-color-bg-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: 10px;
+  bottom: 18px;
+  box-shadow: var(--legacy-shadow-menu);
+  color: var(--app-color-text);
+  display: grid;
+  gap: 9px;
+  grid-template-columns: auto minmax(0, 1fr);
+  max-width: 280px;
+  min-width: 220px;
+  padding: 10px 12px;
+  pointer-events: none;
+  position: fixed;
+  right: 18px;
+  z-index: 1200;
+}
+
+.local-index-progress > span:not(.local-index-progress-dot) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.local-index-progress strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.local-index-progress small {
+  color: var(--app-color-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.local-index-progress-dot {
+  animation: ambient-search-spin 0.8s linear infinite;
+  border: 2px solid var(--app-color-border);
+  border-radius: 50%;
+  border-top-color: var(--app-color-action-primary);
+  height: 12px;
+  width: 12px;
+}
+
+.local-index-progress.complete .local-index-progress-dot,
+.local-index-progress.failed .local-index-progress-dot {
+  animation: none;
+  background: var(--legacy-success);
+  border: 0;
+}
+
+.local-index-progress.failed .local-index-progress-dot {
+  background: var(--app-color-danger);
+}
+
+.local-index-progress progress {
+  accent-color: var(--app-color-action-primary);
+  grid-column: 1 / -1;
+  height: 3px;
+  width: 100%;
+}
+
 .network-inline-error .form-error {
   margin: 0;
 }
@@ -1625,6 +1857,207 @@ html.dark .date-schedule-meridiem button.active {
   padding: 24px;
   position: fixed;
   z-index: 60;
+}
+
+.global-search-backdrop {
+  align-items: flex-start;
+  background: rgba(var(--legacy-ink-rgb), 0.14);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: clamp(72px, 12vh, 132px) 24px 24px;
+  position: fixed;
+  z-index: 100;
+}
+
+.global-search-dialog {
+  background: var(--legacy-bg-paper);
+  border: 1px solid rgba(var(--legacy-ink-rgb), 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(var(--legacy-ink-rgb), 0.06),
+    0 18px 45px rgba(var(--legacy-ink-rgb), 0.16);
+  color: var(--legacy-ink);
+  max-height: min(610px, calc(100vh - 112px));
+  overflow: hidden;
+  width: min(680px, calc(100vw - 48px));
+}
+
+.global-search-input-row {
+  align-items: center;
+  border-bottom: 1px solid rgba(var(--legacy-ink-rgb), 0.08);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 60px;
+  padding: 0 14px;
+}
+
+.global-search-input-row > svg {
+  color: var(--legacy-coral-500);
+}
+
+.global-search-input-row input {
+  background: transparent;
+  border: 0;
+  color: var(--legacy-ink);
+  font: inherit;
+  font-size: 15px;
+  min-width: 0;
+  outline: none;
+}
+
+.global-search-input-row input::placeholder {
+  color: var(--legacy-muted);
+}
+
+.global-search-input-row button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--legacy-muted);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+  width: 40px;
+  transition-duration: 120ms;
+  transition-property: background-color, color, transform;
+  transition-timing-function: ease;
+}
+
+.global-search-input-row button:hover {
+  background: var(--legacy-coral-50);
+  color: var(--legacy-coral-600);
+}
+
+.global-search-input-row button:active {
+  transform: scale(0.96);
+}
+
+.global-search-section-label {
+  align-items: center;
+  color: var(--legacy-coral-600);
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 6px;
+  padding: 11px 14px 5px;
+}
+
+.global-search-section-label span {
+  color: var(--legacy-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.global-search-results {
+  max-height: min(452px, calc(100vh - 226px));
+  overflow-y: auto;
+  padding: 3px 8px 8px;
+}
+
+.global-search-results > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--legacy-ink);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 6px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.global-search-results > button:hover,
+.global-search-results > button.is-active {
+  background: var(--legacy-coral-50);
+  outline: none;
+}
+
+.global-search-result-icon {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--legacy-accent);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.global-search-results > button.is-active .global-search-result-icon,
+.global-search-results > button:hover .global-search-result-icon {
+  color: var(--legacy-coral-600);
+}
+
+.global-search-result-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.global-search-result-copy strong,
+.global-search-result-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search-result-copy strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.global-search-result-copy span,
+.global-search-result-meta {
+  color: var(--legacy-muted);
+  font-size: 11px;
+}
+
+.global-search-result-meta {
+  min-width: max-content;
+}
+
+.global-search-empty {
+  color: var(--legacy-muted);
+  margin: 0;
+  font-size: 12px;
+  padding: 36px 14px;
+  text-align: center;
+}
+
+.global-search-footer {
+  border-top: 1px solid rgba(var(--legacy-ink-rgb), 0.08);
+  color: var(--legacy-muted);
+  display: flex;
+  font-size: 10px;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 7px 12px;
+}
+
+@media (max-width: 640px) {
+  .global-search-backdrop {
+    padding: 56px 12px 12px;
+  }
+
+  .global-search-dialog {
+    width: calc(100vw - 24px);
+  }
+
+  .global-search-result-meta,
+  .global-search-footer {
+    display: none;
+  }
+
+  .global-search-results > button {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
 }
 
 .search-modal,
@@ -2337,14 +2770,14 @@ html.dark .date-schedule-meridiem button.active {
 }
 
 .calendar-layout,
-.briefing-layout {
+.schedule-inbox-layout {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 18px 24px 28px;
 }
 
-.briefing-layout {
+.schedule-inbox-layout {
   min-width: 300px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -2363,8 +2796,16 @@ html.dark .date-schedule-meridiem button.active {
   position: relative;
 }
 
-/* The toolbar stays transparent so views stay centered between title and nav. */
-.cal-toolbar { display: contents; }
+/* Keep the title and controls as one left-aligned, non-wrapping group. */
+.cal-toolbar {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-left: 0;
+  white-space: nowrap;
+}
 
 /* Month view follows the week view: the pane grows with its parent, while the
    calendar grid and the lower utility panels keep only a compact floor. */
@@ -2735,7 +3176,8 @@ html.dark .forest-field {
   align-items: center;
   display: flex;
   flex-wrap: nowrap;
-  gap: 12px;
+  gap: 10px;
+  justify-content: flex-start;
   min-width: 0;
   margin-bottom: 14px;
   overflow: hidden;
@@ -2743,14 +3185,15 @@ html.dark .forest-field {
 
 .cal-title {
   color: var(--legacy-ink);
-  flex: 0 1 auto;
-  font-size: 24px;
+  flex: 0 0 140px;
+  font-size: 20px;
   font-weight: 600;
   margin: 0;
-  min-width: 0;
+  min-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: 140px;
 }
 
 .cal-views {
@@ -2772,7 +3215,7 @@ html.dark .forest-field {
   font-size: 13px;
   font-weight: 600;
   min-height: 28px;
-  padding: 0 16px;
+  padding: 0 12px;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
@@ -2808,7 +3251,7 @@ html.dark .forest-field {
   font-size: 13px;
   font-weight: 600;
   height: 30px;
-  padding: 0 14px;
+  padding: 0 12px;
 }
 
 .cal-nav-icon:hover,
@@ -3175,21 +3618,12 @@ html.dark .forest-field {
 
   .cal-header {
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .cal-title {
     font-size: 20px;
     line-height: 1.15;
-  }
-
-  /* Group view-switch + nav so they never wrap apart (one line). */
-  .cal-toolbar {
-    align-items: center;
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 6px;
-    margin-left: 0;
   }
 
   .cal-views {
@@ -3340,12 +3774,6 @@ html.dark .forest-field {
 
 .week-card,
 .month-card,
-.latest-briefing-card {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-settings-border);
-  border-radius: 12px;
-}
-
 .month-card {
   background: transparent;
   border: 0;
@@ -3982,60 +4410,6 @@ html.dark .forest-field {
   padding: 1px 2px;
 }
 
-.latest-briefing-card {
-  color: inherit;
-  display: block;
-  margin-bottom: 14px;
-  padding: 20px;
-  text-align: left;
-  width: min(860px, 100%);
-}
-
-.latest-briefing-card:disabled {
-  cursor: default;
-}
-
-.latest-briefing-card span {
-  color: var(--legacy-accent);
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.latest-briefing-card strong {
-  display: block;
-  font-size: 20px;
-  margin-bottom: 12px;
-}
-
-.latest-briefing-card p {
-  color: var(--legacy-settings-ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.6;
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.briefing-cards {
-  display: grid;
-  gap: 12px;
-  max-width: 860px;
-}
-
-.briefing-history-link {
-  background: transparent;
-  border: 0;
-  color: var(--legacy-accent);
-  cursor: pointer;
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 600;
-  margin: 8px 0 0;
-  padding: 4px 0;
-}
-
 .schedule-approve-header {
   align-items: baseline;
   display: flex;
@@ -4274,17 +4648,16 @@ html.dark .forest-field {
 
 .date-schedule-field-popover {
   left: 0;
-  position: absolute;
-  width: min(340px, 100%);
-  z-index: 40;
+  position: fixed;
+  width: min(340px, calc(100vw - 28px));
+  z-index: 70;
 }
 
-.date-schedule-field-popover.bottom {
-  top: calc(100% + 6px);
-}
-
+.date-schedule-field-popover.bottom,
 .date-schedule-field-popover.top {
-  bottom: calc(100% + 6px);
+  /* Safe first paint while the viewport coordinates are measured. */
+  bottom: auto;
+  top: 14px;
 }
 
 .date-schedule-field-popover .date-schedule-popover {
@@ -4320,27 +4693,6 @@ html.dark .forest-field {
 .sheet-list {
   display: grid;
   gap: 8px;
-}
-
-.briefing-row {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-settings-border);
-  border-radius: 10px;
-  color: inherit;
-  padding: 13px 14px;
-  text-align: left;
-}
-
-.briefing-row strong,
-.briefing-row span {
-  display: block;
-}
-
-.briefing-row span {
-  color: #7a6b59;
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 5px;
 }
 
 .schedule-card-row {
@@ -4382,14 +4734,6 @@ html.dark .forest-field {
   gap: 8px;
 }
 
-.briefing-detail-content {
-  color: var(--legacy-settings-ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
 .empty-text {
   color: var(--legacy-muted);
   font-weight: 600;
@@ -4405,6 +4749,19 @@ html.dark .forest-field {
   padding: 24px;
   position: relative;
   overflow: hidden;
+}
+
+/* macOS hides the native title bar, so keep the loading screen's top chrome
+   draggable while the main workspace command bar has not mounted yet. */
+.loading-screen::before {
+  content: '';
+  height: var(--legacy-size-commandbar);
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  -webkit-app-region: drag;
+  z-index: 2;
 }
 
 .boot-card {
@@ -4910,7 +5267,7 @@ html.dark .forest-field {
 /* Modern button metrics (shadcn-style: h-36, 14px/500, radius 8, subtle) for
    briefing + inbox surfaces — overrides the warm legacy button theme here. */
 .inbox-workspace,
-.briefing-layout,
+.schedule-inbox-layout,
 .sheet-panel,
 .detail-panel {
   .primary-button,
@@ -5206,6 +5563,14 @@ html.dark .forest-field {
 
 /* Only the actual controls block window-drag; every other pixel of the merged
    titlebar (toolbar gaps, separators, empty space) drags the window. */
+.split-command-divider {
+  align-self: center;
+  background: var(--legacy-border);
+  height: 16px;
+  margin: 0 3px;
+  width: 1px;
+}
+
 .split-workspace-commandbar button,
 .split-workspace-commandbar input,
 .split-workspace-commandbar [data-radix-popper-content-wrapper] {
@@ -5232,6 +5597,13 @@ html.dark .forest-field {
 .session-toggle-button {
   flex-shrink: 0;
   margin-left: 5px;
+}
+
+.session-toggle-button,
+.global-search-trigger {
+  border-radius: 10px;
+  height: 40px;
+  width: 40px;
 }
 
 .simple-editor-toolbar-host {
@@ -5707,6 +6079,85 @@ html.dark .forest-field {
   display: inline-flex;
   flex: 0 0 16px;
   justify-content: center;
+}
+
+.split-menu-view-item svg {
+  color: var(--legacy-muted);
+  flex: 0 0 auto;
+}
+
+.split-menu-view-item.active svg {
+  color: var(--legacy-coral-500);
+}
+
+/* 새 탭과 새 split 패널은 본문 중앙에서 같은 뷰 선택 화면을 사용한다. */
+.split-view-picker-stage {
+  align-items: center;
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px;
+}
+
+.split-view-picker-panel {
+  width: min(340px, 100%);
+}
+
+.split-view-picker-title {
+  color: var(--legacy-ink);
+  font-size: var(--legacy-font-size-md);
+  font-weight: var(--legacy-weight-bold);
+  margin: 0 0 18px;
+}
+
+.split-view-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.split-view-picker-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--legacy-radius-card);
+  color: var(--legacy-ink);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--legacy-font-size-sm);
+  font-weight: var(--legacy-weight-bold);
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: left;
+  transition-duration: 140ms;
+  transition-property: background-color, color, transform;
+  transition-timing-function: ease;
+  width: 100%;
+}
+
+.split-view-picker-item svg {
+  color: var(--legacy-muted);
+  flex: 0 0 auto;
+}
+
+.split-view-picker-item:hover {
+  background: var(--legacy-bg-active-soft);
+}
+
+.split-view-picker-item:hover svg {
+  color: var(--legacy-coral-500);
+}
+
+.split-view-picker-item:active {
+  transform: scale(var(--legacy-press-scale));
+}
+
+.split-view-picker-item:focus-visible {
+  outline: 2px solid var(--legacy-coral-500);
+  outline-offset: 2px;
 }
 
 .split-pane-body-wrapper {

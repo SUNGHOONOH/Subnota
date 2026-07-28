@@ -1,6 +1,6 @@
 # Subnota Desktop Code Map
 
-Last verified: 2026-07-14
+Last verified: 2026-07-28
 
 This document maps the active unified Electron app in `desktop/`. The legacy
 `macos/` and `windows/` folders are migration safety copies, not sources to
@@ -63,7 +63,7 @@ raw IPC access.
 | `src/auto-updater.ts` | Packaged macOS Squirrel.Mac native update feed. Returns inactive on Windows. |
 | `src/update-checker.ts` | GitHub latest-release fallback; selects DMG on macOS and Setup EXE on Windows. |
 | `src/window-close-handler.ts` | Waits for renderer save/flush before closing. |
-| `src/handle-file-drop.ts` | Validates and opens dropped Markdown files. |
+| `src/local-embedding.ts` | On-device embeddings via ONNX Runtime (Transformers.js, `Xenova/bge-m3` q8). Model download/cache, separate interactive vs background-index sessions, `local-embed:*` IPC. |
 
 ## Platform capability matrix
 
@@ -95,8 +95,10 @@ and automatic browser capture are separate capabilities.
 | `src/features/memo/components/SourceDetailPane.tsx` | Saved web-source detail view. |
 | `src/features/calendar/CalendarWorkspace.tsx` | Week/month calendar and completion flows. |
 | `src/features/inbox/InboxWorkspace.tsx` | Manual URL form, local/remote saved items and source opening. |
-| `src/features/briefing/BriefingWorkspace.tsx` | Briefings and schedule recommendations. |
-| `src/features/search/MemoSearchModal.tsx` | Local MiniSearch-based memo search. |
+| `src/features/schedule/ScheduleInboxWorkspace.tsx` | Schedule inbox and recommendations. Renamed from `BriefingWorkspace`; briefings themselves remain iOS-only. |
+| `src/features/search/GlobalSearchOverlay.tsx` | Cross-surface search overlay. |
+| `src/features/search/LocalIndexProgress.tsx` | First-run local index progress and model download state. |
+| `src/features/preview/PreviewPanel.tsx` | Read-only preview panel for *reference* opens. Third `.app-shell` grid column, so it is independent of the split-pane count. |
 | `src/features/settings/SettingsModal.tsx` | Account, theme, storage and platform-available shortcuts. |
 | `src/features/mini/MiniComposer.tsx` | Shared Mini quick memo renderer. |
 | `src/features/tree/**` | Completion-derived growing tree and forest UI/model. |
@@ -104,6 +106,35 @@ and automatic browser capture are separate capabilities.
 `src/App.tsx` caps split panes at two. A pane can host multiple editor/view tabs.
 Opening a source detail appends or focuses its source tab rather than replacing
 the originating tab.
+
+### Navigate vs reference opens
+
+Every "open something" path is one of two kinds, and they land on different
+surfaces. Getting this wrong is the most common regression here.
+
+| Kind | Meaning | Lands on |
+| --- | --- | --- |
+| **Navigate** | The target *is* the destination — you are going there to work. | New tab in the **focused** pane (existing behavior). |
+| **Reference** | You are comparing the target against what you are already looking at. | The **preview panel**. |
+
+Reference opens (7): ambient top result, ambient more-results list, KNN
+neighbour graph nodes (memo and source), Topics chips, Topics graph inbox
+nodes, and the calendar's "open source note". They call `onOpenPreview`, which
+`src/App.tsx` turns into preview-panel state. The panel is reused rather than
+stacked, so clicking through a graph never accumulates panels.
+
+Navigate opens (12) keep using `openMemoInFocusedSplitPane`, `openViewAsTab`,
+`openMemoInPane` and `openSourceInPane`. A reference open must never take over
+the focused pane — that would hide the thing the user was comparing against.
+
+Promotion (`⧉` in the preview header) is the one place that inverts the pane
+choice: with two panes it opens in the **non-focused** pane so the draft stays
+visible, and it never moves focus. With one pane it opens a tab in that pane —
+the app does not create splits on the user's behalf.
+
+Custom events keep the two intents apart: `subnota:preview-memo` opens the
+panel, `subnota:open-memo` / `subnota:open-inbox-source` open real tabs and
+accept `detail.target: 'beside' | 'focused'`.
 
 ## Editor
 
@@ -130,6 +161,45 @@ React Native WebView bridge.
 | `src/services/supabase/memoSync.ts` | Memo sync and conflict behavior. |
 | `src/services/backend/inboxService.ts` | Inbox metadata/summary backend client. |
 | `src/services/backend/networkService.ts` | Network search backend client. |
+| `src/services/local/localMemoIndexer.ts` | Chunks memos and writes vectors to the local index. Filters noise chunks with `isMeaningfulChunk`. |
+| `src/services/local/localMemoSearch.ts` | Local cosine search over `local_memo_chunk_vectors`, excluding the current memo and near-duplicates. |
+| `src/services/local/localInboxIndexer.ts` | Same, for saved web summaries. |
+
+### Ambient Mirror (local embeddings)
+
+Ambient search runs entirely on-device — no network, no per-query cost.
+
+```text
+editor update → ambientIdle picks a delay by writing stage
+              → local-embed:embed (ONNX, one text at a time)
+              → localMemoSearch over local SQLite vectors
+              → ghost line under the editor
+              → ⌘↩ / ⌘⇧↩ or click → preview panel
+```
+
+Two invariants live in code comments and regression tests. Do not undo them:
+
+- **Never batch embeddings.** Passing an array to Transformers.js lets padding
+  leak into the CLS position, so the same sentence yields a different vector
+  (measured cosine 0.978–0.992). Index and query vectors must share one space.
+- **`EMBEDDING_MODEL_ID` gates the local index.** Changing model, engine or
+  quantization invalidates every stored vector; the signature column exists so
+  stale vectors are discarded rather than silently mixed.
+
+Trigger delays come from the writing stage rather than a single idle timer,
+because a 2s pause lands on someone still composing (keystroke-logging research
+puts the transcription/planning boundary at ~2000ms):
+
+| Stage | Delay | Query |
+| --- | --- | --- |
+| Cursor in a heading | 1.5s | The heading text |
+| Current block empty (just pressed Enter) | 2s | The previous sibling block |
+| Text before the cursor ends at a sentence boundary | 2s | Cursor sentence ±1 |
+| Otherwise | 5s | Cursor sentence ±1 |
+
+The "previous sibling" lookup walks up the ancestor chain rather than reading
+the document's top level, because roughly half of real chunks sit inside list
+items, where the top-level index points at the whole list.
 
 ### Memo/calendar flow
 
@@ -180,7 +250,7 @@ The human-facing rules and parity checklist are in `docs/design.md`.
 
 | Path | Responsibility |
 | --- | --- |
-| `forge.config.ts` | Platform makers, macOS signing/notarization, protocol registration and fuses. |
+| `forge.config.ts` | Platform makers, macOS signing/notarization, protocol registration, fuses, and the runtime-dependency allowlist that ships `onnxruntime-node` (see below). |
 | `build/entitlements.mac.plist` | Apple Events and JIT entitlements. |
 | `scripts/build-dmg.sh` | Local macOS package, entitlement-preserving ad-hoc resign and DMG. |
 | `scripts/release.sh` | Signed/notarized macOS DMG + ZIP + `RELEASES.json` release. |
@@ -198,6 +268,10 @@ The human-facing rules and parity checklist are in `docs/design.md`.
 - `second-instance-deep-link.test.ts` — macOS capture deep-link routing.
 - `update-checker.test.ts` — DMG/Setup EXE asset selection.
 - `auto-updater.test.ts` — macOS native update feed.
+- `ambient-idle.test.ts` — writing-stage trigger branches, including list nesting.
+- `local-embedding.test.ts` — IPC contract, single-text embedding, index/interactive session split.
+- `preview-panel.test.tsx` — highlight recovery when indices drift, list/detail modes.
+- `hotkey-hint.test.ts` — ambient shortcuts registered and conflict-free.
 - `offline-store.test.ts` — local-first persistence.
 - `window-close-handler.test.ts` — save-before-close behavior.
 

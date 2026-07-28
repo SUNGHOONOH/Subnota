@@ -212,9 +212,15 @@ describe('canRunAmbientAutoSearch', () => {
 });
 
 describe('appSettings.ambientAutoSearchEnabled', () => {
-  it('기본값은 false다', () => {
-    expect(normalizeAppSettings({}).ambientAutoSearchEnabled).toBe(false);
-    expect(normalizeAppSettings(null).ambientAutoSearchEnabled).toBe(false);
+  it('기본값은 true다', () => {
+    expect(normalizeAppSettings({}).ambientAutoSearchEnabled).toBe(true);
+    expect(normalizeAppSettings(null).ambientAutoSearchEnabled).toBe(true);
+  });
+
+  it('저장된 false 값은 유지되어 설정에서 끌 수 있다', () => {
+    expect(
+      normalizeAppSettings({ ambientAutoSearchEnabled: false }).ambientAutoSearchEnabled,
+    ).toBe(false);
   });
 
   it('저장된 true 값은 유지된다', () => {

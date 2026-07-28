@@ -21,6 +21,7 @@ describe('workspace session persistence', () => {
           editors: [
             {
               id: 'editor-1',
+              isViewPicker: true,
               memoId: 'memo-1',
               networkIsLoading: true,
               networkRequestId: 'request-1',
@@ -46,6 +47,7 @@ describe('workspace session persistence', () => {
     expect(session?.splitPanes[0].networkRequestId).toBeUndefined();
     expect(session?.splitPanes[0].editors?.[0].networkIsLoading).toBe(false);
     expect(session?.splitPanes[0].editors?.[0].networkRequestId).toBeUndefined();
+    expect(session?.splitPanes[0].editors?.[0].isViewPicker).toBe(true);
   });
 
   it('falls back to a valid focused pane and rejects malformed sessions', () => {

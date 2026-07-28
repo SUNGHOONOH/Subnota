@@ -3,7 +3,6 @@ import { Session } from '@supabase/supabase-js';
 import { hashText } from '../../lib/contentHash';
 import { getMemoCategory } from '../../lib/memoCategory';
 import {
-  BriefingRow,
   CalendarBlockRow,
   MemoRow,
   ScheduleInboxRow,
@@ -459,23 +458,6 @@ export const updateScheduleInboxStatus = async (
   if (error) {
     throw error;
   }
-};
-
-export const fetchBriefings = async (session: Session) => {
-  const { data, error } = await supabase
-    .from('briefings')
-    .select('id, content, type, briefing_date, metadata, created_at')
-    .eq('user_id', session.user.id)
-    .eq('type', 'daily')
-    .order('briefing_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(30);
-
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []) as BriefingRow[];
 };
 
 interface TopicClusterRow {

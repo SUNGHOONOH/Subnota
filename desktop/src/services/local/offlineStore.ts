@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { ActivityCompletion, DailyCompletion, ForestTree } from '../../features/tree/model/treeTypes';
 import { InboxSession, InboxSourceType } from '../backend/inboxService';
+import { scheduleLocalMemoIndex } from './localMemoIndexer';
 
 const MEMOS_KEY = 'subnota.macos.local.memos.v1';
 const CALENDAR_BLOCKS_KEY = 'subnota.macos.local.calendarBlocks.v1';
@@ -175,6 +176,9 @@ export const persistLocalMemo = async (memo: LocalMemoRow, ownerId?: string) => 
   await ensureMigrated(ownerId);
   await getApi().localDbSetOwner?.(ownerKey(ownerId));
   await getApi().localDbUpsert(ownerKey(ownerId), 'memo', memo.id, memo);
+  if (getApi().localDbMemoVectorState) {
+    scheduleLocalMemoIndex(memo, ownerKey(ownerId));
+  }
   return memo;
 };
 

@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { CalendarDays } from '@/components/icons';
 import DateSchedulePopover from './DateSchedulePopover';
@@ -20,6 +27,7 @@ const DateScheduleField = ({
 }: DateScheduleFieldProps) => {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>();
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +36,12 @@ const DateScheduleField = ({
       return;
     }
     const onPointerDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        ref.current &&
+        !ref.current.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -36,22 +49,79 @@ const DateScheduleField = ({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [open]);
 
-  // Flip above the field when there isn't enough room below, so the picker
-  // never gets clipped off the bottom of the screen.
+  // Position the picker against the viewport. The field can live inside a
+  // scrolling/overflow-hidden modal, so an absolutely positioned child would
+  // be clipped before it reaches the available space above the field.
   useLayoutEffect(() => {
-    if (!open || !ref.current || !popRef.current) {
+    if (!open || !ref.current) {
       return;
     }
-    const field = ref.current.getBoundingClientRect();
-    const height = popRef.current.offsetHeight;
-    const below = window.innerHeight - field.bottom - 6;
-    const above = field.top - 6;
-    setPlacement(below < height && above > below ? 'top' : 'bottom');
+
+    const updatePosition = () => {
+      if (!ref.current || !popRef.current) {
+        return;
+      }
+      const field = ref.current.getBoundingClientRect();
+      const height = popRef.current.offsetHeight;
+      const viewportPadding = 14;
+      const width = Math.min(340, window.innerWidth - viewportPadding * 2);
+      const maxLeft = Math.max(
+        viewportPadding,
+        window.innerWidth - width - viewportPadding,
+      );
+      const left = Math.min(Math.max(field.left, viewportPadding), maxLeft);
+      const below = window.innerHeight - field.bottom - 6;
+      const above = field.top - 6;
+      const isTop = below < height && above > below;
+      const rawTop = isTop ? field.top - height - 6 : field.bottom + 6;
+      const top = Math.min(
+        Math.max(rawTop, viewportPadding),
+        Math.max(viewportPadding, window.innerHeight - height - viewportPadding),
+      );
+
+      setPlacement(isTop ? 'top' : 'bottom');
+      setPopoverStyle({
+        bottom: 'auto',
+        left,
+        top,
+        width,
+      });
+    };
+
+    let followUpFrame: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      updatePosition();
+      followUpFrame = window.requestAnimationFrame(updatePosition);
+    });
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (followUpFrame !== undefined) {
+        window.cancelAnimationFrame(followUpFrame);
+      }
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [open]);
 
   const valueLabel = allDay
     ? `${format(date, 'yyyy. MM. dd.')} · 종일`
     : format(date, 'yyyy. MM. dd. h:mm a');
+
+  const popover = open ? (
+    <div
+      className={`date-schedule-field-popover ${placement}`}
+      ref={popRef}
+      style={popoverStyle}
+    >
+      <DateSchedulePopover
+        initialDate={date}
+        onApplyDate={onChange}
+        onClose={() => setOpen(false)}
+      />
+    </div>
+  ) : null;
 
   return (
     <div className="date-schedule-field" ref={ref}>
@@ -64,15 +134,7 @@ const DateScheduleField = ({
         <span>{valueLabel}</span>
         <CalendarDays size={18} />
       </button>
-      {open && (
-        <div className={`date-schedule-field-popover ${placement}`} ref={popRef}>
-          <DateSchedulePopover
-            initialDate={date}
-            onApplyDate={onChange}
-            onClose={() => setOpen(false)}
-          />
-        </div>
-      )}
+      {popover && createPortal(popover, document.body)}
     </div>
   );
 };

@@ -6,8 +6,15 @@ import React, {
   useState,
 } from 'react';
 import { format } from 'date-fns';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Editor } from '@tiptap/core';
+import { formatRelativeDay } from '../../../lib/relativeDay';
 import {
+  type AppShortcutSettings,
+  formatHotkeyHint,
+} from '../../../lib/shortcutSettings';
+import {
+  AppWindow,
   CalendarDays,
   Check,
   ChevronDown,
@@ -16,14 +23,17 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Inbox,
   MoreHorizontal,
   Network,
+  NotebookText,
   PanelLeft,
   PanelLeftClose,
   Pin,
   PinSolid,
   Plus,
   Search,
+  Topics,
   Trash2,
   X,
 } from '@/components/icons';
@@ -33,7 +43,6 @@ import RenderErrorBoundary from '../../../components/RenderErrorBoundary';
 import {
   MemoRow,
   CalendarBlockRow,
-  BriefingRow,
   MemoSimilarityEdge,
   ScheduleInboxRow,
   TopicCluster,
@@ -42,13 +51,13 @@ import {
   TopicMembership,
 } from '../../../types';
 import { InboxSession } from '../../../services/backend/inboxService';
-import { MemoChunk, getCursorContextText } from '../../../lib/memoChunker';
+import { MemoChunk } from '../../../lib/memoChunker';
 import {
   NETWORK_SEARCH_EMPTY_MESSAGE,
   NetworkSearchResult,
   formatNetworkSearchErrorMessage,
   isNetworkSearchRetryableMessage,
-  searchCursorNetwork,
+  searchStateB,
 } from '../../../services/backend/networkService';
 import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
 import { EditorContext } from '@tiptap/react';
@@ -58,7 +67,7 @@ import {
   SimpleEditor,
 } from '../../../components/tiptap-templates/simple/simple-editor';
 import CalendarWorkspace, { CalendarTreePanel } from '../../calendar/CalendarWorkspace';
-import BriefingWorkspace from '../../briefing/BriefingWorkspace';
+import ScheduleInboxWorkspace from '../../schedule/ScheduleInboxWorkspace';
 import InboxWorkspace from '../../inbox/InboxWorkspace';
 import { getMemoCategory } from '../../../lib/memoCategory';
 import {
@@ -107,6 +116,7 @@ export interface MemoSplitEditorState {
     startIndex: number;
   } | null;
   id: string;
+  isViewPicker?: boolean;
   memoId?: string;
   mode?: 'draft' | 'existing';
   networkErrorMessage?: string | null;
@@ -131,11 +141,13 @@ const VIEW_LABELS: Record<MemoSplitPaneView, string> = {
   calendar: '캘린더',
   inbox: '웹 inbox',
   memo: '노트',
-  network: '네트워크 검색',
+  network: '주변 메모',
   source: '웹 요약',
   topics: 'Topics',
 };
 
+// network·source는 네트워크 검색·웹 요약 열기의 결과로만 열리는 뷰라
+// 사용자가 직접 고르는 목록에서는 제외한다.
 const MENU_VIEWS: MemoSplitPaneView[] = [
   'memo',
   'inbox',
@@ -143,6 +155,14 @@ const MENU_VIEWS: MemoSplitPaneView[] = [
   'briefing',
   'topics',
 ];
+
+const VIEW_ICONS: Partial<Record<MemoSplitPaneView, typeof NotebookText>> = {
+  briefing: Inbox,
+  calendar: CalendarDays,
+  inbox: AppWindow,
+  memo: NotebookText,
+  topics: Topics,
+};
 // Drag floor only — keeps a pane grabbable. Auto-layout (window narrowing) has no
 // floor (CSS min-width:0), so content panes clip rather than forcing a scrollbar.
 const SPLIT_PANE_MIN_WIDTH_PX = 240;
@@ -186,6 +206,7 @@ const paneToEditor = (pane: MemoSplitPaneState): MemoSplitEditorState => ({
   draftText: pane.draftText,
   highlight: pane.highlight,
   id: pane.activeEditorId ?? `${pane.id}-editor`,
+  isViewPicker: pane.isViewPicker,
   memoId: pane.memoId,
   mode: pane.mode,
   networkErrorMessage: pane.networkErrorMessage,
@@ -223,6 +244,7 @@ const mirrorEditorPatch = (
   draftCategory: editor.draftCategory,
   draftText: editor.draftText,
   highlight: editor.highlight,
+  isViewPicker: editor.isViewPicker,
   memoId: editor.memoId,
   mode: editor.mode,
   networkErrorMessage: editor.networkErrorMessage,
@@ -263,14 +285,12 @@ const buildSplitKnnGraph = (
   results: NetworkSearchResult[],
   getLabel: (result: NetworkSearchResult) => string,
 ) => {
-  // Center "지금 문장" node is the cursor sentence; neighbour nodes orbit it,
-  // pulled closer the higher their similarity. Labels are memo titles so the
-  // graph reads like the network mock.
+  // State B is an ego graph centered on the current whole memo.
   const nodes: KnowledgeGraphNode[] = [
     {
       color: '#1d1d1f',
       id: 'network:query',
-      label: '지금 문장',
+      label: '현재 메모',
       size: 15,
       x: 0,
       y: 0,
@@ -351,13 +371,35 @@ const inboxSessionToSourceResult = (item: InboxSession): NetworkSearchResult => 
   title: item.title,
 });
 
+// 미리보기 패널은 NetworkSearchResult를 받는다. 검색이 아니라 메모를 직접
+// 지목해서 여는 경로(Topics 칩, 캘린더 원본 노트)에서는 하이라이트할 청크가
+// 없으므로 start/end를 0으로 두고 본문 전체만 보여준다.
+const memoToPreviewResult = (memo: MemoRow): NetworkSearchResult => ({
+  chunkId: `memo-${memo.id}`,
+  chunkText: '',
+  createdAt: memo.created_at ? Date.parse(memo.created_at) : null,
+  endIndex: 0,
+  inboxSessionId: null,
+  memoContent: memo.content,
+  memoCreatedAt: memo.created_at ? Date.parse(memo.created_at) : null,
+  memoId: memo.id,
+  memoUpdatedAt: memo.updated_at ? Date.parse(memo.updated_at) : null,
+  similarity: 0,
+  sourceKind: 'memo',
+  sourceLabel: null,
+  sourceType: null,
+  sourceUrl: null,
+  startIndex: 0,
+  thumbnailUrl: null,
+  title: null,
+});
+
 const buildSplitTopicGraph = (
   clusters: TopicCluster[],
   memberships: TopicMembership[],
   globalEdges: MemoSimilarityEdge[],
   memos: MemoRow[],
   activeMemoId: string | null,
-  focusedTopicId: string | null,
   inboxMemberships: TopicInboxMembership[] = [],
   inboxEdges: TopicMemoInboxEdge[] = [],
   inboxItems: InboxSession[] = [],
@@ -366,10 +408,6 @@ const buildSplitTopicGraph = (
   const inboxItemById = new Map(inboxItems.map(item => [item.id, item]));
   const nodes: KnowledgeGraphNode[] = [];
   const edges: KnowledgeGraphEdge[] = [];
-  // Filter ONLY on an explicit topic focus. Falling back to the active memo's
-  // topic silently dropped every other cluster's memo-memo edges (the panel
-  // Topics view looked like bare hub-spoke stars while the rail view didn't).
-  const activeTopicId = focusedTopicId ?? null;
   const total = Math.max(clusters.length, 1);
   // Push clusters onto a wider ring as their count grows so they don't overlap.
   const topicRing = 1.4 + total * 0.18;
@@ -479,13 +517,13 @@ const buildSplitTopicGraph = (
     TOPIC_INTRA_EDGE_TOP_K,
     TOPIC_INTRA_EDGE_MIN_SIMILARITY,
   );
-  const visibleGlobalEdges = activeTopicId
-    ? simplifiedGlobalEdges.filter(
-        edge =>
-          edge.sourceTopicId === activeTopicId &&
-          edge.targetTopicId === activeTopicId,
-      )
-    : capCrossTopicBridges(simplifiedGlobalEdges, TOPIC_BRIDGE_EDGE_LIMIT);
+  // Node selection must not reshape the map. Topics stay distinguished by
+  // color while the same full set of sparse intra-topic and bridge edges
+  // remains visible before and after a click.
+  const visibleGlobalEdges = capCrossTopicBridges(
+    simplifiedGlobalEdges,
+    TOPIC_BRIDGE_EDGE_LIMIT,
+  );
 
   visibleGlobalEdges
     .forEach((edge, index) => {
@@ -503,9 +541,7 @@ const buildSplitTopicGraph = (
       });
     });
 
-  inboxEdges
-    .filter(edge => !activeTopicId || edge.topicId === activeTopicId)
-    .forEach((edge, index) => {
+  inboxEdges.forEach((edge, index) => {
       edges.push({
         color: colorOf(edge.topicId),
         id: `split-memo-inbox-edge-${edge.memoId}-${edge.inboxSessionId}-${index}`,
@@ -514,7 +550,7 @@ const buildSplitTopicGraph = (
         target: `inbox:${edge.inboxSessionId}`,
         weight: edge.similarity,
       });
-    });
+  });
 
   return { edges, nodes };
 };
@@ -542,6 +578,7 @@ interface MemoSplitWorkspaceProps {
   initialPaneWidths?: Record<string, number>;
   isSessionCollapsed?: boolean;
   onToggleSession?: () => void;
+  onOpenGlobalSearch?: () => void;
   onAddPane?: () => void;
   onChangePane: (id: string, patch: Partial<MemoSplitPaneState>) => void;
   onCloseAllPanes?: () => void;
@@ -549,6 +586,15 @@ interface MemoSplitWorkspaceProps {
   onFocusPane?: (id: string) => void;
   onPaneWidthsChange?: (widths: Record<string, number>) => void;
   onAmbientQuery?: (editorId: string, memoId: string | null, queryText: string) => void;
+  // 고스트 줄의 단축키 힌트에 쓴다. 사용자가 재바인딩하면 힌트도 따라간다.
+  appShortcuts?: AppShortcutSettings;
+  // 참조 성격의 열기(ambient 추천, 주변메모·Topics 그래프, 캘린더 원본 노트)는
+  // 새 탭 대신 미리보기 패널로 보낸다. 원본과 비교하려고 여는 것이라
+  // 새 탭으로 열면 보고 있던 것이 화면에서 사라지기 때문이다.
+  onOpenPreview?: (
+    results: NetworkSearchResult[],
+    mode?: 'detail' | 'list',
+  ) => void;
   panes: MemoSplitPaneState[];
   memos: MemoRow[];
   onCreateMemo: (content: string, category?: string) => MemoRow;
@@ -572,7 +618,6 @@ interface MemoSplitWorkspaceProps {
   onToggleInboxLike: (id: string, liked: boolean) => void;
 
   // 브리핑 연동
-  briefings: BriefingRow[];
   scheduleInbox: ScheduleInboxRow[];
   onAcceptInbox: (item: ScheduleInboxRow) => void;
   onDismissInbox: (item: ScheduleInboxRow) => void;
@@ -603,6 +648,7 @@ const MemoSplitWorkspace = ({
   initialPaneWidths = {},
   isSessionCollapsed = false,
   onToggleSession,
+  onOpenGlobalSearch,
   onAddPane,
   onChangePane,
   onCloseAllPanes,
@@ -612,8 +658,10 @@ const MemoSplitWorkspace = ({
   onAmbientQuery,
   panes,
   memos,
+  appShortcuts,
   onCreateMemo,
   onDeleteMemoById,
+  onOpenPreview,
   onUpdateMemo,
   onSelectMemoById,
   calendarBlocks,
@@ -627,7 +675,6 @@ const MemoSplitWorkspace = ({
   onRefreshInbox,
   onSaveInboxUrl,
   onToggleInboxLike,
-  briefings,
   scheduleInbox,
   onAcceptInbox,
   onDismissInbox,
@@ -803,34 +850,6 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
-  const patchEditorById = useCallback(
-    (
-      paneId: string,
-      editorId: string,
-      patch: Partial<MemoSplitEditorState>,
-    ) => {
-      const pane = panesRef.current.find(candidate => candidate.id === paneId);
-      if (!pane) {
-        return;
-      }
-      const editors = getPaneEditors(pane);
-      const nextEditors = editors.map(editor =>
-        editor.id === editorId ? { ...editor, ...patch } : editor,
-      );
-      const nextActiveEditor =
-        nextEditors.find(editor => editor.id === pane.activeEditorId) ??
-        nextEditors.find(editor => editor.id === editorId) ??
-        nextEditors[0];
-
-      onChangePane(paneId, {
-        ...mirrorEditorPatch(nextActiveEditor),
-        activeEditorId: nextActiveEditor.id,
-        editors: nextEditors,
-      });
-    },
-    [onChangePane],
-  );
-
   const upsertEditorById = useCallback(
     (
       paneId: string,
@@ -867,30 +886,10 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
-  const runEditorNetworkSearch = useCallback(
+  const runEditorStateBSearch = useCallback(
     async (pane: MemoSplitPaneState, editor: MemoSplitEditorState) => {
-      const candidate = editorInstances[pane.id];
-      const liveEditor = candidate && !candidate.isDestroyed ? candidate : null;
-      const selection = liveEditor?.state.selection.$from;
-      const savedQueryText = editor.networkQueryChunk?.text?.trim() ?? '';
-      const shouldReuseSavedQuery = editor.view === 'network' && Boolean(savedQueryText);
-      const paragraph = shouldReuseSavedQuery
-        ? savedQueryText
-        : selection?.parent.textContent ?? editor.ambientQueryText ?? '';
-      // 앰비언트 검색과 동일하게 커서 문장 ±1로 쿼리한다. 문단 전체를 보내면
-      // 한 문단짜리 노트가 통째로 한 블록으로 임베딩/표시되고(백엔드는 ~3문장
-      // 청크를 인덱싱), 유사도도 떨어진다.
-      const queryText = (shouldReuseSavedQuery
-        ? paragraph
-        : selection
-        ? getCursorContextText(
-            paragraph,
-            Math.min(selection.parentOffset, paragraph.length),
-          )
-        : paragraph
-      )
-        .slice(0, 1000)
-        .trim();
+      const memo = editor.memoId ? memoById.get(editor.memoId) : null;
+      const queryText = (editor.draftText ?? memo?.content ?? '').trim();
       const targetEditor =
         editor.view === 'network'
           ? editor
@@ -898,7 +897,7 @@ const MemoSplitWorkspace = ({
 
       if (!queryText) {
         upsertEditorById(pane.id, targetEditor, {
-          networkErrorMessage: '검색할 문단을 먼저 선택하거나 작성해 주세요.',
+          networkErrorMessage: '내용이 있는 메모에서 주변 메모를 찾아 주세요.',
           networkIsLoading: false,
           networkResults: [],
           view: 'network',
@@ -930,7 +929,7 @@ const MemoSplitWorkspace = ({
       }, true);
 
       try {
-        const response = await searchCursorNetwork({
+        const response = await searchStateB({
           limit: 8,
           minimumSimilarity: NETWORK_MIN_SIMILARITY,
           memoId: editor.memoId ?? null,
@@ -974,21 +973,22 @@ const MemoSplitWorkspace = ({
         }
       }
     },
-    [editorInstances, upsertEditorById],
+    [memoById, upsertEditorById],
   );
 
   const handleAddEditor = useCallback(
-    (pane: MemoSplitPaneState, view: MemoSplitPaneView = 'memo') => {
+    (pane: MemoSplitPaneState) => {
       const editors = getPaneEditors(pane);
-      const nextEditor = createEditor(view);
+      const nextEditor = createEditor('memo', { isViewPicker: true });
 
       onChangePane(pane.id, {
         ...mirrorEditorPatch(nextEditor),
         activeEditorId: nextEditor.id,
         editors: [...editors, nextEditor],
       });
+      onFocusPane?.(pane.id);
     },
-    [onChangePane],
+    [onChangePane, onFocusPane],
   );
 
   const handleSelectEditorView = useCallback(
@@ -997,6 +997,7 @@ const MemoSplitWorkspace = ({
       const activeEditor = getActiveEditor(pane);
       const nextEditor: MemoSplitEditorState = {
         ...activeEditor,
+        isViewPicker: false,
         mode: view === 'memo' ? activeEditor.mode ?? 'draft' : activeEditor.mode,
         view,
       };
@@ -1163,14 +1164,31 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
+  // 미리보기 패널의 "새 탭으로 열기"는 target:'beside'를 실어 보낸다.
+  // 패널이 2개면 포커스되지 않은 쪽에 열어야 쓰던 초안이 화면에 남는다.
+  const resolveOpenTargetPane = useCallback(
+    (target?: 'beside' | 'focused') => {
+      if (target === 'beside' && panes.length > 1) {
+        return panes.find(pane => pane.id !== focusedPane?.id) ?? panes[0];
+      }
+      return focusedPane ?? panes[0];
+    },
+    [focusedPane, panes],
+  );
+
   // 토픽 폴더(사이드바)의 링크 행 클릭 → 해당 요약을 소스 탭으로 연다.
   useEffect(() => {
     const handleOpenInboxSource = (event: Event) => {
-      const detail = (event as CustomEvent<{ inboxSessionId?: string }>).detail;
+      const detail = (
+        event as CustomEvent<{
+          inboxSessionId?: string;
+          target?: 'beside' | 'focused';
+        }>
+      ).detail;
       const item = (inboxItems as InboxSession[]).find(
         candidate => candidate.id === detail?.inboxSessionId,
       );
-      const pane = focusedPane ?? panes[0];
+      const pane = resolveOpenTargetPane(detail?.target);
       if (item && pane) {
         openSourceInPane(pane, inboxSessionToSourceResult(item));
       }
@@ -1179,14 +1197,33 @@ const MemoSplitWorkspace = ({
     window.addEventListener('subnota:open-inbox-source', handleOpenInboxSource);
     return () =>
       window.removeEventListener('subnota:open-inbox-source', handleOpenInboxSource);
-  }, [focusedPane, inboxItems, openSourceInPane, panes]);
+  }, [inboxItems, openSourceInPane, resolveOpenTargetPane]);
 
-  // 캘린더 일정의 "원본 노트 열기" → 해당 노트를 포커스 패널 탭으로 연다.
+  // 캘린더 일정의 "원본 노트 열기" → 캘린더를 보면서 출처를 확인하는
+  // 흐름이라 참조다. 탭으로 열면 캘린더가 사라져 확인의 의미가 없어진다.
+  // (승격용 subnota:open-memo와 의도가 달라 이벤트를 분리해 둔다.)
   useEffect(() => {
-    const handleOpenMemo = (event: Event) => {
+    const handlePreviewMemo = (event: Event) => {
       const detail = (event as CustomEvent<{ memoId?: string }>).detail;
       const memo = detail?.memoId ? memoById.get(detail.memoId) : null;
-      const pane = focusedPane ?? panes[0];
+      if (memo) {
+        onOpenPreview?.([memoToPreviewResult(memo)]);
+      }
+    };
+
+    window.addEventListener('subnota:preview-memo', handlePreviewMemo);
+    return () =>
+      window.removeEventListener('subnota:preview-memo', handlePreviewMemo);
+  }, [memoById, onOpenPreview]);
+
+  // 미리보기 패널의 "새 탭으로 열기" 승격 경로.
+  useEffect(() => {
+    const handleOpenMemo = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ memoId?: string; target?: 'beside' | 'focused' }>
+      ).detail;
+      const memo = detail?.memoId ? memoById.get(detail.memoId) : null;
+      const pane = resolveOpenTargetPane(detail?.target);
       if (memo && pane) {
         openMemoInPane(pane.id, memo);
       }
@@ -1194,7 +1231,7 @@ const MemoSplitWorkspace = ({
 
     window.addEventListener('subnota:open-memo', handleOpenMemo);
     return () => window.removeEventListener('subnota:open-memo', handleOpenMemo);
-  }, [focusedPane, memoById, openMemoInPane, panes]);
+  }, [memoById, openMemoInPane, resolveOpenTargetPane]);
 
   const handleChangeMemoText = (
     pane: MemoSplitPaneState,
@@ -1253,6 +1290,10 @@ const MemoSplitWorkspace = ({
       return;
     }
 
+    // 기준일은 의도적으로 Date.now()(buildScheduleFromSelection 기본값) — created_at을
+    // 쓰면 오래된 메모에 오늘 새로 쓴 상대 날짜("내일" 등)가 과거로 어긋난다. 등록
+    // 시점 재해석에 따른 드리프트는 확인 바가 확정 절대 날짜를 미리 보여줘 사용자가
+    // 잡는다. (작성 시점 freeze는 마크다운 저장 구조상 비용이 커 보류.)
     const schedule = buildScheduleFromSelection(selectedText);
     if (!schedule.date) {
       // 날짜 미인식 → 바로 날짜 피커를 띄워 직접 고르게 한다.
@@ -1409,6 +1450,36 @@ const MemoSplitWorkspace = ({
     pane: MemoSplitPaneState,
     editor: MemoSplitEditorState,
   ) => {
+    if (editor.isViewPicker) {
+      return (
+        <div className="split-view-picker-stage">
+          <section
+            aria-label="새 탭에서 열기"
+            className="split-view-picker-panel"
+          >
+            <h2 className="split-view-picker-title">새 탭에서 열기</h2>
+            <div className="split-view-picker">
+              {MENU_VIEWS.map((view, index) => {
+                const ViewIcon = VIEW_ICONS[view];
+                return (
+                  <button
+                    autoFocus={index === 0}
+                    className="split-view-picker-item"
+                    key={view}
+                    onClick={() => handleSelectEditorView(pane, view)}
+                    type="button"
+                  >
+                    {ViewIcon ? <ViewIcon size={18} /> : null}
+                    <span>{VIEW_LABELS[view]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      );
+    }
+
     if (editor.view === 'calendar') {
       return (
         <CalendarWorkspace
@@ -1423,7 +1494,7 @@ const MemoSplitWorkspace = ({
 
     if (editor.view === 'briefing') {
       return (
-        <BriefingWorkspace
+        <ScheduleInboxWorkspace
           inboxItems={scheduleInbox}
           onAcceptInbox={onAcceptInbox}
           onDismissInbox={onDismissInbox}
@@ -1466,26 +1537,23 @@ const MemoSplitWorkspace = ({
         const graph = buildSplitKnnGraph(editor.networkResults ?? [], result =>
           getResultTitle(result, memos),
         );
+        // 그래프를 보면서 노드를 훑는 맥락이라 참조다. 새 탭으로 열면
+        // 기준이 됐던 그래프가 사라져 비교가 불가능해진다.
         const openResult = (result: NetworkSearchResult) => {
-          const target = result.memoId
-            ? memos.find(item => item.id === result.memoId)
-            : null;
-          if (target) {
-            onSelectMemoById(target.id);
-            openMemoInPane(pane.id, target);
-          } else if (result.sourceKind === 'inbox') {
-            openSourceInPane(pane, result);
+          if (result.memoId) {
+            onSelectMemoById(result.memoId);
           }
+          onOpenPreview?.([result]);
         };
 
         return (
           <div className="split-network-search net-graph-view">
             <div className="net-overlay-stack">
               <div className="net-query-card">
-                <span className="net-query-eyebrow">지금 문장</span>
+                <span className="net-query-eyebrow">현재 메모</span>
                 <p className="net-query-text">
-                  {editor.networkQueryChunk?.text?.trim() ||
-                    '문장을 선택하거나 작성해 주세요.'}
+                  {(editor.networkQueryChunk?.text?.trim() ||
+                    '내용이 있는 메모에서 실행해 주세요.').slice(0, 240)}
                 </p>
               </div>
               {editor.networkErrorMessage && (
@@ -1494,7 +1562,7 @@ const MemoSplitWorkspace = ({
                   {isNetworkSearchRetryableMessage(editor.networkErrorMessage) && (
                     <button
                       className="quick-date-chip"
-                      onClick={() => void runEditorNetworkSearch(pane, editor)}
+                      onClick={() => void runEditorStateBSearch(pane, editor)}
                       type="button"
                     >
                       다시 시도
@@ -1504,12 +1572,12 @@ const MemoSplitWorkspace = ({
               )}
             </div>
             {editor.networkIsLoading && (
-              <p className="loading-text net-loading">연결성 찾는 중...</p>
+              <p className="loading-text net-loading">주변 메모 찾는 중...</p>
             )}
             {editor.networkResults && editor.networkResults.length > 0 && (
               <>
                 <KnowledgeGraphView
-                  ariaLabel="커서 문장 기준 유사 메모 그래프"
+                  ariaLabel="현재 메모 기준 주변 메모와 링크 그래프"
                   className="net-graph-canvas"
                   edges={graph.edges}
                   nodes={graph.nodes}
@@ -1528,7 +1596,7 @@ const MemoSplitWorkspace = ({
                 />
                 <div className="net-result-dock">
                   <div className="net-result-dock-head">
-                    <strong>연결된 메모</strong>
+                    <strong>연결된 메모·링크</strong>
                     <span>유사도 순 · {editor.networkResults.length}</span>
                   </div>
                   <div className="net-result-cards">
@@ -1550,11 +1618,15 @@ const MemoSplitWorkspace = ({
                         </span>
                         <span className="net-card-bottom">
                           <span className="net-card-date">
-                            {formatResultDate(res.memoCreatedAt)}
+                            {formatResultDate(
+                              res.memoCreatedAt ?? res.createdAt,
+                            )}
                           </span>
                           <span className="net-card-open">
                             <ExternalLink size={12} />
-                            새 탭으로 노트 열기
+                            {res.sourceKind === 'inbox'
+                              ? '저장한 링크 열기'
+                              : '새 탭으로 노트 열기'}
                           </span>
                         </span>
                       </button>
@@ -1580,7 +1652,6 @@ const MemoSplitWorkspace = ({
           topicGlobalEdges,
           memos,
           editor.memoId,
-          focusedTopicId,
           topicInboxMemberships,
           topicInboxEdges,
           inboxItems as InboxSession[],
@@ -1606,12 +1677,7 @@ const MemoSplitWorkspace = ({
                 if (nodeId.startsWith('topic:')) {
                   const topicId = nodeId.slice('topic:'.length);
                   setFocusedMemoId(null);
-                  if (focusedTopicId === topicId) {
-                    // Second click on the focused hub returns to the full map.
-                    setFocusedTopicId(null);
-                  } else {
-                    showTopicFolderFromGraph(topicId);
-                  }
+                  showTopicFolderFromGraph(topicId);
                   return;
                 }
 
@@ -1621,7 +1687,8 @@ const MemoSplitWorkspace = ({
                     candidate => candidate.id === sessionId,
                   );
                   if (item) {
-                    openSourceInPane(pane, inboxSessionToSourceResult(item));
+                    // Topics 그래프를 훑는 중이므로 참조로 연다.
+                    onOpenPreview?.([inboxSessionToSourceResult(item)]);
                   }
                   return;
                 }
@@ -1633,6 +1700,11 @@ const MemoSplitWorkspace = ({
                     null;
 
                   if (topicId) {
+                    // The graph selection is also the sidebar selection. This
+                    // updates activeMemoId so the first clicked memo does not
+                    // remain highlighted after selecting another node, while
+                    // keeping the current editor tab unchanged.
+                    onSelectMemoById(memoId);
                     showTopicFolderFromGraph(topicId, memoId);
                   }
                 }
@@ -1672,8 +1744,9 @@ const MemoSplitWorkspace = ({
                       memo => getMemoCategory(memo.category) === category,
                     );
                     if (target) {
+                      // 클러스터 맥락을 유지해야 하므로 참조로 연다.
                       onSelectMemoById(target.id);
-                      openMemoInPane(pane.id, target);
+                      onOpenPreview?.([memoToPreviewResult(target)]);
                     }
                   }}
                 >
@@ -1718,6 +1791,11 @@ const MemoSplitWorkspace = ({
       (editor.id === ambientEmptyEditorId ||
         (editor.id === ambientEditorId &&
           Boolean(ambientResult || ambientError)));
+    // 글을 쓰던 중에 흘끗 보는 것이므로 참조다. 새 탭으로 열면 쓰던
+    // 초안이 화면에서 사라져 추천을 확인하는 의미가 없어진다.
+    const openAmbientResult = (result: NetworkSearchResult) => {
+      onOpenPreview?.([result]);
+    };
 
     return (
       <div className="split-memo-pane-body">
@@ -1908,8 +1986,8 @@ const MemoSplitWorkspace = ({
             </TooltipIconButton>
             <TooltipIconButton
               className="split-action-btn note-tool-btn"
-              onClick={() => void runEditorNetworkSearch(pane, editor)}
-              tooltip="네트워크 검색"
+              onClick={() => void runEditorStateBSearch(pane, editor)}
+              tooltip="주변 메모"
             >
               <Network size={15} />
             </TooltipIconButton>
@@ -1946,25 +2024,50 @@ const MemoSplitWorkspace = ({
                 유사한 문장이 아직은 없습니다
               </span>
             )}
-            {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
-              <button
-                className="ambient-card ambient-card-compact"
-                onClick={() => {
-                  const target = ambientResult.memoId
-                    ? memos.find(candidate => candidate.id === ambientResult.memoId)
-                    : null;
-                  if (target) {
-                    openMemoInPane(pane.id, target);
-                  } else if (ambientResult.sourceKind === 'inbox') {
-                    openSourceInPane(pane, ambientResult);
-                  }
-                }}
-                type="button"
-              >
-                <span>연결 추천</span>
-                <strong>{ambientResult.chunkText}</strong>
-              </button>
-            )}
+            {/*
+              * 고스트 줄 — Cursor의 인라인 제안처럼 조용히 스르륵 나타난다.
+              *
+              * 다만 앞에 "7일 전 ·" 같은 메타데이터를 붙이는 것이 핵심이다.
+              * 이 접두사가 없으면 회색 글씨가 "내가 이어서 쓸 문장"으로 읽혀
+              * Tab을 누르면 삽입될 것 같은 잘못된 약속이 된다. 이건 참조지
+              * 완성 제안이 아니다.
+              *
+              * AnimatePresence는 조건문 *바깥*에 있어야 한다. 안에 두면
+              * 결과가 사라질 때 통째로 언마운트되어 exit이 실행되지 않는다.
+              */}
+            <AnimatePresence mode="wait">
+              {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientResult && (
+                <motion.button
+                  animate={{ filter: 'blur(0px)', opacity: 1, y: 0 }}
+                  className="ambient-ghost"
+                  exit={{
+                    filter: 'blur(4px)',
+                    opacity: 0,
+                    transition: { duration: 0.15, ease: 'easeIn' },
+                    y: -4,
+                  }}
+                  initial={{ filter: 'blur(4px)', opacity: 0, y: 4 }}
+                  key={ambientResult.chunkId}
+                  onClick={() => openAmbientResult(ambientResult)}
+                  transition={{ bounce: 0, duration: 0.3, type: 'spring' }}
+                  type="button"
+                >
+                  <span className="ambient-ghost-meta">
+                    {ambientResult.sourceKind === 'inbox'
+                      ? '저장한 링크'
+                      : formatRelativeDay(
+                          ambientResult.memoCreatedAt ?? ambientResult.createdAt,
+                        ) || '연결된 문장'}
+                  </span>
+                  <span className="ambient-ghost-text">
+                    {ambientResult.chunkText}
+                  </span>
+                  <span aria-hidden="true" className="ambient-ghost-hint">
+                    {formatHotkeyHint(appShortcuts?.openAmbientDetail)}
+                  </span>
+                </motion.button>
+              )}
+            </AnimatePresence>
             {pane.id === focusedPane?.id && editor.id === ambientEditorId && ambientError && (
               <span className="ambient-inline-error">{ambientError}</span>
             )}
@@ -2035,6 +2138,19 @@ const MemoSplitWorkspace = ({
             )}
           </TooltipIconButton>
         )}
+        {onOpenGlobalSearch && (
+          <TooltipIconButton
+            aria-label="전역 검색"
+            className="split-command-button global-search-trigger"
+            onClick={onOpenGlobalSearch}
+            tooltip="전역 검색"
+          >
+            <Search size={16} />
+          </TooltipIconButton>
+        )}
+        {/* 접기·검색(사이드바)과 undo·redo(문서)는 성격이 달라 한 덩어리로
+            읽히면 안 된다. */}
+        <div aria-hidden className="split-command-divider" />
         <EditorContext.Provider value={{ editor: focusedToolbarEditor }}>
           <UndoRedoButton action="undo" aria-label="실행 취소" tooltip="실행 취소" />
           <UndoRedoButton action="redo" aria-label="다시 실행" tooltip="다시 실행" />
@@ -2080,7 +2196,9 @@ const MemoSplitWorkspace = ({
                       className={`split-editor-tab ${editor.id === activeEditor.id ? 'active' : ''}`}
                     >
                       <span className="split-tab-label">
-                        {VIEW_LABELS[editor.view]}
+                        {editor.isViewPicker
+                          ? '새 탭'
+                          : VIEW_LABELS[editor.view]}
                       </span>
                       <span
                         aria-label="탭 닫기"
@@ -2165,23 +2283,27 @@ const MemoSplitWorkspace = ({
                     모두 닫기
                   </button>
                   <div className="split-menu-separator" />
-                  {MENU_VIEWS.map(view => (
-                    <button
-                      key={view}
-                      onClick={() => {
-                        handleSelectEditorView(pane, view);
-                      }}
-                      className={`split-menu-item split-menu-view-item ${activeEditor.view === view ? 'active' : ''}`}
-                      type="button"
-                    >
-                      <span className="split-menu-check">
-                        {activeEditor.view === view ? (
-                          <Check size={14} strokeWidth={2.8} />
-                        ) : null}
-                      </span>
-                      <span>{VIEW_LABELS[view]}</span>
-                    </button>
-                  ))}
+                  {MENU_VIEWS.map(view => {
+                    const ViewIcon = VIEW_ICONS[view];
+                    return (
+                      <button
+                        key={view}
+                        onClick={() => {
+                          handleSelectEditorView(pane, view);
+                        }}
+                        className={`split-menu-item split-menu-view-item ${activeEditor.view === view ? 'active' : ''}`}
+                        type="button"
+                      >
+                        <span className="split-menu-check">
+                          {activeEditor.view === view ? (
+                            <Check size={14} strokeWidth={2.8} />
+                          ) : null}
+                        </span>
+                        {ViewIcon ? <ViewIcon size={15} /> : null}
+                        <span>{VIEW_LABELS[view]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2198,7 +2320,7 @@ const MemoSplitWorkspace = ({
                       </button>
                     </div>
                   )}
-                  resetKey={`${pane.id}:${activeEditor.id}:${activeEditor.view}`}
+                  resetKey={`${pane.id}:${activeEditor.id}:${activeEditor.view}:${activeEditor.isViewPicker ? 'picker' : 'view'}`}
                 >
                   <PaneBodyRenderer render={() => renderPaneBody(pane, activeEditor)} />
                 </RenderErrorBoundary>

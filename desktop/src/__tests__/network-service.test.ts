@@ -38,8 +38,8 @@ describe('networkService', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { searchCursorNetwork } = await import('../services/backend/networkService');
-    const response = await searchCursorNetwork({
+    const { searchStateB } = await import('../services/backend/networkService');
+    const response = await searchStateB({
       memoId: 'memo-1',
       minimumSimilarity: 0.48,
       queryText: '테스트 문장',
@@ -60,12 +60,12 @@ describe('networkService', () => {
       ),
     );
 
-    const { searchCursorNetwork } = await import(
+    const { searchStateB } = await import(
       '../services/backend/networkService'
     );
 
     await expect(
-      searchCursorNetwork({ memoId: null, queryText: '테스트' }),
+      searchStateB({ memoId: null, queryText: '테스트' }),
     ).rejects.toMatchObject({
       retryAfterSeconds: 7,
       retryable: true,
@@ -90,9 +90,9 @@ describe('networkService', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    const { searchCursorNetwork } = await import('../services/backend/networkService');
+    const { searchStateB } = await import('../services/backend/networkService');
     await expect(
-      searchCursorNetwork({ memoId: null, queryText: '테스트' }),
+      searchStateB({ memoId: null, queryText: '테스트' }),
     ).resolves.toMatchObject({ results: [] });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -115,17 +115,17 @@ describe('networkService', () => {
     const {
       NETWORK_SEARCH_RETRY_MESSAGE,
       formatNetworkSearchErrorMessage,
-      searchCursorNetwork,
+      searchStateB,
     } = await import('../services/backend/networkService');
 
     await expect(
-      searchCursorNetwork({ memoId: null, queryText: '테스트' }),
+      searchStateB({ memoId: null, queryText: '테스트' }),
     ).rejects.toMatchObject({
       retryable: true,
       status: null,
     });
 
-    await searchCursorNetwork({ memoId: null, queryText: '테스트' }).catch(
+    await searchStateB({ memoId: null, queryText: '테스트' }).catch(
       error => {
         expect(formatNetworkSearchErrorMessage(error)).toBe(
           NETWORK_SEARCH_RETRY_MESSAGE,

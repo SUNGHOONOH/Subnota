@@ -3,6 +3,9 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { DESKTOP_PLATFORM_FEATURES } from './platform/policy';
+// 타입 전용 import는 컴파일 시 완전히 제거되므로 main 프로세스 코드가
+// preload 번들로 끌려오지 않는다. 상태 모양의 단일 출처를 유지하기 위함.
+import type { LocalEmbeddingStatus } from './local-embedding';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getPlatformFeatures: () => DESKTOP_PLATFORM_FEATURES,
@@ -59,6 +62,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     toggleMini: string;
   }) => {
     return ipcRenderer.invoke('set-global-shortcuts', settings);
+  },
+  suspendGlobalShortcuts: (suspended: boolean) => {
+    return ipcRenderer.invoke('suspend-global-shortcuts', suspended);
   },
   onShortcutSettingsChanged: (
     callback: (settings: {
@@ -181,6 +187,142 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('local-db:replace-synced', ownerId, recordType, values),
   localDbMigrate: (ownerId: string | null, datasets: unknown): Promise<void> =>
     ipcRenderer.invoke('local-db:migrate', ownerId, datasets),
+  localDbMemoVectorState: (
+    ownerId: string | null,
+  ): Promise<
+    Array<{
+      chunkCount: number;
+      memoId: string;
+      sourceContentHash: string;
+    }>
+  > => ipcRenderer.invoke('local-db:memo-vector-state', ownerId),
+  localDbMemoVectorTexts: (
+    ownerId: string | null,
+    memoId: string,
+  ): Promise<string[]> =>
+    ipcRenderer.invoke('local-db:memo-vector-texts', ownerId, memoId),
+  localDbReplaceMemoVectors: (
+    ownerId: string | null,
+    memoId: string,
+    sourceContentHash: string,
+    expectedContent: string,
+    chunks: Array<{
+      end: number;
+      id: string;
+      index: number;
+      start: number;
+      text: string;
+      vector: number[] | null;
+    }>,
+  ): Promise<{ stored: boolean }> =>
+    ipcRenderer.invoke(
+      'local-db:replace-memo-vectors',
+      ownerId,
+      memoId,
+      sourceContentHash,
+      expectedContent,
+      chunks,
+    ),
+  localDbDeleteMemoVectors: (
+    ownerId: string | null,
+    memoId: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke('local-db:delete-memo-vectors', ownerId, memoId),
+  localDbSearchMemoVectors: (
+    ownerId: string | null,
+    queryVector: number[],
+    excludeMemoId: string | null,
+    limit: number,
+    minimumSimilarity: number,
+  ): Promise<
+    Array<{
+      chunkId: string;
+      chunkText: string;
+      endIndex: number;
+      memoContent: string;
+      memoCreatedAt: string | null;
+      memoId: string;
+      memoUpdatedAt: string | null;
+      similarity: number;
+      startIndex: number;
+    }>
+  > =>
+    ipcRenderer.invoke(
+      'local-db:search-memo-vectors',
+      ownerId,
+      queryVector,
+      excludeMemoId,
+      limit,
+      minimumSimilarity,
+    ),
+  localDbInboxVectorState: (
+    ownerId: string | null,
+  ): Promise<
+    Array<{
+      inboxSessionId: string;
+      sourceContentHash: string;
+    }>
+  > => ipcRenderer.invoke('local-db:inbox-vector-state', ownerId),
+  localDbReplaceInboxVector: (
+    ownerId: string | null,
+    inboxSessionId: string,
+    sourceContentHash: string,
+    expectedSourceText: string,
+    vector: number[],
+  ): Promise<{ stored: boolean }> =>
+    ipcRenderer.invoke(
+      'local-db:replace-inbox-vector',
+      ownerId,
+      inboxSessionId,
+      sourceContentHash,
+      expectedSourceText,
+      vector,
+    ),
+  localDbDeleteInboxVector: (
+    ownerId: string | null,
+    inboxSessionId: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      'local-db:delete-inbox-vector',
+      ownerId,
+      inboxSessionId,
+    ),
+  localDbSearchInboxVectors: (
+    ownerId: string | null,
+    queryVector: number[],
+    limit: number,
+    minimumSimilarity: number,
+  ): Promise<
+    Array<{
+      chunkId: string;
+      chunkText: string;
+      createdAt: string | null;
+      inboxSessionId: string;
+      similarity: number;
+      sourceLabel: string | null;
+      sourceType: string | null;
+      sourceUrl: string | null;
+      thumbnailUrl: string | null;
+      title: string | null;
+    }>
+  > =>
+    ipcRenderer.invoke(
+      'local-db:search-inbox-vectors',
+      ownerId,
+      queryVector,
+      limit,
+      minimumSimilarity,
+    ),
+  localEmbedStatus: (): Promise<LocalEmbeddingStatus> =>
+    ipcRenderer.invoke('local-embed:status'),
+  localEmbedEnsureModel: (): Promise<LocalEmbeddingStatus> =>
+    ipcRenderer.invoke('local-embed:ensure-model'),
+  localEmbed: (texts: string[]): Promise<number[][]> =>
+    ipcRenderer.invoke('local-embed:embed', texts),
+  localEmbedForIndex: (texts: string[]): Promise<number[][]> =>
+    ipcRenderer.invoke('local-embed:index', texts),
+  localEmbedReleaseIndexModel: (): Promise<void> =>
+    ipcRenderer.invoke('local-embed:release-index'),
   getDesktopPreferences: (): Promise<{
     closeBehavior: 'quit' | 'tray';
     launchAtLogin: boolean;

@@ -42,6 +42,8 @@ import {
 } from './lib/windowBounds';
 import { DESKTOP_PLATFORM_FEATURES } from './platform/policy';
 import './local-database';
+// local-embed:* IPC 핸들러는 이 모듈의 최상위 부수효과로 등록된다.
+import './local-embedding';
 
 const APP_RENDERER_SCHEME = 'subnota-app';
 const APP_RENDERER_ORIGIN = `${APP_RENDERER_SCHEME}://bundle`;
@@ -483,6 +485,18 @@ const applyGlobalShortcutSettings = (
   };
 };
 
+// 단축키 녹화 중에는 OS 등록을 잠시 내린다. globalShortcut은 창보다 먼저
+// 키를 가로채므로, 켜 둔 채로는 렌더러가 keydown을 받지 못하고 Mini 창이
+// 대신 뜬다.
+ipcMain.handle('suspend-global-shortcuts', (event, suspended: boolean) => {
+  assertTrustedIpcSender(event);
+  if (suspended) {
+    unregisterGlobalShortcuts();
+    return;
+  }
+  applyGlobalShortcutSettings(shortcutSettings);
+});
+
 ipcMain.handle(
   'set-global-shortcuts',
   (event, nextSettings: Partial<ShortcutSettings>) => {
@@ -491,7 +505,10 @@ ipcMain.handle(
     const result = applyGlobalShortcutSettings(normalized);
 
     if (!result.registered.capture || !result.registered.toggle) {
-      return applyGlobalShortcutSettings(shortcutSettings);
+      // 이전 설정으로 되돌리되, registered는 실패한 쪽을 그대로 돌려준다.
+      // 롤백 등록의 결과(전부 true)를 반환하면 호출자가 실패를 성공으로 읽는다.
+      applyGlobalShortcutSettings(shortcutSettings);
+      return { registered: result.registered, settings: shortcutSettings };
     }
 
     shortcutSettings = normalized;

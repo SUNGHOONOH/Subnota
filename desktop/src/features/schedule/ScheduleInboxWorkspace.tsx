@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Group, Pagination } from '@mantine/core';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -10,7 +10,7 @@ import DateScheduleField from '../memo/components/DateScheduleField';
 import { validDate } from '../memo/components/dateScheduleTime';
 import { toValidDate } from '../../lib/viewCrashGuards';
 
-interface BriefingWorkspaceProps {
+interface ScheduleInboxWorkspaceProps {
   inboxItems: ScheduleInboxRow[];
   onAcceptInbox: (item: ScheduleInboxRow) => void;
   onDismissInbox: (item: ScheduleInboxRow) => void;
@@ -41,11 +41,11 @@ const formatCreatedAgo = (value: string) => {
     : '생성일 확인 필요';
 };
 
-const BriefingWorkspace = ({
+const ScheduleInboxWorkspace = ({
   inboxItems,
   onAcceptInbox,
   onDismissInbox,
-}: BriefingWorkspaceProps) => {
+}: ScheduleInboxWorkspaceProps) => {
   const [editingInbox, setEditingInbox] = useState<ScheduleInboxRow | null>(null);
   const [editingTime, setEditingTime] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
@@ -58,13 +58,35 @@ const BriefingWorkspace = ({
   const current = Math.min(page, pageCount);
   const pagedItems = inboxItems.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
-  const openInboxEditor = (item: ScheduleInboxRow) => {
+  const openInboxEditor = useCallback((item: ScheduleInboxRow) => {
     const scheduledAt = new Date(item.scheduled_at);
 
     setEditingInbox(item);
     setEditingTitle(item.title);
     setEditingTime(format(scheduledAt, "yyyy-MM-dd'T'HH:mm"));
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenScheduleItem = (event: Event) => {
+      const { itemId } = (
+        event as CustomEvent<{ itemId?: string }>
+      ).detail ?? { itemId: undefined };
+      const index = inboxItems.findIndex(item => item.id === itemId);
+      if (index < 0) return;
+      setPage(Math.floor(index / PAGE_SIZE) + 1);
+      openInboxEditor(inboxItems[index]);
+    };
+
+    window.addEventListener(
+      'subnota:open-schedule-inbox-item',
+      handleOpenScheduleItem,
+    );
+    return () =>
+      window.removeEventListener(
+        'subnota:open-schedule-inbox-item',
+        handleOpenScheduleItem,
+      );
+  }, [inboxItems, openInboxEditor]);
 
   const acceptEditedInbox = () => {
     if (!editingInbox) {
@@ -94,7 +116,7 @@ const BriefingWorkspace = ({
   };
 
   return (
-    <div className="briefing-layout">
+    <div className="schedule-inbox-layout">
       <div className="schedule-approve-header">
         <strong>저장할 일정</strong>
         <span className="count">{inboxItems.length}</span>
@@ -216,4 +238,4 @@ const BriefingWorkspace = ({
   );
 };
 
-export default BriefingWorkspace;
+export default ScheduleInboxWorkspace;

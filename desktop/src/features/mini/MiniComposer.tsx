@@ -5,8 +5,13 @@ import { ExternalLink } from '@/components/icons';
 import { createUuid } from '../../lib/contentHash';
 import { MINI_SUBNOTA_CATEGORY } from '../../lib/memoCategory';
 import {
+  APP_SHORTCUT_FIELDS,
+  APP_SHORTCUT_LABELS,
+  SHORTCUT_LABELS,
   ShortcutSettings,
+  findShortcutConflicts,
   keyboardEventToAccelerator,
+  loadAppShortcutSettings,
   loadShortcutSettings,
   saveShortcutSettings,
 } from '../../lib/shortcutSettings';
@@ -95,9 +100,10 @@ const saveMiniDraft = (value: string) => {
 const MiniComposer = () => {
   const platformFeatures = window.electronAPI?.getPlatformFeatures?.();
   const platform = platformFeatures?.platform ?? 'macos';
-  const visibleShortcuts = platformFeatures?.captureShortcut === false
-    ? MINI_SHORTCUTS.filter(item => item.field !== 'capturePage')
-    : MINI_SHORTCUTS;
+  const capturePageEnabled = platformFeatures?.captureShortcut !== false;
+  const visibleShortcuts = capturePageEnabled
+    ? MINI_SHORTCUTS
+    : MINI_SHORTCUTS.filter(item => item.field !== 'capturePage');
   const showsRecentCaptures =
     platformFeatures?.recentCapturesInTray !== false;
   const [text, setText] = useState(loadMiniDraft);
@@ -145,16 +151,36 @@ const MiniComposer = () => {
     };
   }, [showsRecentCaptures]);
 
+  // 녹화 중에는 OS 등록을 내린다. 켜 둔 채로는 현재 Mini 단축키를 누르는
+  // 순간 창이 토글돼 버려서 자기 단축키를 다시 지정할 수 없다.
+  // 창은 blur되면 숨겨지므로(mini-subnota.ts), 아래 blur 취소가 없으면
+  // 단축키가 내려간 채 남아 Mini를 다시 열 수 없게 된다.
+  useEffect(() => {
+    if (!recordingField) {
+      return undefined;
+    }
+    void window.electronAPI?.suspendGlobalShortcuts?.(true);
+    return () => {
+      void window.electronAPI?.suspendGlobalShortcuts?.(false);
+    };
+  }, [recordingField]);
+
   useEffect(() => {
     if (!recordingField) {
       return undefined;
     }
 
+    const cancel = () => {
+      setRecordingField(null);
+      setStatus('단축키 변경을 취소했습니다.');
+    };
+
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setRecordingField(null);
-        setStatus('단축키 변경을 취소했습니다.');
+        // 전파를 끊지 않으면 입력창의 Esc 처리가 이어 실행돼 Mini까지 닫힌다.
+        event.stopPropagation();
+        cancel();
         return;
       }
 
@@ -171,6 +197,26 @@ const MiniComposer = () => {
         ...shortcuts,
         [recordingField]: accelerator,
       };
+
+      // 여기서 openSearch까지 함께 본다. 앱 내부 단축키라 OS 등록에는
+      // 실패하지 않으므로, 막지 않으면 메모 검색이 조용히 죽는다.
+      const appShortcuts = loadAppShortcutSettings();
+      const reservedAppShortcuts = APP_SHORTCUT_FIELDS.map(field => ({
+        accelerator: appShortcuts[field],
+        label: APP_SHORTCUT_LABELS[field],
+      }));
+      const conflict = findShortcutConflicts(requested, {
+        fields: capturePageEnabled
+          ? ['toggleMini', 'capturePage', 'openSearch']
+          : ['toggleMini', 'openSearch'],
+        labels: SHORTCUT_LABELS,
+        reserved: reservedAppShortcuts,
+      })[recordingField];
+      if (conflict) {
+        setStatus(`'${conflict}'에 이미 할당된 조합입니다. 다른 조합을 눌러 주세요.`);
+        return;
+      }
+
       const changedField = recordingField;
       setRecordingField(null);
 
@@ -190,9 +236,13 @@ const MiniComposer = () => {
         });
     };
 
+    window.addEventListener('blur', cancel);
     window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [recordingField, shortcuts]);
+    return () => {
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('keydown', handler, true);
+    };
+  }, [capturePageEnabled, recordingField, shortcuts]);
 
   const changeText = (value: string) => {
     setText(value);

@@ -37,4 +37,28 @@ describe('getSections', () => {
     const sections = getSections(memos, ['ghost']);
     expect(sections[0].title).toBe('최근 메모');
   });
+
+  it('places mini memos in their own section right after 최근 메모', () => {
+    const mini = [memo('m1', now), memo('m2', now)];
+    const sections = getSections(memos, [], mini);
+
+    expect(sections.map(section => section.title)).toEqual([
+      '최근 메모',
+      'Mini 노트',
+      '오늘',
+    ]);
+    expect(sections[1].data.map(item => item.id)).toEqual(['m1', 'm2']);
+    // 미니는 날짜 그룹에 다시 나타나지 않는다.
+    expect(sections[2].data.map(item => item.id)).toEqual(['d']);
+  });
+
+  it('pins a mini memo into 고정됨 and drops it from the mini section', () => {
+    const mini = [memo('m1', now), memo('m2', now)];
+    const sections = getSections(memos, ['m1'], mini);
+
+    expect(sections[0].title).toBe('고정됨');
+    expect(sections[0].data.map(item => item.id)).toEqual(['m1']);
+    const miniSection = sections.find(section => section.title === 'Mini 노트');
+    expect(miniSection?.data.map(item => item.id)).toEqual(['m2']);
+  });
 });
