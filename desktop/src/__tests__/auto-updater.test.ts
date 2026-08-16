@@ -76,7 +76,7 @@ describe('auto updater', () => {
 
   it('does not configure native updates when no Subnota release feed is configured', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-    delete process.env.SUBNOTA_RELEASE_REPO;
+    process.env.SUBNOTA_RELEASE_REPO = 'not-a-repository';
     delete process.env.GITHUB_REPOSITORY;
     delete process.env.SUBNOTA_MAC_UPDATE_FEED_URL;
     const { configureAutoUpdater } = await import('../auto-updater');
@@ -88,6 +88,38 @@ describe('auto updater', () => {
 
     expect(result).toBe(false);
     expect(mockSetFeedURL).not.toHaveBeenCalled();
+  });
+
+  it('rejects an update feed outside the configured GitHub release', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    process.env.SUBNOTA_MAC_UPDATE_FEED_URL =
+      'https://attacker.example/RELEASES.json';
+    const { configureAutoUpdater } = await import('../auto-updater');
+
+    const result = configureAutoUpdater({
+      isPackaged: true,
+      notifyRenderer: mockWebContentsSend,
+    });
+
+    expect(result).toBe(false);
+    expect(mockSetFeedURL).not.toHaveBeenCalled();
+  });
+
+  it('uses the Subnota release repository in packaged builds by default', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    delete process.env.SUBNOTA_RELEASE_REPO;
+    delete process.env.GITHUB_REPOSITORY;
+    const { configureAutoUpdater } = await import('../auto-updater');
+
+    configureAutoUpdater({
+      isPackaged: true,
+      notifyRenderer: mockWebContentsSend,
+    });
+
+    expect(mockSetFeedURL).toHaveBeenCalledWith({
+      url: 'https://github.com/SUNGHOONOH/subnota/releases/latest/download/RELEASES.json',
+      serverType: 'json',
+    });
   });
 
   it('does not configure native updates outside packaged macOS builds', async () => {
@@ -147,6 +179,48 @@ describe('auto updater', () => {
       releaseName: 'Subnota 1.2.0',
       updateUrl: 'https://example.com/Subnota.zip',
     });
+  });
+
+  it('marks update shutdown before Squirrel.Mac closes the windows', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const onInstallRequested = vi.fn();
+    const { configureAutoUpdater } = await import('../auto-updater');
+
+    configureAutoUpdater({
+      isPackaged: true,
+      notifyRenderer: mockWebContentsSend,
+      onInstallRequested,
+    });
+    const listener = mockOn.mock.calls.find(([event]) => event === 'before-quit-for-update')?.[1] as () => void;
+
+    listener();
+
+    expect(onInstallRequested).toHaveBeenCalledOnce();
+  });
+
+  it('reports an asynchronous native install failure to the shutdown guard', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const onError = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { configureAutoUpdater } = await import('../auto-updater');
+
+    configureAutoUpdater({
+      isPackaged: true,
+      notifyRenderer: mockWebContentsSend,
+      onError,
+    });
+    const listener = mockOn.mock.calls.find(([event]) => event === 'error')?.[1] as (
+      error: Error,
+    ) => void;
+
+    listener(new Error('install failed'));
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(mockWebContentsSend).toHaveBeenCalledWith(
+      'auto-update-error',
+      expect.any(Object),
+    );
+    consoleError.mockRestore();
   });
 
   it('quits and installs a downloaded update', async () => {

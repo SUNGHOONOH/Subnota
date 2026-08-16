@@ -126,8 +126,10 @@
       cursor: pointer;
       outline: none;
 
-      &:focus {
-        border-color: var(--tt-brand-color-400);
+      /* select는 캐럿이 없어 테두리 색 변경만으로는 포커스가 안 보인다. */
+      &:focus-visible {
+        outline: 2px solid var(--app-color-focus-ring);
+        outline-offset: 2px;
       }
     }
 

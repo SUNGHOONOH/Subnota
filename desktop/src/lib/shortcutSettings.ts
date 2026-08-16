@@ -6,10 +6,16 @@ export interface ShortcutSettings {
 
 export interface AppShortcutSettings {
   createMemo: string;
+  createTab: string;
+  closeActiveTab: string;
+  focusPreviousTab: string;
+  focusNextTab: string;
   openSettings: string;
   openMemos: string;
   openCalendar: string;
   openInbox: string;
+  openTopics: string;
+  toggleSidebar: string;
   focusPreviousPane: string;
   focusNextPane: string;
   createSplitPane: string;
@@ -47,10 +53,16 @@ export const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
 
 export const DEFAULT_APP_SHORTCUT_SETTINGS: AppShortcutSettings = {
   createMemo: 'CommandOrControl+N',
+  createTab: 'CommandOrControl+T',
+  closeActiveTab: 'CommandOrControl+W',
+  focusPreviousTab: 'Control+Shift+Tab',
+  focusNextTab: 'Control+Tab',
   openSettings: 'CommandOrControl+,',
   openMemos: 'CommandOrControl+1',
   openCalendar: 'CommandOrControl+2',
   openInbox: 'CommandOrControl+3',
+  openTopics: 'CommandOrControl+4',
+  toggleSidebar: 'CommandOrControl+Alt+S',
   focusPreviousPane: 'CommandOrControl+Alt+Left',
   focusNextPane: 'CommandOrControl+Alt+Right',
   createSplitPane: 'CommandOrControl+\\',
@@ -70,20 +82,50 @@ export const SHORTCUT_FIELDS = [
 export const SHORTCUT_LABELS: Record<keyof ShortcutSettings, string> = {
   capturePage: '현재 페이지 저장',
   openSearch: '메모 검색',
-  toggleMini: 'Mini Subnota 열기',
+  toggleMini: 'Quick Subnota 열기',
 };
 
 export const APP_SHORTCUT_LABELS: Record<keyof AppShortcutSettings, string> = {
   createMemo: '새 메모 생성',
+  createTab: '새 탭 생성',
+  closeActiveTab: '현재 탭 닫기',
+  focusPreviousTab: '이전 탭으로 이동',
+  focusNextTab: '다음 탭으로 이동',
   openSettings: '설정 열기',
   openMemos: '메모 보기',
   openCalendar: '캘린더 보기',
-  openInbox: 'Inbox 보기',
+  openInbox: '링크 저장함 보기',
+  openTopics: 'Topics 보기',
+  toggleSidebar: '사이드바 열기/닫기',
   focusPreviousPane: '이전 분할 패널 포커스',
   focusNextPane: '다음 분할 패널 포커스',
   createSplitPane: '새 분할 패널',
   openAmbientDetail: '연결된 문장 미리보기',
   openAmbientList: '연결된 문장 목록',
+};
+
+export const isMacPlatform = (): boolean =>
+  typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+
+/**
+ * Electron의 공용 accelerator 토큰을 현재 OS의 짧은 표시로 바꾼다.
+ * 저장값은 CommandOrControl로 공유하되, 사용자에게는 macOS에서 ⌘,
+ * Windows/Linux에서 Ctrl만 보이게 한다.
+ */
+export const formatHotkeyKey = (
+  key: string,
+  isMac: boolean = isMacPlatform(),
+): string => {
+  const part = key.trim();
+  if (part === 'CommandOrControl' || part === 'mod') return isMac ? '⌘' : 'Ctrl';
+  if (part === 'Command' || part === 'Cmd') return '⌘';
+  if (part === 'Control' || part === 'Ctrl') return isMac ? '⌃' : 'Ctrl';
+  if (part === 'Shift') return '⇧';
+  if (part === 'Alt' || part === 'Option') return isMac ? '⌥' : 'Alt';
+  if (part === 'Enter' || part === 'Return') return '↩';
+  if (part === 'Plus') return '+';
+  if (part === 'Comma') return ',';
+  return part;
 };
 
 /**
@@ -92,31 +134,54 @@ export const APP_SHORTCUT_LABELS: Record<keyof AppShortcutSettings, string> = {
  */
 export const formatHotkeyHint = (
   accelerator?: string | null,
-  isMac: boolean = typeof navigator !== 'undefined' &&
-    /Mac/i.test(navigator.platform),
+  isMac: boolean = isMacPlatform(),
 ): string => {
   if (!accelerator) return '';
   return accelerator
     .split('+')
-    .map(key => {
-      const part = key.trim();
-      if (part === 'CommandOrControl' || part === 'mod') return isMac ? '⌘' : 'Ctrl';
-      if (part === 'Command' || part === 'Cmd') return '⌘';
-      if (part === 'Control' || part === 'Ctrl') return 'Ctrl';
-      if (part === 'Shift') return '⇧';
-      if (part === 'Alt' || part === 'Option') return isMac ? '⌥' : 'Alt';
-      if (part === 'Enter' || part === 'Return') return '↩';
-      if (part === 'Plus') return '+';
-      if (part === 'Comma') return ',';
-      return part;
-    })
+    .map(key => formatHotkeyKey(key, isMac))
     .join('');
+};
+
+export const formatHotkeyModifierHint = (
+  isMac: boolean = isMacPlatform(),
+): string =>
+  [
+    formatHotkeyKey('CommandOrControl', isMac),
+    formatHotkeyKey('Alt', isMac),
+    formatHotkeyKey('Shift', isMac),
+  ].join(' · ');
+
+export const formatHotkeyTooltip = (
+  label: string,
+  accelerator?: string | null,
+): string => {
+  const hint = formatHotkeyHint(accelerator);
+  return hint ? `${label} · ${hint}` : label;
 };
 
 export const APP_SHORTCUT_FIELDS = Object.keys(
   DEFAULT_APP_SHORTCUT_SETTINGS,
 ) as Array<keyof AppShortcutSettings>;
 export const APP_SHORTCUT_STORAGE_KEY = 'subnota.app-shortcuts.v1';
+// Electron의 기본 메뉴가 먼저 처리하는 조합이다. 앱 기능에 재할당하면 두
+// 동작이 함께 실행되거나, 사용자가 설정한 동작이 실행되지 않는다.
+export const APP_SHORTCUT_RESERVED = [
+  { accelerator: 'CommandOrControl+,', label: '설정 열기' },
+  { accelerator: 'CommandOrControl+Shift+W', label: '창 닫기' },
+  { accelerator: 'CommandOrControl+Z', label: '실행 취소' },
+  { accelerator: 'CommandOrControl+Shift+Z', label: '다시 실행' },
+  { accelerator: 'CommandOrControl+Y', label: '다시 실행' },
+  { accelerator: 'CommandOrControl+X', label: '잘라내기' },
+  { accelerator: 'CommandOrControl+C', label: '복사' },
+  { accelerator: 'CommandOrControl+V', label: '붙여넣기' },
+  { accelerator: 'CommandOrControl+Shift+V', label: '서식 없이 붙여넣기' },
+  { accelerator: 'CommandOrControl+A', label: '모두 선택' },
+  { accelerator: 'CommandOrControl+R', label: '새로고침' },
+  { accelerator: 'CommandOrControl+Shift+R', label: '강력 새로고침' },
+  { accelerator: 'CommandOrControl+Alt+I', label: '개발자 도구' },
+  { accelerator: 'CommandOrControl+Q', label: '앱 종료' },
+] as const;
 
 const readShortcutValue = (
   value: unknown,
@@ -190,6 +255,22 @@ export const normalizeAppShortcutSettings = (
     value?.createMemo,
     DEFAULT_APP_SHORTCUT_SETTINGS.createMemo,
   ),
+  createTab: normalizeAppShortcutValue(
+    value?.createTab,
+    DEFAULT_APP_SHORTCUT_SETTINGS.createTab,
+  ),
+  closeActiveTab: normalizeAppShortcutValue(
+    value?.closeActiveTab,
+    DEFAULT_APP_SHORTCUT_SETTINGS.closeActiveTab,
+  ),
+  focusPreviousTab: normalizeAppShortcutValue(
+    value?.focusPreviousTab,
+    DEFAULT_APP_SHORTCUT_SETTINGS.focusPreviousTab,
+  ),
+  focusNextTab: normalizeAppShortcutValue(
+    value?.focusNextTab,
+    DEFAULT_APP_SHORTCUT_SETTINGS.focusNextTab,
+  ),
   openSettings: normalizeAppShortcutValue(
     value?.openSettings,
     DEFAULT_APP_SHORTCUT_SETTINGS.openSettings,
@@ -205,6 +286,14 @@ export const normalizeAppShortcutSettings = (
   openInbox: normalizeAppShortcutValue(
     value?.openInbox,
     DEFAULT_APP_SHORTCUT_SETTINGS.openInbox,
+  ),
+  openTopics: normalizeAppShortcutValue(
+    value?.openTopics,
+    DEFAULT_APP_SHORTCUT_SETTINGS.openTopics,
+  ),
+  toggleSidebar: normalizeAppShortcutValue(
+    value?.toggleSidebar,
+    DEFAULT_APP_SHORTCUT_SETTINGS.toggleSidebar,
   ),
   openAmbientDetail: normalizeAppShortcutValue(
     value?.openAmbientDetail,

@@ -2,12 +2,19 @@ import { hashText } from '../../lib/contentHash';
 import { chunkMemoText, isMeaningfulChunk } from '../../lib/memoChunker';
 import { MemoRow } from '../../types';
 
-export const LOCAL_INDEX_DEBOUNCE_MS = 2_000;
+export const LOCAL_INDEX_DEBOUNCE_MS = 5_000;
 
 export interface LocalMemoIndexProgress {
   completedChunks: number;
   downloadedBytes: number;
   error?: string;
+  isInitialIndex: boolean;
+  /**
+   * 사용자가 직접 요청한 실행인가. blur 정리와 자동 ambient 검색은 사용자가
+   * 시킨 적 없는 배경 작업이라 진행 상황을 그리지 않는다 — 다른 메모를
+   * 클릭했을 뿐인데 "준비 완료!"가 뜨고 닫으라고 하면 안 된다.
+   */
+  isVisible: boolean;
   ownerId: string | null;
   stage:
     | 'complete'
@@ -94,19 +101,10 @@ export const createLocalMemoIndexer = (
     memos: MemoRow[],
     ownerId: string | null,
     expectedGeneration: number,
+    isVisible: boolean,
   ) => {
     if (expectedGeneration !== generation) return;
     const api = getApi();
-    const baseProgress: LocalMemoIndexProgress = {
-      completedChunks: 0,
-      downloadedBytes: 0,
-      ownerId,
-      stage: 'preparing',
-      totalBytes: 0,
-      totalChunks: 0,
-    };
-    emit(baseProgress);
-
     await api.localDbSetOwner(ownerId);
     const existing = new Map(
       (await api.localDbMemoVectorState(ownerId)).map(state => [
@@ -114,6 +112,17 @@ export const createLocalMemoIndexer = (
         state,
       ]),
     );
+    const baseProgress: LocalMemoIndexProgress = {
+      completedChunks: 0,
+      downloadedBytes: 0,
+      isInitialIndex: existing.size === 0,
+      isVisible,
+      ownerId,
+      stage: 'preparing',
+      totalBytes: 0,
+      totalChunks: 0,
+    };
+    emit(baseProgress);
     if (expectedGeneration !== generation) return;
 
     const staleMemos = memos
@@ -245,11 +254,15 @@ export const createLocalMemoIndexer = (
     }
   };
 
-  const enqueue = (memos: MemoRow[], ownerId: string | null) => {
+  const enqueue = (
+    memos: MemoRow[],
+    ownerId: string | null,
+    isVisible: boolean,
+  ) => {
     const expectedGeneration = generation;
     queue = queue
       .catch(() => undefined)
-      .then(() => run(memos, ownerId, expectedGeneration));
+      .then(() => run(memos, ownerId, expectedGeneration, isVisible));
     return queue;
   };
 
@@ -257,6 +270,7 @@ export const createLocalMemoIndexer = (
     key: string,
     memos: MemoRow[],
     ownerId: string | null,
+    isVisible: boolean,
   ) => {
     const previous = timers.get(key);
     if (previous) clearTimeout(previous);
@@ -264,7 +278,7 @@ export const createLocalMemoIndexer = (
       key,
       setTimeout(() => {
         timers.delete(key);
-        void enqueue(memos, ownerId);
+        void enqueue(memos, ownerId, isVisible);
       }, debounceMs),
     );
   };
@@ -276,12 +290,15 @@ export const createLocalMemoIndexer = (
       timers.clear();
       void getApi().localEmbedReleaseIndexModel().catch(() => undefined);
     },
-    reconcile: (memos: MemoRow[], ownerId: string | null) =>
-      enqueue(memos, ownerId),
-    scheduleMemo: (memo: MemoRow, ownerId: string | null) =>
-      schedule(`${ownerId ?? 'guest'}:${memo.id}`, [memo], ownerId),
-    scheduleReconcile: (memos: MemoRow[], ownerId: string | null) =>
-      schedule(`${ownerId ?? 'guest'}:workspace`, memos, ownerId),
+    reconcile: (memos: MemoRow[], ownerId: string | null, isVisible = false) =>
+      enqueue(memos, ownerId, isVisible),
+    scheduleMemo: (memo: MemoRow, ownerId: string | null, isVisible = false) =>
+      schedule(`${ownerId ?? 'guest'}:${memo.id}`, [memo], ownerId, isVisible),
+    scheduleReconcile: (
+      memos: MemoRow[],
+      ownerId: string | null,
+      isVisible = false,
+    ) => schedule(`${ownerId ?? 'guest'}:workspace`, memos, ownerId, isVisible),
     subscribe: (listener: (progress: LocalMemoIndexProgress) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

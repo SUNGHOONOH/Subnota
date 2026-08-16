@@ -15,6 +15,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -53,7 +54,15 @@ import {
   searchCursorNetwork,
 } from '../network/services/networkService';
 import { requireOnlineLogin } from '../../shared/supabase/authGate';
+import { supabase } from '../../shared/supabase/client';
+import PlatformModal from '../../components/PlatformModal';
+import SubnotaSpinner from '../../components/SubnotaSpinner';
 import { Memo, MemoDateAnchor, useMemoStore } from '../../store/useMemoStore';
+import { clearLocalInboxSessions } from '../inbox/services/localInboxQueue';
+import {
+  deleteAccount as deleteUserAccount,
+  isAccountDeletionAvailable,
+} from '../auth/services/account';
 import { SidebarViewMode } from './components/MemoSidebar';
 import {
   differenceInCalendarDays,
@@ -175,6 +184,9 @@ const MemoScreen = ({ enableSplitWorkspace = false }: MemoScreenProps = {}) => {
   const clearActiveCategoryFilter = useMemoStore(
     state => state.clearActiveCategoryFilter,
   );
+  const resetAfterAccountDeletion = useMemoStore(
+    state => state.resetAfterAccountDeletion,
+  );
   // Non-empty memos in the same order the sidebar shows them (category filter
   // applied, newest first). Used for auto-selecting the first memo and for
   // picking the neighbor memo after a deletion.
@@ -204,6 +216,14 @@ const MemoScreen = ({ enableSplitWorkspace = false }: MemoScreenProps = {}) => {
   const [scheduleMinute, setScheduleMinute] = useState('');
   const [isNetworkVisible, setNetworkVisible] = useState(false);
   const [isMoreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [isDeleteAccountDialogVisible, setDeleteAccountDialogVisible] =
+    useState(false);
+  const [deleteAccountConfirmation, setDeleteAccountConfirmation] = useState('');
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(
+    null,
+  );
+  const [isCheckingAccountDeletion, setCheckingAccountDeletion] = useState(false);
+  const [isDeletingAccount, setDeletingAccount] = useState(false);
   const [pendingScheduleText, setPendingScheduleText] = useState('');
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [isNetworkLoading, setNetworkLoading] = useState(false);
@@ -1185,6 +1205,66 @@ const MemoScreen = ({ enableSplitWorkspace = false }: MemoScreenProps = {}) => {
     handleDeleteMemo();
   }, [handleDeleteMemo]);
 
+  const handleDeleteAccount = useCallback(async () => {
+    setMoreMenuVisible(false);
+    if (isCheckingAccountDeletion || isDeletingAccount) {
+      return;
+    }
+
+    setCheckingAccountDeletion(true);
+    const available = await isAccountDeletionAvailable();
+    setCheckingAccountDeletion(false);
+    if (!available) {
+      Alert.alert(
+        '인터넷 연결 필요',
+        '계정 삭제는 인터넷 연결이 필요합니다. 연결을 확인한 뒤 다시 시도해 주세요.',
+      );
+      return;
+    }
+
+    setDeleteAccountConfirmation('');
+    setDeleteAccountError(null);
+    setDeleteAccountDialogVisible(true);
+  }, [isCheckingAccountDeletion, isDeletingAccount]);
+
+  const submitDeleteAccount = useCallback(async () => {
+    if (deleteAccountConfirmation.trim() !== '삭제' || isDeletingAccount) {
+      return;
+    }
+
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      await deleteUserAccount();
+
+      let localCleanupFailed = false;
+      try {
+        await clearLocalInboxSessions();
+        await useMemoStore.persist.clearStorage();
+      } catch {
+        localCleanupFailed = true;
+      } finally {
+        resetAfterAccountDeletion();
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+      }
+
+      setDeleteAccountDialogVisible(false);
+      setDeleteAccountConfirmation('');
+      Alert.alert(
+        '계정 삭제 완료',
+        localCleanupFailed
+          ? '계정은 삭제되었습니다. 이 기기의 일부 데이터 정리에 문제가 있어 앱을 다시 시작해 주세요.'
+          : '계정과 데이터가 삭제되었습니다.',
+      );
+    } catch {
+      setDeleteAccountError(
+        '계정 삭제에 실패했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.',
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  }, [deleteAccountConfirmation, isDeletingAccount, resetAfterAccountDeletion]);
+
   const handleOpenMemoList = useCallback(() => {
     Keyboard.dismiss();
     setMoreMenuVisible(false);
@@ -1583,9 +1663,106 @@ const MemoScreen = ({ enableSplitWorkspace = false }: MemoScreenProps = {}) => {
                 노트 삭제
               </Text>
             </Pressable>
+            <View style={styles.moreMenuDivider} />
+            <Pressable
+              accessibilityRole="button"
+              disabled={isCheckingAccountDeletion || isDeletingAccount}
+              onPress={handleDeleteAccount}
+              style={({ pressed }) => [
+                styles.moreMenuItem,
+                (isCheckingAccountDeletion || isDeletingAccount) &&
+                  styles.moreMenuItemDisabled,
+                pressed && styles.moreMenuItemPressed,
+              ]}
+            >
+              {isCheckingAccountDeletion ? (
+                <SubnotaSpinner color="#B5453A" size={17} />
+              ) : (
+                <Trash2 size={17} color="#B5453A" />
+              )}
+              <Text style={[styles.moreMenuText, styles.moreMenuDeleteText]}>
+                {isCheckingAccountDeletion ? '연결 확인 중…' : '계정 및 데이터 삭제'}
+              </Text>
+            </Pressable>
           </View>
         </>
       )}
+
+      <PlatformModal
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) {
+            setDeleteAccountDialogVisible(false);
+          }
+        }}
+        transparent
+        visible={isDeleteAccountDialogVisible}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.accountDeleteModalBackdrop}
+        >
+          <View style={styles.accountDeleteModalPanel}>
+            {isDeletingAccount && (
+              <SubnotaSpinner color="#CC785C" size={30} />
+            )}
+            <Text style={styles.accountDeleteModalTitle}>
+              계정 및 데이터 삭제
+            </Text>
+            <Text style={styles.accountDeleteModalText}>
+              계정과 모든 서버·기기 데이터를 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+            </Text>
+            <TextInput
+              autoCapitalize="none"
+              editable={!isDeletingAccount}
+              onChangeText={setDeleteAccountConfirmation}
+              placeholder="삭제"
+              placeholderTextColor="#A89E90"
+              style={styles.accountDeleteInput}
+              value={deleteAccountConfirmation}
+            />
+            <Text style={styles.accountDeleteInputHint}>
+              계속하려면 ‘삭제’를 입력하세요.
+            </Text>
+            {deleteAccountError && (
+              <Text style={styles.accountDeleteError}>
+                {deleteAccountError}
+              </Text>
+            )}
+            <View style={styles.accountDeleteActions}>
+              <Pressable
+                disabled={isDeletingAccount}
+                onPress={() => setDeleteAccountDialogVisible(false)}
+                style={styles.accountDeleteCancelButton}
+              >
+                <Text style={styles.accountDeleteCancelText}>취소</Text>
+              </Pressable>
+              <Pressable
+                disabled={
+                  deleteAccountConfirmation.trim() !== '삭제' ||
+                  isDeletingAccount
+                }
+                onPress={submitDeleteAccount}
+                style={[
+                  styles.accountDeleteConfirmButton,
+                  (deleteAccountConfirmation.trim() !== '삭제' ||
+                    isDeletingAccount) &&
+                    styles.accountDeleteConfirmButtonDisabled,
+                ]}
+              >
+                {isDeletingAccount && <SubnotaSpinner color="#FFFFFF" size={17} />}
+                <Text style={styles.accountDeleteConfirmText}>
+                  {isDeletingAccount
+                    ? '삭제하는 중…'
+                    : deleteAccountError
+                      ? '다시 시도'
+                      : '계정 영구 삭제'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </PlatformModal>
 
       {Platform.OS === 'ios' ? (
         <InputAccessoryView nativeID={DATE_ACTIONS_ACCESSORY_ID}>
@@ -2188,6 +2365,88 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginLeft: 40,
     marginVertical: 4,
+  },
+  accountDeleteModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(27, 22, 18, 0.42)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  accountDeleteModalPanel: {
+    backgroundColor: '#FAF6F0',
+    borderColor: '#E5DDD0',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    maxWidth: 420,
+    padding: 22,
+    width: '100%',
+  },
+  accountDeleteModalTitle: {
+    color: '#2C2520',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  accountDeleteModalText: {
+    color: '#6C6257',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  accountDeleteInput: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8CDBE',
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: '#2C2520',
+    fontSize: 15,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  accountDeleteInputHint: {
+    color: '#8C8174',
+    fontSize: 12,
+    marginTop: -5,
+  },
+  accountDeleteError: {
+    color: '#B5453A',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  accountDeleteActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+    marginTop: 6,
+  },
+  accountDeleteCancelButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  accountDeleteCancelText: {
+    color: '#6C6257',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  accountDeleteConfirmButton: {
+    alignItems: 'center',
+    backgroundColor: '#B5453A',
+    borderRadius: 9,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  accountDeleteConfirmButtonDisabled: {
+    opacity: 0.45,
+  },
+  accountDeleteConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
   dateAccessoryChip: {
     backgroundColor: '#EEF2FF',

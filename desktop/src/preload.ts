@@ -2,18 +2,46 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import { DESKTOP_PLATFORM_FEATURES } from './platform/policy';
+import { COLD_START_ARG, DESKTOP_PLATFORM_FEATURES } from './platform/policy';
 // 타입 전용 import는 컴파일 시 완전히 제거되므로 main 프로세스 코드가
 // preload 번들로 끌려오지 않는다. 상태 모양의 단일 출처를 유지하기 위함.
 import type { LocalEmbeddingStatus } from './local-embedding';
 
+type ClipNotificationKind = 'failed' | 'saved';
+const LOCAL_WRITE_FLUSH_REASONS = new Set<LocalWriteFlushReason>([
+  'database-maintenance',
+  'shutdown',
+  'window-close',
+]);
+let clipNotificationSequence = 0;
+const pendingClipNotificationClicks = new Map<string, () => void>();
+
+ipcRenderer.on('clip-notification:event', (_event, payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return;
+  const { action, id } = payload as { action?: unknown; id?: unknown };
+  if (
+    typeof id !== 'string' ||
+    !/^[a-z0-9-]{1,64}$/i.test(id) ||
+    (action !== 'click' && action !== 'closed')
+  ) {
+    return;
+  }
+  const onClick = pendingClipNotificationClicks.get(id);
+  pendingClipNotificationClicks.delete(id);
+  if (action === 'click') onClick?.();
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 앱을 켠 뒤 처음 만든 창인가. 창만 다시 연 경우와 구분하려고 main이
+  // 창 생성 시 인자로 넘겨 준다(COLD_START_ARG 주석 참고).
+  isColdStart: process.argv.includes(COLD_START_ARG),
   getPlatformFeatures: () => DESKTOP_PLATFORM_FEATURES,
-  onFileOpened: (callback: (filePath: string) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, filePath: string) => callback(filePath);
-    ipcRenderer.on('file-opened', listener);
-    return () => ipcRenderer.removeListener('file-opened', listener);
-  },
+  getActiveWorkspaceOwner: (): Promise<string | null> =>
+    ipcRenderer.invoke('active-workspace-owner:get'),
+  setActiveWorkspaceOwner: (ownerId: string | null): Promise<void> =>
+    ipcRenderer.invoke('active-workspace-owner:set', ownerId),
+  setUiLanguage: (language: 'en' | 'ko'): Promise<void> =>
+    ipcRenderer.invoke('app:set-ui-language', language),
   onMiniPrefill: (callback: (text: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
     ipcRenderer.on('mini-prefill', listener);
@@ -36,14 +64,96 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mini-status', listener);
     return () => ipcRenderer.removeListener('mini-status', listener);
   },
+  onFlushPendingLocalWrites: (
+    callback: (reason: LocalWriteFlushReason) => Promise<void>,
+  ) => {
+    if (typeof callback !== 'function') {
+      throw new TypeError('A local write flush callback is required.');
+    }
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return;
+      const { reason, requestId } = payload as {
+        reason?: unknown;
+        requestId?: unknown;
+      };
+      if (
+        typeof requestId !== 'string' ||
+        !/^flush-[a-z0-9]+-[a-z0-9]+$/.test(requestId) ||
+        typeof reason !== 'string' ||
+        !LOCAL_WRITE_FLUSH_REASONS.has(reason as LocalWriteFlushReason)
+      ) {
+        return;
+      }
+      void Promise.resolve()
+        .then(() => callback(reason as LocalWriteFlushReason))
+        .then(() => {
+          ipcRenderer.send('flush-pending-local-writes-complete', {
+            ok: true,
+            requestId,
+          });
+        })
+        .catch(error => {
+          ipcRenderer.send('flush-pending-local-writes-complete', {
+            message: (error instanceof Error ? error.message : String(error)).slice(
+              0,
+              500,
+            ),
+            ok: false,
+            requestId,
+          });
+        });
+    };
+    ipcRenderer.on('flush-pending-local-writes', listener);
+    return () => ipcRenderer.removeListener('flush-pending-local-writes', listener);
+  },
+  onLocalWriteFlushCancelled: (callback: () => void) => {
+    if (typeof callback !== 'function') {
+      throw new TypeError('A local write flush cancellation callback is required.');
+    }
+    const listener = () => callback();
+    ipcRenderer.on('local-write-flush-cancelled', listener);
+    return () =>
+      ipcRenderer.removeListener('local-write-flush-cancelled', listener);
+  },
   closeMini: () => {
     ipcRenderer.send('mini-close');
   },
   notifyMiniSaved: () => {
     ipcRenderer.send('mini-saved');
   },
+  captureCurrentPage: () => {
+    ipcRenderer.send('mini-capture-page');
+  },
   showMainWindow: () => {
     ipcRenderer.send('open-main-window');
+  },
+  showClipNotification: async (
+    kind: ClipNotificationKind,
+    body: string,
+    onClick?: () => void,
+  ): Promise<boolean> => {
+    const id = `${Date.now().toString(36)}-${(++clipNotificationSequence).toString(36)}`;
+    if (typeof onClick === 'function') {
+      if (pendingClipNotificationClicks.size >= 100) {
+        const oldestId = pendingClipNotificationClicks.keys().next().value;
+        if (typeof oldestId === 'string') {
+          pendingClipNotificationClicks.delete(oldestId);
+        }
+      }
+      pendingClipNotificationClicks.set(id, onClick);
+    }
+    try {
+      const shown = await ipcRenderer.invoke('clip-notification:show', {
+        body,
+        id,
+        kind,
+      });
+      if (shown !== true) pendingClipNotificationClicks.delete(id);
+      return shown === true;
+    } catch (error) {
+      pendingClipNotificationClicks.delete(id);
+      throw error;
+    }
   },
   openSettings: () => {
     ipcRenderer.send('open-settings-window');
@@ -109,11 +219,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('inbox-capture', listener);
     return () => ipcRenderer.removeListener('inbox-capture', listener);
   },
-  readFile: (filePath: string): Promise<{ path: string; content: string }> => {
-    return ipcRenderer.invoke('read-file', filePath);
-  },
   checkForUpdate: (): Promise<{ version: string; downloadUrl: string } | null> => {
     return ipcRenderer.invoke('check-for-update');
+  },
+  downloadUpdate: (): Promise<boolean> => {
+    return ipcRenderer.invoke('download-update');
   },
   onUpdateDownloaded: (callback: (info: { releaseName: string; updateUrl: string }) => void) => {
     const listener = (
@@ -123,31 +233,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('auto-update-downloaded', listener);
     return () => ipcRenderer.removeListener('auto-update-downloaded', listener);
   },
+  onUpdateError: (callback: (info: { message: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: { message: string }) => {
+      callback(info);
+    };
+    ipcRenderer.on('auto-update-error', listener);
+    return () => ipcRenderer.removeListener('auto-update-error', listener);
+  },
+  onUpdateNotAvailable: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('auto-update-not-available', listener);
+    return () => ipcRenderer.removeListener('auto-update-not-available', listener);
+  },
   installUpdate: (): Promise<void> => {
     return ipcRenderer.invoke('install-update');
   },
   openExternal: (url: string): Promise<boolean> => {
     return ipcRenderer.invoke('open-external', url);
   },
-  openLocalFile: (filePath: string): Promise<boolean> => {
-    return ipcRenderer.invoke('open-local-file', filePath);
-  },
-  saveFile: (filePath: string, content: string): Promise<void> => {
-    return ipcRenderer.invoke('save-file', filePath, content);
-  },
-  onSaveBeforeClose: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on('save-before-close', listener);
-    return () => ipcRenderer.removeListener('save-before-close', listener);
-  },
-  notifySaveComplete: () => {
-    ipcRenderer.send('save-complete');
-  },
   getFilePath: (file: File) => {
     return webUtils.getPathForFile(file);
-  },
-  setFilePath: (filePath: string): Promise<void> => {
-    return ipcRenderer.invoke('set-file-path', filePath);
   },
   setAuthWindowMode: (isAuthMode: boolean): Promise<boolean> => {
     return ipcRenderer.invoke('set-auth-window-mode', isAuthMode);
@@ -174,17 +279,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordId: string,
     value: unknown,
   ): Promise<void> => ipcRenderer.invoke('local-db:upsert', ownerId, recordType, recordId, value),
+  localDbApplyMemoSyncResult: (
+    ownerId: string | null,
+    memoId: string,
+    expectedLocalContent: string,
+    value: unknown,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      'local-db:apply-memo-sync-result',
+      ownerId,
+      memoId,
+      expectedLocalContent,
+      value,
+    ),
+  localDbPatchMemoSyncBase: (
+    ownerId: string | null,
+    memoId: string,
+    syncedContent: string,
+    syncedContentHash: string | null,
+  ): Promise<unknown | null> =>
+    ipcRenderer.invoke(
+      'local-db:patch-memo-sync-base',
+      ownerId,
+      memoId,
+      syncedContent,
+      syncedContentHash,
+    ),
+  localDbRestoreMemoSnapshotAfterPull: (
+    ownerId: string | null,
+    memoId: string,
+    value: unknown,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      'local-db:restore-memo-snapshot-after-pull',
+      ownerId,
+      memoId,
+      value,
+    ),
   localDbDelete: (
     ownerId: string | null,
     recordType: string,
     recordId: string,
   ): Promise<void> => ipcRenderer.invoke('local-db:delete', ownerId, recordType, recordId),
+  localDbClearOwner: (ownerId: string | null): Promise<void> =>
+    ipcRenderer.invoke('local-db:clear-owner', ownerId),
+  localDbDeleteInboxPendingIfNotDeleted: (
+    ownerId: string | null,
+    recordId: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      'local-db:delete-inbox-pending-if-not-deleted',
+      ownerId,
+      recordId,
+    ),
   localDbReplaceSynced: (
     ownerId: string | null,
     recordType: string,
     values: unknown[],
+    preserveIds?: string[],
   ): Promise<unknown[]> =>
-    ipcRenderer.invoke('local-db:replace-synced', ownerId, recordType, values),
+    ipcRenderer.invoke(
+      'local-db:replace-synced',
+      ownerId,
+      recordType,
+      values,
+      preserveIds,
+    ),
   localDbMigrate: (ownerId: string | null, datasets: unknown): Promise<void> =>
     ipcRenderer.invoke('local-db:migrate', ownerId, datasets),
   localDbMemoVectorState: (
@@ -315,6 +475,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ),
   localEmbedStatus: (): Promise<LocalEmbeddingStatus> =>
     ipcRenderer.invoke('local-embed:status'),
+  localEmbedDownloadModel: (): Promise<LocalEmbeddingStatus> =>
+    ipcRenderer.invoke('local-embed:download-model'),
+  localEmbedDeleteModel: (): Promise<LocalEmbeddingStatus> =>
+    ipcRenderer.invoke('local-embed:delete-model'),
+  localEmbedDiskSpace: (): Promise<{
+    freeBytes: number | null;
+    requiredBytes: number;
+  }> => ipcRenderer.invoke('local-embed:disk-space'),
   localEmbedEnsureModel: (): Promise<LocalEmbeddingStatus> =>
     ipcRenderer.invoke('local-embed:ensure-model'),
   localEmbed: (texts: string[]): Promise<number[][]> =>
@@ -352,4 +520,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('local-db:export-json', name, value),
   exportMarkdown: (name: string, content: string): Promise<string | null> =>
     ipcRenderer.invoke('local-db:export-markdown', name, content),
+  copyText: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke('clipboard:write-text', text),
 });

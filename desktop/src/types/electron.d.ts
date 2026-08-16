@@ -1,5 +1,10 @@
 declare const __APP_VERSION__: string;
 
+type LocalWriteFlushReason =
+  | 'database-maintenance'
+  | 'shutdown'
+  | 'window-close';
+
 // 로컬 임베딩 모델(bge-m3 ONNX q8)의 준비 상태. 모델은 앱에 번들하지 않고
 // 첫 사용 시 userData로 내려받으므로, 렌더러가 진행률을 보여줄 수 있어야 한다.
 interface LocalEmbeddingStatusBridge {
@@ -26,15 +31,29 @@ interface DesktopPlatformFeatures {
 
 interface ElectronAPI {
   getPlatformFeatures: () => DesktopPlatformFeatures;
-  onFileOpened: (callback: (filePath: string) => void) => () => void;
+  getActiveWorkspaceOwner: () => Promise<string | null>;
+  setActiveWorkspaceOwner: (ownerId: string | null) => Promise<void>;
+  setUiLanguage: (language: 'en' | 'ko') => Promise<void>;
+  /** 앱을 켠 뒤 처음 만든 창인가. 창만 다시 연 경우는 false. */
+  isColdStart?: boolean;
   onMiniPrefill: (callback: (text: string) => void) => () => void;
   onMiniRecentInbox: (
     callback: (items: Array<{ title: string; url: string; sourceLabel: string }>) => void,
   ) => () => void;
   onMiniStatus: (callback: (message: string) => void) => () => void;
+  onFlushPendingLocalWrites: (
+    callback: (reason: LocalWriteFlushReason) => Promise<void>,
+  ) => () => void;
+  onLocalWriteFlushCancelled: (callback: () => void) => () => void;
   closeMini: () => void;
   notifyMiniSaved: () => void;
+  captureCurrentPage: () => void;
   showMainWindow: () => void;
+  showClipNotification: (
+    kind: 'failed' | 'saved',
+    body: string,
+    onClick?: () => void,
+  ) => Promise<boolean>;
   openSettings: () => void;
   recordInboxSave: (item: {
     sourceLabel: string;
@@ -52,6 +71,12 @@ interface ElectronAPI {
   }>;
   suspendGlobalShortcuts: (suspended: boolean) => Promise<void>;
   localEmbedStatus: () => Promise<LocalEmbeddingStatusBridge>;
+  localEmbedDownloadModel: () => Promise<LocalEmbeddingStatusBridge>;
+  localEmbedDeleteModel: () => Promise<LocalEmbeddingStatusBridge>;
+  localEmbedDiskSpace: () => Promise<{
+    freeBytes: number | null;
+    requiredBytes: number;
+  }>;
   localEmbedEnsureModel: () => Promise<LocalEmbeddingStatusBridge>;
   localEmbed: (texts: string[]) => Promise<number[][]>;
   localEmbedForIndex: (texts: string[]) => Promise<number[][]>;
@@ -69,19 +94,16 @@ interface ElectronAPI {
   onInboxCapture: (
     callback: (payload: { url?: string; title?: string; error?: string }) => void,
   ) => () => void;
-  readFile: (filePath: string) => Promise<{ path: string; content: string }>;
   checkForUpdate: () => Promise<{ version: string; downloadUrl: string } | null>;
+  downloadUpdate: () => Promise<boolean>;
   onUpdateDownloaded: (
     callback: (info: { releaseName: string; updateUrl: string }) => void,
   ) => () => void;
+  onUpdateError: (callback: (info: { message: string }) => void) => () => void;
+  onUpdateNotAvailable: (callback: () => void) => () => void;
   installUpdate: () => Promise<void>;
   openExternal: (url: string) => Promise<boolean>;
-  openLocalFile: (filePath: string) => Promise<boolean>;
-  saveFile: (filePath: string, content: string) => Promise<void>;
   getFilePath: (file: File) => string;
-  onSaveBeforeClose: (callback: () => void) => () => void;
-  notifySaveComplete: () => void;
-  setFilePath: (filePath: string) => Promise<void>;
   setAuthWindowMode: (isAuthMode: boolean) => Promise<boolean>;
   startOAuth: (authUrl: string) => Promise<string>;
   cancelOAuth: () => Promise<void>;
@@ -97,15 +119,38 @@ interface ElectronAPI {
     recordId: string,
     value: unknown,
   ) => Promise<void>;
+  localDbApplyMemoSyncResult: (
+    ownerId: string | null,
+    memoId: string,
+    expectedLocalContent: string,
+    value: unknown,
+  ) => Promise<boolean>;
+  localDbPatchMemoSyncBase: (
+    ownerId: string | null,
+    memoId: string,
+    syncedContent: string,
+    syncedContentHash: string | null,
+  ) => Promise<unknown | null>;
+  localDbRestoreMemoSnapshotAfterPull: (
+    ownerId: string | null,
+    memoId: string,
+    value: unknown,
+  ) => Promise<void>;
   localDbDelete: (
     ownerId: string | null,
     recordType: string,
     recordId: string,
   ) => Promise<void>;
+  localDbClearOwner: (ownerId: string | null) => Promise<void>;
+  localDbDeleteInboxPendingIfNotDeleted: (
+    ownerId: string | null,
+    recordId: string,
+  ) => Promise<boolean>;
   localDbReplaceSynced: (
     ownerId: string | null,
     recordType: string,
     values: unknown[],
+    preserveIds?: string[],
   ) => Promise<unknown[]>;
   localDbMigrate: (ownerId: string | null, datasets: unknown) => Promise<void>;
   localDbMemoVectorState: (
@@ -220,6 +265,7 @@ interface ElectronAPI {
   restoreLocalData: (filePath: string) => Promise<void>;
   exportJson: (name: string, value: unknown) => Promise<string | null>;
   exportMarkdown: (name: string, content: string) => Promise<string | null>;
+  copyText: (text: string) => Promise<boolean>;
 }
 
 interface Window {

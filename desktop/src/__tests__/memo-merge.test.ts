@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeMemoContent } from '../lib/mergeMemo';
+import {
+  mergeMemoContent,
+  rebaseEditorChangeOntoCanonical,
+} from '../lib/mergeMemo';
 
 const BASE = '부산 여행 계획\n첫날은 광안리 산책\n둘째날은 돼지국밥';
 
@@ -29,5 +32,24 @@ describe('mergeMemoContent (3-way merge)', () => {
       '서버에서도 전부 다시 작성했습니다. 접점이 전혀 없는 내용입니다.',
     );
     expect(merged.ok).toBe(false);
+  });
+});
+
+describe('rebaseEditorChangeOntoCanonical', () => {
+  it('keeps a remote merge when the still-open editor receives its next input', () => {
+    const previousEditor = '첫 줄\n공유 기준\n로컬 추가';
+    const nextEditor = `${previousEditor}x`;
+    const canonical = '첫 줄\n원격 추가\n공유 기준\n로컬 추가';
+
+    const rebased = rebaseEditorChangeOntoCanonical(
+      previousEditor,
+      nextEditor,
+      canonical,
+    );
+
+    expect(rebased).toEqual({
+      ok: true,
+      text: '첫 줄\n원격 추가\n공유 기준\n로컬 추가x',
+    });
   });
 });

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, inbox, maintenance, memo_chunks, network, schedule, topics
+from app.api.routes import account, health, inbox, maintenance, memo_chunks, network, schedule, topics
 from app.core.config import settings
 
 app = FastAPI(
@@ -14,8 +14,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_headers=["Authorization", "Content-Type"],
-    # PATCH: /inbox/sessions/{id}/liked — 빠지면 preflight에서 차단된다.
-    allow_methods=["GET", "PATCH", "POST", "OPTIONS"],
+    # PATCH/DELETE are used by authenticated Inbox mutations and require CORS
+    # preflight from the bundled renderer origin.
+    allow_methods=["DELETE", "GET", "PATCH", "POST", "OPTIONS"],
     allow_origins=[
         origin.strip()
         for origin in settings.cors_allow_origins.split(",")
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(account.router)
 app.include_router(topics.router)
 app.include_router(memo_chunks.router)
 app.include_router(network.router)

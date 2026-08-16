@@ -50,9 +50,15 @@ interface LocalMemoSearchApi {
 }
 
 export const LOCAL_SEARCH_EMPTY_MESSAGE = '비슷한 문장이 아직은 없네요!';
-export const LOCAL_SEARCH_ERROR_MESSAGE =
-  '로컬 검색을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const NEAR_DUPLICATE_SIMILARITY = 0.97;
+// 원인 문구는 두지 않는다 — 사용자가 할 수 있는 건 다시 시도뿐이고,
+// "로컬"은 내부 용어라 아무것도 설명하지 못한다.
+export const LOCAL_SEARCH_ERROR_MESSAGE = '검색하지 못했어요';
+
+const throwIfAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted) {
+    throw new DOMException('Local memo search cancelled.', 'AbortError');
+  }
+};
 
 export const formatLocalMemoSearchErrorMessage = (error: unknown) => {
   if (error instanceof DOMException && error.name === 'AbortError') return null;
@@ -73,6 +79,7 @@ export const searchLocalMemoChunks = async ({
   minimumSimilarity,
   ownerId,
   queryText,
+  signal,
 }: {
   api?: LocalMemoSearchApi;
   limit?: number;
@@ -80,7 +87,9 @@ export const searchLocalMemoChunks = async ({
   minimumSimilarity: number;
   ownerId: string | null;
   queryText: string;
+  signal?: AbortSignal;
 }): Promise<NetworkSearchResponse> => {
+  throwIfAborted(signal);
   const text = queryText.trim().slice(0, 1000);
   if (!text || !isMeaningfulChunk(text)) {
     return {
@@ -98,9 +107,11 @@ export const searchLocalMemoChunks = async ({
     text,
   };
   await api.localDbSetOwner(ownerId);
+  throwIfAborted(signal);
   // 질의는 대화형 extractor를 사용한다. 배경 색인용 2-thread 세션과
   // 구현체·모델·양자화는 같고, latency를 위해 스레드 제한만 적용하지 않는다.
   const [queryVector] = await api.localEmbed([text]);
+  throwIfAborted(signal);
   const candidateLimit = Math.min(10, Math.max(limit * 2, 5));
   const [memoRows, inboxRows] = await Promise.all([
     api.localDbSearchMemoVectors(
@@ -117,13 +128,8 @@ export const searchLocalMemoChunks = async ({
       minimumSimilarity,
     ),
   ]);
-  const memoResults: NetworkSearchResult[] = memoRows
-    .filter(
-      row =>
-        row.similarity <= NEAR_DUPLICATE_SIMILARITY &&
-        row.chunkText.trim() !== text,
-    )
-    .map(row => ({
+  throwIfAborted(signal);
+  const memoResults: NetworkSearchResult[] = memoRows.map(row => ({
       chunkId: row.chunkId,
       chunkText: row.chunkText,
       createdAt: null,
@@ -146,13 +152,7 @@ export const searchLocalMemoChunks = async ({
       thumbnailUrl: null,
       title: null,
     }));
-  const inboxResults: NetworkSearchResult[] = inboxRows
-    .filter(
-      row =>
-        row.similarity <= NEAR_DUPLICATE_SIMILARITY &&
-        row.chunkText.trim() !== text,
-    )
-    .map(row => ({
+  const inboxResults: NetworkSearchResult[] = inboxRows.map(row => ({
       chunkId: row.chunkId,
       chunkText: row.chunkText,
       createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,

@@ -1,17 +1,25 @@
 import { addDays, endOfWeek, format, isToday, isYesterday, startOfDay, startOfWeek } from 'date-fns';
+import { getUiDateLocale } from './uiLanguage';
 
-export const formatMemoDate = (value: string) => {
+export const formatMemoDate = (value: string, language: 'en' | 'ko' = 'ko') => {
   const date = new Date(value);
 
   if (isToday(date)) {
-    return format(date, 'a h:mm');
+    return new Intl.DateTimeFormat(getUiDateLocale(language), {
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date);
   }
 
   if (isYesterday(date)) {
-    return '어제';
+    return language === 'en' ? 'Yesterday' : '어제';
   }
 
-  return format(date, 'yyyy. M. d.');
+  return new Intl.DateTimeFormat(getUiDateLocale(language), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
 };
 
 export const formatBriefingDate = (value: string | null, fallback: string) => {

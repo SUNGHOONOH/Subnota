@@ -13,13 +13,18 @@ import {
   TopicMemoEdge,
   TopicMembership,
 } from '../../types';
-import { ForestTree } from '../../features/tree/model/treeTypes';
 import { supabase } from './client';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export const ensureProfile = async (userId: string) => {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { error } = await supabase
     .from('profiles')
-    .upsert({ id: userId }, { onConflict: 'id' });
+    .upsert(
+      timeZone ? { id: userId, time_zone: timeZone } : { id: userId },
+      { onConflict: 'id' },
+    );
 
   if (error) {
     throw error;
@@ -171,7 +176,9 @@ export const fetchMemos = async (session: Session) => {
 
   const { data, error } = await supabase
     .from('memos')
-    .select('id, content, content_hash, synced_content_hash, content_updated_at, category, is_archived, created_at, updated_at')
+    .select(
+      'id, content, content_hash, synced_content_hash, content_updated_at, conflict_of, category, is_archived, created_at, updated_at',
+    )
     .eq('user_id', session.user.id)
     .eq('is_archived', false)
     .order('updated_at', { ascending: false });
@@ -181,6 +188,23 @@ export const fetchMemos = async (session: Session) => {
   }
 
   return (data ?? []) as MemoRow[];
+};
+
+export const fetchMemoById = async (session: Session, memoId: string) => {
+  const { data, error } = await supabase
+    .from('memos')
+    .select(
+      'id, content, content_hash, synced_content_hash, content_updated_at, conflict_of, category, is_archived, created_at, updated_at',
+    )
+    .eq('user_id', session.user.id)
+    .eq('id', memoId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as MemoRow;
 };
 
 export type UpsertMemoResult =
@@ -197,16 +221,15 @@ export const upsertMemo = async (
     createdAt?: string;
     id: string;
   },
-  options?: { preserveConflictCopy?: boolean },
 ): Promise<UpsertMemoResult> => {
   const contentHash = hashText(memo.content);
   const contentUpdatedAt = memo.contentUpdatedAt ?? new Date().toISOString();
   const createdAt = memo.createdAt ?? new Date().toISOString();
 
   // Optimistic-concurrency upsert: on a concurrent edit the server keeps its
-  // version and returns 'conflict' so the caller can 3-way merge and re-push
-  // (see pushMemoMerging). Only the explicit fallback asks the server to
-  // preserve ours as a conflict copy.
+  // version and returns 'conflict' so the caller can 3-way merge and re-push.
+  // Visible server-side conflict copies are intentionally disabled; the sync
+  // layer stores a deterministic hidden recovery record locally instead.
   const { data, error } = await supabase.rpc('upsert_memo_if_base_hash', {
     p_id: memo.id,
     p_base_hash: memo.baseHash ?? null,
@@ -215,7 +238,7 @@ export const upsertMemo = async (
     p_category: getMemoCategory(memo.category),
     p_content_updated_at: contentUpdatedAt,
     p_created_at: createdAt,
-    p_preserve_conflict_copy: options?.preserveConflictCopy ?? false,
+    p_preserve_conflict_copy: false,
   });
 
   if (error) {
@@ -250,7 +273,10 @@ export const upsertMemo = async (
     updated_at: contentUpdatedAt,
   };
 
-  return { memo: row, status: result.status as 'conflict' | 'inserted' | 'updated' };
+  return {
+    memo: row,
+    status: result.status as 'conflict' | 'inserted' | 'updated',
+  };
 };
 
 export const archiveMemo = async (session: Session, memoId: string) => {
@@ -269,7 +295,7 @@ export const fetchCalendarBlocks = async (session: Session) => {
   const { data, error } = await supabase
     .from('calendar_blocks')
     .select(
-      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, completed_at, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, category_id, is_completed, completed_at, created_at, updated_at',
     )
     .eq('user_id', session.user.id)
     .order('start_date', { ascending: true });
@@ -294,6 +320,7 @@ export const upsertCalendarBlock = async (
   session: Session,
   block: {
     allDay: boolean;
+    categoryId?: string | null;
     color: string;
     completedAt?: string | null;
     endDate?: string | null;
@@ -314,19 +341,22 @@ export const upsertCalendarBlock = async (
         title: block.title.trim() || '새 일정',
         note: block.note,
         start_date: block.startDate,
-        end_date: block.allDay ? null : block.endDate ?? null,
+        end_date: block.allDay ? null : (block.endDate ?? null),
         all_day: block.allDay,
-        all_day_date: block.allDay ? toLocalCalendarDate(block.startDate) : null,
+        all_day_date: block.allDay
+          ? toLocalCalendarDate(block.startDate)
+          : null,
         time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         order: block.order ?? 0,
         color: block.color,
+        category_id: block.categoryId ?? null,
         is_completed: block.isCompleted ?? false,
         completed_at: block.completedAt ?? null,
       },
       { onConflict: 'id' },
     )
     .select(
-      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, is_completed, completed_at, created_at, updated_at',
+      'id, title, note, start_date, end_date, all_day, all_day_date, time_zone, order, color, category_id, is_completed, completed_at, created_at, updated_at',
     )
     .single();
 
@@ -337,7 +367,10 @@ export const upsertCalendarBlock = async (
   return data as CalendarBlockRow;
 };
 
-export const deleteCalendarBlock = async (session: Session, blockId: string) => {
+export const deleteCalendarBlock = async (
+  session: Session,
+  blockId: string,
+) => {
   const { error } = await supabase
     .from('calendar_blocks')
     .delete()
@@ -353,7 +386,12 @@ export const deleteCalendarBlock = async (session: Session, blockId: string) => 
 // insert a no-op when the unique (user, block) / (user, day) key already exists.
 export const recordActivityCompletion = async (
   session: Session,
-  record: { calendar_block_id: string; completed_at: string; id: string; local_date: string },
+  record: {
+    calendar_block_id: string;
+    completed_at: string;
+    id: string;
+    local_date: string;
+  },
 ) => {
   const { error } = await supabase.from('activity_completions').upsert(
     {
@@ -373,7 +411,12 @@ export const recordActivityCompletion = async (
 
 export const recordDailyCompletion = async (
   session: Session,
-  record: { completed_at: string; id: string; local_date: string; todo_count: number },
+  record: {
+    completed_at: string;
+    id: string;
+    local_date: string;
+    todo_count: number;
+  },
 ) => {
   const { error } = await supabase.from('daily_completions').upsert(
     {
@@ -384,41 +427,6 @@ export const recordDailyCompletion = async (
       todo_count: record.todo_count,
     },
     { onConflict: 'user_id,local_date', ignoreDuplicates: true },
-  );
-
-  if (error) {
-    throw error;
-  }
-};
-
-export const fetchTrees = async (session: Session): Promise<ForestTree[]> => {
-  const { data, error } = await supabase
-    .from('trees')
-    .select('id, generation, planted_at, final_params, completed_todo_count, completed_day_count')
-    .eq('user_id', session.user.id)
-    .order('generation', { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []) as ForestTree[];
-};
-
-// Planting is a single idempotent insert: unique(user_id, generation) makes a
-// double-plant a no-op, so it is atomic without a multi-step RPC.
-export const recordPlantedTree = async (session: Session, tree: ForestTree) => {
-  const { error } = await supabase.from('trees').upsert(
-    {
-      id: tree.id,
-      user_id: session.user.id,
-      generation: tree.generation,
-      planted_at: tree.planted_at,
-      final_params: tree.final_params,
-      completed_todo_count: tree.completed_todo_count,
-      completed_day_count: tree.completed_day_count,
-    },
-    { onConflict: 'user_id,generation', ignoreDuplicates: true },
   );
 
   if (error) {
@@ -449,6 +457,13 @@ export const updateScheduleInboxStatus = async (
   id: string,
   status: 'accepted' | 'dismissed',
 ) => {
+  // `schedule_inbox.id` is a Postgres uuid. Invalid local/test rows can exist
+  // in the action outbox after development data was inserted; sending them to
+  // PostgREST produces a permanent 22P02/400 that is retried forever.
+  if (!UUID_RE.test(id)) {
+    return;
+  }
+
   const { error } = await supabase
     .from('schedule_inbox')
     .update({ status })
@@ -467,6 +482,7 @@ interface TopicClusterRow {
   label: string;
   memo_count: number | null;
   representative_memo_ids: string[] | null;
+  updated_at: string | null;
 }
 
 interface TopicMembershipRow {
@@ -503,10 +519,14 @@ interface TopicMemoInboxEdgeRow {
   topic_id: string;
 }
 
-export const fetchTopicMap = async (session: Session): Promise<TopicMapData> => {
+export const fetchTopicMap = async (
+  session: Session,
+): Promise<TopicMapData> => {
   const { data: clusterData, error: clusterError } = await supabase
     .from('topic_clusters')
-    .select('id, label, keywords, representative_memo_ids, memo_count, confidence')
+    .select(
+      'id, label, keywords, representative_memo_ids, memo_count, confidence, updated_at',
+    )
     .eq('user_id', session.user.id)
     .order('memo_count', { ascending: false });
 
@@ -525,66 +545,95 @@ export const fetchTopicMap = async (session: Session): Promise<TopicMapData> => 
   const edgeResult = await supabase
     .from('topic_memo_edges')
     .select('topic_id, source_memo_id, target_memo_id, similarity');
-  const edgeData = edgeResult.error ? [] : edgeResult.data ?? [];
+  const edgeData = edgeResult.error ? [] : (edgeResult.data ?? []);
   // Tolerate a missing table so the app keeps working pre-migration.
   const inboxItemResult = await supabase
     .from('topic_cluster_inbox_items')
     .select('topic_id, inbox_session_id, score');
-  const inboxItemData = inboxItemResult.error ? [] : inboxItemResult.data ?? [];
+  const inboxItemData = inboxItemResult.error
+    ? []
+    : (inboxItemResult.data ?? []);
   const inboxEdgeResult = await supabase
     .from('topic_memo_inbox_edges')
     .select('topic_id, memo_id, inbox_session_id, similarity');
-  const inboxEdgeData = inboxEdgeResult.error ? [] : inboxEdgeResult.data ?? [];
+  const inboxEdgeData = inboxEdgeResult.error
+    ? []
+    : (inboxEdgeResult.data ?? []);
   const globalEdgeResult = await supabase
     .from('memo_similarity_edges')
-    .select('source_memo_id, target_memo_id, source_topic_id, target_topic_id, similarity');
-  const globalEdgeData = globalEdgeResult.error ? [] : globalEdgeResult.data ?? [];
+    .select(
+      'source_memo_id, target_memo_id, source_topic_id, target_topic_id, similarity',
+    );
+  const globalEdgeData = globalEdgeResult.error
+    ? []
+    : (globalEdgeResult.data ?? []);
 
-  const clusters: TopicCluster[] = ((clusterData ?? []) as TopicClusterRow[]).map(
-    row => ({
-      confidence: row.confidence,
-      id: row.id,
-      keywords: row.keywords ?? [],
-      label: row.label,
-      memoCount: row.memo_count ?? 0,
-      representativeMemoIds: row.representative_memo_ids ?? [],
-    }),
-  );
+  const clusters: TopicCluster[] = (
+    (clusterData ?? []) as TopicClusterRow[]
+  ).map((row) => ({
+    confidence: row.confidence,
+    id: row.id,
+    keywords: row.keywords ?? [],
+    label: row.label,
+    memoCount: row.memo_count ?? 0,
+    representativeMemoIds: row.representative_memo_ids ?? [],
+  }));
   const memberships: TopicMembership[] = (
     (membershipData ?? []) as TopicMembershipRow[]
-  ).map(row => ({
+  ).map((row) => ({
     memoId: row.memo_id,
     score: row.score,
     topicId: row.topic_id,
   }));
-  const edges: TopicMemoEdge[] = (edgeData as TopicMemoEdgeRow[]).map(row => ({
-    similarity: row.similarity,
-    sourceMemoId: row.source_memo_id,
-    targetMemoId: row.target_memo_id,
-    topicId: row.topic_id,
-  }));
-  const globalEdges = (globalEdgeData as MemoSimilarityEdgeRow[]).map(row => ({
-    similarity: row.similarity,
-    sourceMemoId: row.source_memo_id,
-    sourceTopicId: row.source_topic_id,
-    targetMemoId: row.target_memo_id,
-    targetTopicId: row.target_topic_id,
-  }));
+  const edges: TopicMemoEdge[] = (edgeData as TopicMemoEdgeRow[]).map(
+    (row) => ({
+      similarity: row.similarity,
+      sourceMemoId: row.source_memo_id,
+      targetMemoId: row.target_memo_id,
+      topicId: row.topic_id,
+    }),
+  );
+  const globalEdges = (globalEdgeData as MemoSimilarityEdgeRow[]).map(
+    (row) => ({
+      similarity: row.similarity,
+      sourceMemoId: row.source_memo_id,
+      sourceTopicId: row.source_topic_id,
+      targetMemoId: row.target_memo_id,
+      targetTopicId: row.target_topic_id,
+    }),
+  );
   const inboxMemberships: TopicInboxMembership[] = (
     inboxItemData as TopicInboxItemRow[]
-  ).map(row => ({
+  ).map((row) => ({
     inboxSessionId: row.inbox_session_id,
     score: row.score,
     topicId: row.topic_id,
   }));
   const inboxEdges: TopicMemoInboxEdge[] = (
     inboxEdgeData as TopicMemoInboxEdgeRow[]
-  ).map(row => ({
+  ).map((row) => ({
     inboxSessionId: row.inbox_session_id,
     memoId: row.memo_id,
     similarity: row.similarity,
     topicId: row.topic_id,
   }));
 
-  return { clusters, edges, globalEdges, inboxEdges, inboxMemberships, memberships };
+  const updatedAt = ((clusterData ?? []) as TopicClusterRow[]).reduce<
+    string | null
+  >((latest, row) => {
+    if (!row.updated_at) {
+      return latest;
+    }
+    return !latest || row.updated_at > latest ? row.updated_at : latest;
+  }, null);
+
+  return {
+    clusters,
+    edges,
+    globalEdges,
+    inboxEdges,
+    inboxMemberships,
+    memberships,
+    updatedAt,
+  };
 };

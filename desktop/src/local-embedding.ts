@@ -19,14 +19,26 @@ import { app, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+  downloadWeightsResumable,
+  fileMatchesExpectedModel,
+  freeDiskBytes,
+} from './local-embedding-download';
+
 const MODEL_REPO = 'Xenova/bge-m3';
+const MODEL_REVISION = '4de13258303883538bd53b696b452bf8099f0858';
 const MODEL_DTYPE = 'q8';
 // Xenova/bge-m3 = BAAI/bge-m3의 ONNX 변환판. dtype q8은 onnx/model_quantized.onnx.
 // 로컬 인덱스 무효화 판정에 쓰므로 실제 모델·엔진·양자화에서 값을 만든다.
 // 이 값이 바뀌면 기존 로컬 벡터는 버리고 다시 색인해야 한다.
-export const EMBEDDING_MODEL_ID = `${MODEL_REPO}@onnx-${MODEL_DTYPE}`;
+export const EMBEDDING_MODEL_ID = `${MODEL_REPO}@${MODEL_REVISION}:onnx-${MODEL_DTYPE}`;
 const MODEL_WEIGHTS = 'onnx/model_quantized.onnx';
-const MODEL_BYTES = 569_694_530; // 진행률 표시용. 실제 값은 progress 이벤트로 대체된다.
+const MODEL_BYTES = 569_694_530;
+const MODEL_SHA256 = '0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d';
+const WEIGHTS_URL = `https://huggingface.co/${MODEL_REPO}/resolve/${MODEL_REVISION}/${MODEL_WEIGHTS}`;
+// 가중치 + 토크나이저·설정 + 여유. 부족하면 받기 전에 막는다 — 570MB를 받다
+// 실패하는 것보다 시작 전에 알려 주는 편이 낫다.
+const REQUIRED_DISK_BYTES = MODEL_BYTES + 200_000_000;
 export const EMBEDDING_VECTOR_DIMENSIONS = 1024;
 
 export interface LocalEmbeddingStatus {
@@ -39,7 +51,15 @@ export interface LocalEmbeddingStatus {
 }
 
 const cacheDirectory = () => path.join(app.getPath('userData'), 'models');
-const weightsPath = () => path.join(cacheDirectory(), MODEL_REPO, MODEL_WEIGHTS);
+// Transformers.js의 FileCache는 main이 아닌 revision을 캐시 키 경로에 넣는다.
+// 전용 다운로더도 같은 위치에 써야 검증한 파일을 pipeline이 그대로 사용한다.
+const weightsPath = () =>
+  path.join(cacheDirectory(), MODEL_REPO, MODEL_REVISION, MODEL_WEIGHTS);
+const partialWeightsPath = () => `${weightsPath()}.part`;
+// revision 고정 전 버전이 사용하던 캐시 위치. 파일 내용이 현재 pinned
+// revision과 일치할 때만 새 위치로 옮겨 재다운로드를 피한다.
+const legacyWeightsPath = () =>
+  path.join(cacheDirectory(), MODEL_REPO, MODEL_WEIGHTS);
 
 let status: LocalEmbeddingStatus = {
   downloadedBytes: 0,
@@ -60,11 +80,17 @@ const currentStatus = (): LocalEmbeddingStatus => {
   if (!inspectedDisk && status.state === 'absent') {
     inspectedDisk = true;
     try {
-      if (fs.existsSync(weightsPath())) {
+      const candidate = fs.existsSync(weightsPath())
+        ? weightsPath()
+        : fs.existsSync(legacyWeightsPath())
+          ? legacyWeightsPath()
+          : null;
+      if (candidate) {
+        const downloadedBytes = fs.statSync(candidate).size;
         setStatus({
-          downloadedBytes: fs.statSync(weightsPath()).size,
-          ready: true,
-          state: 'ready',
+          downloadedBytes,
+          ready: downloadedBytes === MODEL_BYTES,
+          state: downloadedBytes === MODEL_BYTES ? 'ready' : 'absent',
         });
       }
     } catch {
@@ -76,8 +102,8 @@ const currentStatus = (): LocalEmbeddingStatus => {
 };
 
 // ── 모델 로딩 ────────────────────────────────────────────────────────────
-// Transformers.js가 다운로드와 캐시를 모두 처리한다. 부분 파일 관리도
-// 라이브러리 몫이라 우리가 따로 할 일이 없다.
+// 큰 가중치는 revision·크기·SHA-256을 고정한 전용 이어받기 경로로 확보하고,
+// 토크나이저와 설정 같은 작은 파일만 Transformers.js 캐시에 맡긴다.
 type Extractor = (
   text: string,
   options: { pooling: 'cls'; normalize: boolean },
@@ -88,15 +114,92 @@ type DisposableExtractor = Extractor & { dispose: () => Promise<void> };
 let interactiveExtractorPromise: Promise<DisposableExtractor> | null = null;
 let indexExtractorPromise: Promise<DisposableExtractor> | null = null;
 let indexEmbeddingQueue: Promise<void> = Promise.resolve();
+let modelDownloadPromise: Promise<LocalEmbeddingStatus> | null = null;
+let weightsVerified = false;
+
+const ensureWeights = async (
+  onProgress: (progress: { downloadedBytes: number; totalBytes: number }) => void,
+  allowDownload = true,
+) => {
+  if (weightsVerified && fs.existsSync(weightsPath())) {
+    fs.rmSync(partialWeightsPath(), { force: true });
+    return;
+  }
+  if (fs.existsSync(weightsPath())) {
+    const current = await fileMatchesExpectedModel(
+      weightsPath(),
+      MODEL_BYTES,
+      MODEL_SHA256,
+    );
+    if (current) {
+      fs.rmSync(partialWeightsPath(), { force: true });
+      weightsVerified = true;
+      return;
+    }
+    if (!allowDownload) {
+      throw new Error('검색 준비 파일을 먼저 내려받아 주세요.');
+    }
+  }
+  if (!fs.existsSync(weightsPath()) && fs.existsSync(legacyWeightsPath())) {
+    const legacyIsCurrent = await fileMatchesExpectedModel(
+      legacyWeightsPath(),
+      MODEL_BYTES,
+      MODEL_SHA256,
+    );
+    if (legacyIsCurrent) {
+      fs.mkdirSync(path.dirname(weightsPath()), { recursive: true });
+      fs.renameSync(legacyWeightsPath(), weightsPath());
+      fs.rmSync(partialWeightsPath(), { force: true });
+      weightsVerified = true;
+      return;
+    }
+  }
+  if (!allowDownload) {
+    throw new Error('검색 준비 파일을 먼저 내려받아 주세요.');
+  }
+  if (!fs.existsSync(weightsPath())) {
+    const { freeBytes, requiredBytes } = diskSpaceForModel();
+    if (freeBytes !== null && freeBytes < requiredBytes) {
+      const shortfall = Math.ceil((requiredBytes - freeBytes) / 1_000_000);
+      throw new Error(`저장 공간이 ${shortfall}MB 부족합니다.`);
+    }
+  }
+  await downloadWeightsResumable({
+    expectedBytes: MODEL_BYTES,
+    expectedSha256: MODEL_SHA256,
+    onProgress,
+    targetPath: weightsPath(),
+    url: WEIGHTS_URL,
+  });
+  fs.rmSync(partialWeightsPath(), { force: true });
+  weightsVerified = true;
+};
 
 const loadExtractor = async (
   mode: 'index' | 'interactive',
+  allowDownload = true,
 ): Promise<DisposableExtractor> => {
-  const alreadyOnDisk = fs.existsSync(weightsPath());
+  const alreadyOnDisk =
+    fs.existsSync(weightsPath()) || fs.existsSync(legacyWeightsPath());
   setStatus({
     ready: false,
     state: alreadyOnDisk ? 'loading' : 'downloading',
     error: undefined,
+  });
+
+  await ensureWeights(
+    ({ downloadedBytes, totalBytes }) =>
+      setStatus({ downloadedBytes, totalBytes: totalBytes || MODEL_BYTES }),
+    allowDownload,
+  );
+  // 가중치가 끝난 뒤 Transformers.js가 받는 tokenizer/config 파일의
+  // 진행률은 570MB 가중치와 다른 작업이다. 그 값을 같은 바이트 카운터에
+  // 쓰면 완료 직후 진행률이 0으로 되돌아간 것처럼 보인다.
+  setStatus({
+    downloadedBytes: MODEL_BYTES,
+    totalBytes: MODEL_BYTES,
+    ready: false,
+    state: 'loading',
   });
 
   // ESM 전용이라 동적 import로 가져온다. vite.main.config.ts에서 external로
@@ -105,31 +208,18 @@ const loadExtractor = async (
   env.cacheDir = cacheDirectory();
   env.allowLocalModels = false; // 저장소 경로가 아니라 HF Hub에서만 받는다
 
-  // 여러 파일(가중치·토크나이저)이 병렬로 내려오므로 파일별 진행률을 합산한다.
-  const progress = new Map<string, { loaded: number; total: number }>();
+  // 가중치 진행률과 보조 파일 진행률은 서로 다른 단위라 합산하지 않는다.
+  // 보조 파일 진행률을 같은 카운터에 쓰면 모델 다운로드가 끝난 뒤 0부터
+  // 다시 시작하는 것처럼 표시된다. 이 단계는 loading 상태로만 표시한다.
   const extract = await pipeline('feature-extraction', MODEL_REPO, {
     dtype: MODEL_DTYPE,
+    revision: MODEL_REVISION,
     // 세션 옵션은 생성 시 고정된다. CPU를 오래 점유하는 색인 세션만
     // 2개 스레드로 제한하고, 커서 질의용 세션은 ORT 기본값을 유지한다.
     ...(mode === 'index'
       ? { session_options: { intraOpNumThreads: 2 } }
       : {}),
-    progress_callback: (event: {
-      file?: string;
-      loaded?: number;
-      status?: string;
-      total?: number;
-    }) => {
-      if (event.status !== 'progress' || !event.file) return;
-      progress.set(event.file, { loaded: event.loaded ?? 0, total: event.total ?? 0 });
-      let loaded = 0;
-      let total = 0;
-      for (const entry of progress.values()) {
-        loaded += entry.loaded;
-        total += entry.total;
-      }
-      setStatus({ downloadedBytes: loaded, totalBytes: total || MODEL_BYTES });
-    },
+    progress_callback: () => undefined,
   });
 
   setStatus({ state: 'ready', ready: true });
@@ -138,12 +228,13 @@ const loadExtractor = async (
 
 const ensureExtractor = (
   mode: 'index' | 'interactive',
+  allowDownload = true,
 ): Promise<DisposableExtractor> => {
   const current =
     mode === 'index' ? indexExtractorPromise : interactiveExtractorPromise;
   if (current) return current;
 
-  const next = loadExtractor(mode).catch(error => {
+  const next = loadExtractor(mode, allowDownload).catch(error => {
     if (mode === 'index') {
       indexExtractorPromise = null;
     } else {
@@ -161,11 +252,78 @@ const ensureExtractor = (
   return next;
 };
 
-export const ensureModel = (): Promise<DisposableExtractor> =>
-  ensureExtractor('interactive');
+/** 남은 공간과 필요한 공간. UI가 받기 전에 안내하는 데 쓴다. */
+export const diskSpaceForModel = () => ({
+  freeBytes: freeDiskBytes(cacheDirectory()),
+  requiredBytes: REQUIRED_DISK_BYTES,
+});
 
-export const ensureIndexModel = (): Promise<DisposableExtractor> =>
-  ensureExtractor('index');
+/**
+ * 모델을 내려받기만 한다(추론 세션은 만들지 않는다). 관문에서 부르는 경로라
+ * 진행률을 상태에 계속 반영하고, 큰 가중치는 이어받기로 처리한다.
+ */
+export const downloadModel = (): Promise<LocalEmbeddingStatus> => {
+  if (modelDownloadPromise) return modelDownloadPromise;
+
+  const next = (async () => {
+    setStatus({ downloadedBytes: 0, ready: false, state: 'downloading', error: undefined });
+    try {
+      await ensureWeights(({ downloadedBytes, totalBytes }) =>
+        setStatus({ downloadedBytes, totalBytes: totalBytes || MODEL_BYTES }),
+      );
+      // 토크나이저·설정 등 작은 파일은 Transformers.js가 채운다.
+      await ensureExtractor('interactive');
+    } catch (error) {
+      setStatus({
+        state: 'failed',
+        error: error instanceof Error ? error.message : '모델을 받지 못했습니다.',
+      });
+    }
+    return status;
+  })();
+  modelDownloadPromise = next;
+  void next.finally(() => {
+    if (modelDownloadPromise === next) modelDownloadPromise = null;
+  });
+  return next;
+};
+
+/** 모델 파일을 지워 공간을 되찾는다. 다음 사용 때 다시 받는다. */
+export const deleteModel = async (): Promise<LocalEmbeddingStatus> => {
+  await releaseIndexModel();
+  interactiveExtractorPromise = null;
+  indexExtractorPromise = null;
+  fs.rmSync(path.join(cacheDirectory(), MODEL_REPO), {
+    force: true,
+    recursive: true,
+  });
+  weightsVerified = false;
+  inspectedDisk = true;
+  setStatus({
+    downloadedBytes: 0,
+    ready: false,
+    state: 'absent',
+    totalBytes: MODEL_BYTES,
+    error: undefined,
+  });
+  return status;
+};
+
+const requireDownloadedModel = () => {
+  if (!currentStatus().ready) {
+    throw new Error('검색 준비 파일을 먼저 내려받아 주세요.');
+  }
+};
+
+export const ensureModel = (): Promise<DisposableExtractor> => {
+  requireDownloadedModel();
+  return ensureExtractor('interactive', false);
+};
+
+export const ensureIndexModel = (): Promise<DisposableExtractor> => {
+  requireDownloadedModel();
+  return ensureExtractor('index', false);
+};
 
 const embedWith = async (
   texts: string[],
@@ -244,6 +402,21 @@ ipcMain.handle('local-embed:ensure-model', async (event) => {
   assertTrustedSender(event);
   await ensureModel();
   return status;
+});
+
+ipcMain.handle('local-embed:download-model', async event => {
+  assertTrustedSender(event);
+  return downloadModel();
+});
+
+ipcMain.handle('local-embed:delete-model', async event => {
+  assertTrustedSender(event);
+  return deleteModel();
+});
+
+ipcMain.handle('local-embed:disk-space', event => {
+  assertTrustedSender(event);
+  return diskSpaceForModel();
 });
 
 ipcMain.handle('local-embed:embed', async (event, texts: unknown) => {

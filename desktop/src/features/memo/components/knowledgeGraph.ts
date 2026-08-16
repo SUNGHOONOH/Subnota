@@ -39,13 +39,63 @@ export interface KnowledgeGraphEdge {
   weight?: number;
 }
 
+/**
+ * 그래프는 데이터다. 그래서 노드는 브랜드색이 아니라 초록 계열이다 —
+ * 브랜드색을 여기 쓰면 "관련 있는 메모"와 "여기를 누르라"가 같은 색이 된다.
+ *
+ * 값은 로고 잎의 말라카이트(#0b6e4f)와 캘린더 기본색(#66705A)의 중간이다.
+ * 로고 쪽만 쓰면 캘린더와 남남이 되고, 캘린더 쪽만 쓰면 올리브라 흰 캔버스
+ * 위에서 노드가 묻힌다. 두 초록을 잇는 자리라 가운데를 쓴다.
+ *
+ * Sigma에 넘기는 값이라 CSS 변수를 못 쓰고 리터럴로 둔다. 세 값이 갈라지지
+ * 않도록 바꿀 때는 `_color-tokens.scss`의 두 원본을 같이 확인할 것.
+ */
+export const GRAPH_NODE_COLOR = '#396f55';
+
 export const GRAPH_COLORS = {
   active: '#1d1d1f',
-  activeEdge: '#cc785c',
+  activeEdge: GRAPH_NODE_COLOR,
   defaultEdge: '#e6e3dd',
-  defaultNode: '#cc785c',
+  defaultNode: GRAPH_NODE_COLOR,
   mutedNode: '#c7c3bb',
 } as const;
+
+/** 수집함에서 온 노드. 메모(초록)와 구분되는 중립 회청색. */
+export const GRAPH_INBOX_NODE = '#6d7185';
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+// A surrounding-memo map needs an absolute floor so a weak search result
+// cannot masquerade as a strong match. Within that truthful range, give the
+// local ranking a modest lift: otherwise 100% and 52% occupy nearly the same
+// visual weight in a small result set.
+export const getSimilarityMapGeometry = (
+  similarity: number,
+  lowestSimilarity: number,
+  highestSimilarity: number,
+  minimumSimilarity: number,
+) => {
+  const score = clamp(similarity, 0, 1);
+  const absoluteWeight = clamp(
+    (score - minimumSimilarity) / (1 - minimumSimilarity),
+    0,
+    1,
+  );
+  const span = Math.max(highestSimilarity - lowestSimilarity, 0);
+  const relativeWeight =
+    span >= 0.08 ? clamp((score - lowestSimilarity) / span, 0, 1) : absoluteWeight;
+  const visualWeight = clamp(
+    absoluteWeight + relativeWeight * (1 - absoluteWeight) * 0.35,
+    0,
+    1,
+  );
+
+  return {
+    distance: 1.35 - visualWeight * 0.95,
+    size: 7.5 + visualWeight * 15.5,
+  };
+};
 
 const normalizeWeight = (weight?: number) => {
   if (!Number.isFinite(weight)) {
@@ -245,6 +295,7 @@ export const capIntraTopicEdges = <T extends MemoEdgeLike>(
 
 type GetActiveId = () => string | null | undefined;
 type GetHoveredId = () => string | null | undefined;
+type GetFocusedTopicId = () => string | null | undefined;
 
 const getStringAttribute = (data: Record<string, unknown>, key: string) =>
   typeof data[key] === 'string' ? data[key] : null;
@@ -255,6 +306,12 @@ const isNodeRelatedToHovered = (
   data: Record<string, unknown>,
   hovered: string,
 ) => {
+  // An edge-less similarity map uses spatial distance, not graph adjacency.
+  // Keep every point legible while a result is hovered.
+  if (graph.size === 0) {
+    return true;
+  }
+
   if (node === hovered || !graph.hasNode(hovered)) {
     return true;
   }
@@ -273,8 +330,25 @@ const isNodeRelatedToHovered = (
 // Sigma nodeReducer: highlight the active node without mutating the graph, so a
 // selection change is a cheap refresh() rather than a renderer rebuild.
 export const createNodeReducer =
-  (graph: Graph, getActiveId: GetActiveId, getHoveredId: GetHoveredId = () => null) =>
+  (
+    graph: Graph,
+    getActiveId: GetActiveId,
+    getHoveredId: GetHoveredId = () => null,
+    getFocusedTopicId: GetFocusedTopicId = () => null,
+  ) =>
   (node: string, data: Record<string, unknown>): Record<string, unknown> => {
+    const focusedTopicId = getFocusedTopicId();
+    const nodeTopicId = getStringAttribute(data, 'topicId');
+    if (focusedTopicId && nodeTopicId !== focusedTopicId) {
+      return {
+        ...data,
+        color: GRAPH_COLORS.mutedNode,
+        forceLabel: false,
+        size: Math.max((typeof data.size === 'number' ? data.size : 8) - 1, 3),
+        zIndex: 0,
+      };
+    }
+
     const active = getActiveId();
     if (node === active) {
       return {
@@ -310,8 +384,28 @@ export const createNodeReducer =
 
 // Sigma edgeReducer: highlight edges touching the active node.
 export const createEdgeReducer =
-  (graph: Graph, getActiveId: GetActiveId, getHoveredId: GetHoveredId = () => null) =>
+  (
+    graph: Graph,
+    getActiveId: GetActiveId,
+    getHoveredId: GetHoveredId = () => null,
+    getFocusedTopicId: GetFocusedTopicId = () => null,
+  ) =>
   (edge: string, data: Record<string, unknown>): Record<string, unknown> => {
+    const focusedTopicId = getFocusedTopicId();
+    if (focusedTopicId) {
+      const sourceTopicId = getStringAttribute(
+        graph.getNodeAttributes(graph.source(edge)) as Record<string, unknown>,
+        'topicId',
+      );
+      const targetTopicId = getStringAttribute(
+        graph.getNodeAttributes(graph.target(edge)) as Record<string, unknown>,
+        'topicId',
+      );
+      if (sourceTopicId !== focusedTopicId || targetTopicId !== focusedTopicId) {
+        return { ...data, color: GRAPH_COLORS.defaultEdge, size: 0.35, zIndex: 0 };
+      }
+    }
+
     const active = getActiveId();
     const source = graph.source(edge);
     const target = graph.target(edge);

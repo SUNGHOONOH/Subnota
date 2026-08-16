@@ -1,16 +1,17 @@
 import type { MantineColorsTuple } from '@mantine/core';
 
+/** 잉크 블루. `_color-tokens.scss`의 `--app-color-brand-*`와 같은 값이다. */
 export const desktopBrandColors: MantineColorsTuple = [
-  '#fdf4f0',
-  '#f8e4da',
-  '#f3b9a6',
-  '#e98a6d',
-  '#dc6343',
-  '#cc4929',
-  '#bf3f22',
-  '#9f321b',
-  '#7f2817',
-  '#5b1c10',
+  '#eff6ff',
+  '#deecff',
+  '#bfd8ff',
+  '#94b6f5',
+  '#6388cd',
+  '#325496',
+  '#254582',
+  '#1b376b',
+  '#142b55',
+  '#0f2040',
 ];
 
 export const desktopColorTokens = {
@@ -30,5 +31,7 @@ export const desktopColorTokens = {
     canvas: '#fdfdfb',
     ink: '#141413',
     hairline: '#E6DFD8',
+    /* 종이 사이드바. `--app-color-chrome-bg`와 같은 값. */
+    chrome: '#f3f1e9',
   },
 };

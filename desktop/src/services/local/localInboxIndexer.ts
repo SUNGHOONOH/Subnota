@@ -1,7 +1,7 @@
 import { hashText } from '../../lib/contentHash';
 import type { InboxSession } from '../backend/inboxService';
 
-const LOCAL_INBOX_INDEX_DEBOUNCE_MS = 2_000;
+const LOCAL_INBOX_INDEX_DEBOUNCE_MS = 5_000;
 
 interface LocalInboxVectorState {
   inboxSessionId: string;

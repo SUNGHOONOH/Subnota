@@ -9,10 +9,13 @@ import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button
 import { Button } from "@/components/tiptap-ui-primitive/button/button"
 import { ClipboardCopyIcon } from "@/components/tiptap-icons/clipboard-copy-icon"
 import { CheckIcon } from "@/components/tiptap-icons/check-icon"
+import { copyTextToClipboard } from "@/lib/copy-code"
 
 export interface CopyMarkdownButtonProps extends ButtonProps {
   editor?: Editor | null
 }
+
+type MarkdownEditor = Editor & { getMarkdown: () => string }
 
 export const CopyMarkdownButton = forwardRef<
   HTMLButtonElement,
@@ -27,8 +30,9 @@ export const CopyMarkdownButton = forwardRef<
         onClick?.(event)
         if (event.defaultPrevented || !editor) return
 
-        const markdown = (editor as any).getMarkdown() as string
-        await navigator.clipboard.writeText(markdown)
+        const markdown = (editor as MarkdownEditor).getMarkdown()
+        const copied = await copyTextToClipboard(markdown)
+        if (!copied) return
 
         setCopied(true)
         clearTimeout(timeoutRef.current)

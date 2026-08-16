@@ -5,7 +5,7 @@ import {
   blocksForLocalDate,
   getLocalDateString,
   isDayComplete,
-} from '../features/tree/model/dayCompletion';
+} from '../features/report/dayCompletion';
 import { CalendarBlockRow } from '../types';
 
 const block = (over: Partial<CalendarBlockRow>): CalendarBlockRow => ({

@@ -95,4 +95,19 @@ describe('global search', () => {
       'memo:memo-1',
     ]);
   });
+
+  it('does not crash when a refresh briefly supplies the same item twice', () => {
+    const items = buildGlobalSearchItems({
+      calendarBlocks: [],
+      inboxItems: [inboxItem, inboxItem],
+      memos: [],
+      scheduleInbox: [],
+      topicClusters: [],
+    });
+
+    const catalog = buildGlobalSearchCatalog(items);
+    expect(catalog.search('사이드바').map(item => item.key)).toEqual([
+      'inbox:inbox-1',
+    ]);
+  });
 });

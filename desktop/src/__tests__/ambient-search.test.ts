@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -37,11 +39,12 @@ describe('createAmbientSearchRunner', () => {
 
     expect(started).toBe(true);
     expect(search).toHaveBeenCalledTimes(1);
-    expect(search).toHaveBeenCalledWith({
+    expect(search.mock.calls[0]?.[0]).toEqual({
       editorId: 'editor-1',
       memoId: 'memo-1',
       queryText: '버튼 클릭 시점의 문장입니다',
     });
+    expect(search.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);
   });
 
   it('검색 중 재클릭해도 추가 요청이 발생하지 않는다', async () => {
@@ -96,22 +99,70 @@ describe('createAmbientSearchRunner', () => {
     );
   });
 
-  it('진행 중 계속 타이핑해도 요청은 취소되지 않고 원래 snapshot으로 결과가 온다', async () => {
+  it('새 문맥은 진행 중 요청을 무효화하고 정리 후 최신 요청만 실행한다', async () => {
+    const first = createDeferred<Response>();
+    const second = createDeferred<Response>();
+    const search = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const runner = createAmbientSearchRunner<string, string>({ search });
+    const firstResult = vi.fn();
+    const secondResult = vi.fn();
+    const firstFinish = vi.fn();
+
+    runner.run(target('처음 커서가 있던 문장입니다'), {
+      onFinish: firstFinish,
+      onResult: firstResult,
+    });
+    const firstSignal = search.mock.calls[0]?.[1] as AbortSignal;
+    expect(
+      runner.run(target('이동한 커서 위치의 최신 문장입니다'), {
+        onResult: secondResult,
+      }),
+    ).toBe(true);
+
+    expect(firstSignal.aborted).toBe(true);
+    expect(firstFinish).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledTimes(1);
+
+    first.resolve({ queryChunk: 'old', results: ['old-result'] });
+    await flush();
+
+    expect(firstResult).not.toHaveBeenCalled();
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search.mock.calls[1]?.[0].queryText).toBe(
+      '이동한 커서 위치의 최신 문장입니다',
+    );
+
+    second.resolve({ queryChunk: 'new', results: ['new-result'] });
+    await flush();
+
+    expect(secondResult).toHaveBeenCalledTimes(1);
+    expect(secondResult.mock.calls[0][0].queryText).toBe(
+      '이동한 커서 위치의 최신 문장입니다',
+    );
+  });
+
+  it('cancel은 진행 중 결과와 대기 중 최신 요청을 모두 버린다', async () => {
     const deferred = createDeferred<Response>();
     const search = vi.fn().mockReturnValue(deferred.promise);
     const runner = createAmbientSearchRunner<string, string>({ search });
+    const onFinish = vi.fn();
     const onResult = vi.fn();
 
-    runner.run(target('처음 클릭한 순간의 문장입니다'), { onResult });
-    // 사용자가 계속 입력해 pending이 바뀐 상황 — 새 run은 무시되고 기존 요청 유지
-    expect(runner.run(target('이후에 입력이 이어진 문장입니다'), { onResult })).toBe(false);
+    runner.run(target('취소할 검색 문장입니다'), { onFinish, onResult });
+    const signal = search.mock.calls[0]?.[1] as AbortSignal;
+    runner.cancel();
 
-    deferred.resolve({ queryChunk: 'chunk', results: ['top'] });
+    expect(signal.aborted).toBe(true);
+    expect(runner.isSearching()).toBe(false);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+
+    deferred.resolve({ queryChunk: 'old', results: ['old-result'] });
     await flush();
 
-    expect(search).toHaveBeenCalledTimes(1);
-    expect(onResult).toHaveBeenCalledTimes(1);
-    expect(onResult.mock.calls[0][0].queryText).toBe('처음 클릭한 순간의 문장입니다');
+    expect(onResult).not.toHaveBeenCalled();
+    expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
   it('결과가 없으면 onResult 대신 onEmpty가 호출된다', async () => {
@@ -154,26 +205,39 @@ describe('createAmbientSearchRunner', () => {
     expect(search).not.toHaveBeenCalled();
   });
 
-  it('성공한 동일 쿼리는 cooldown 동안 차단되고 지나면 다시 허용된다', async () => {
-    let currentTime = 0;
+  it('자동 검색은 같은 문맥에서 한 번 끝나면 문맥이 바뀔 때까지 반복하지 않는다', async () => {
     const search = vi.fn().mockResolvedValue({ queryChunk: 'q', results: ['r'] });
-    const runner = createAmbientSearchRunner<string, string>({
-      cooldownMs: 60000,
-      now: () => currentTime,
-      search,
-    });
+    const runner = createAmbientSearchRunner<string, string>({ search });
 
-    expect(runner.run(target('cooldown 확인용 문장입니다'))).toBe(true);
+    expect(runner.run(target('같은 문맥에서는 한 번만 검색합니다'))).toBe(true);
     await flush();
-    expect(runner.run(target('cooldown 확인용 문장입니다'))).toBe(false);
+    expect(runner.run(target('같은 문맥에서는 한 번만 검색합니다'))).toBe(false);
 
-    currentTime = 60001;
-    expect(runner.run(target('cooldown 확인용 문장입니다'))).toBe(true);
+    expect(runner.run(target('다른 문맥으로 이동했습니다'))).toBe(true);
     await flush();
-    expect(search).toHaveBeenCalledTimes(2);
+    expect(runner.run(target('같은 문맥에서는 한 번만 검색합니다'))).toBe(true);
+    await flush();
+    expect(search).toHaveBeenCalledTimes(3);
   });
 
-  it('다른 쿼리는 cooldown과 무관하게 즉시 실행된다', async () => {
+  it('수동 검색은 짧은 선택문과 자동 검색 완료 문맥을 모두 다시 실행할 수 있다', async () => {
+    const search = vi.fn().mockResolvedValue({ queryChunk: 'q', results: ['r'] });
+    const runner = createAmbientSearchRunner<string, string>({ search });
+
+    runner.run(target('이미 자동 검색한 문장입니다'));
+    await flush();
+    expect(
+      runner.run(target('주차 문제'), {}, { mode: 'manual' }),
+    ).toBe(true);
+    await flush();
+    expect(
+      runner.run(target('이미 자동 검색한 문장입니다'), {}, { mode: 'manual' }),
+    ).toBe(true);
+    await flush();
+    expect(search).toHaveBeenCalledTimes(3);
+  });
+
+  it('다른 자동 문맥은 즉시 실행된다', async () => {
     const search = vi.fn().mockResolvedValue({ queryChunk: 'q', results: ['r'] });
     const runner = createAmbientSearchRunner<string, string>({ search });
 
@@ -227,5 +291,60 @@ describe('appSettings.ambientAutoSearchEnabled', () => {
     expect(
       normalizeAppSettings({ ambientAutoSearchEnabled: true }).ambientAutoSearchEnabled,
     ).toBe(true);
+  });
+
+  it('화면 언어는 ko 또는 en만 저장한다', () => {
+    expect(normalizeAppSettings({ uiLanguage: 'ko' }).uiLanguage).toBe('ko');
+    expect(normalizeAppSettings({ uiLanguage: 'en' }).uiLanguage).toBe('en');
+    expect(normalizeAppSettings({ uiLanguage: 'fr' as never }).uiLanguage).toMatch(
+      /^(ko|en)$/,
+    );
+  });
+});
+
+// 자동 검색의 "없음"·"오류"는 화면에 그리지 않는다. 그렇다고 핸들러를
+// 안 부르면 이전 결과가 남으므로, 부르되 mode를 함께 넘겨 판단하게 한다.
+describe('결과 없음·오류의 mode 전달', () => {
+  it('onEmpty는 실행 모드를 함께 받는다', async () => {
+    const onEmpty = vi.fn();
+    const search = vi.fn().mockResolvedValue({ queryChunk: 'q', results: [] });
+    const runner = createAmbientSearchRunner<string, string>({ search });
+
+    runner.run(target('자동으로 시작된 검색 문장입니다'), { onEmpty });
+    await flush();
+    expect(onEmpty.mock.calls[0]?.[1]).toBe('auto');
+
+    runner.run(target('직접 누른 검색'), { onEmpty }, { mode: 'manual' });
+    await flush();
+    expect(onEmpty.mock.calls[1]?.[1]).toBe('manual');
+  });
+
+  it('onError는 오류 뒤에 실행 모드를 받는다', async () => {
+    const onError = vi.fn();
+    const search = vi.fn().mockRejectedValue(new Error('boom'));
+    const runner = createAmbientSearchRunner<string, string>({ search });
+
+    runner.run(target('자동으로 시작된 검색 문장입니다'), { onError });
+    await flush();
+    expect(onError.mock.calls[0]?.[2]).toBe('auto');
+
+    runner.run(target('직접 누른 검색'), { onError }, { mode: 'manual' });
+    await flush();
+    expect(onError.mock.calls[1]?.[2]).toBe('manual');
+  });
+});
+
+describe('App의 mode 분기', () => {
+  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+
+  it('자동 검색은 없음·오류를 그리지 않는다', () => {
+    const handlers = appSource.slice(
+      appSource.indexOf('const ambientSearchHandlers = {'),
+      appSource.indexOf('const runAmbientSearchNow'),
+    );
+
+    // onEmpty·onError 각각에 "수동일 때만 표시" 분기가 있어야 한다.
+    expect(handlers.match(/if \(mode !== 'manual'\)/g)).toHaveLength(2);
+    expect(handlers).toContain('setAmbientError(message)');
   });
 });

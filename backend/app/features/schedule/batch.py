@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field
 
@@ -6,10 +7,11 @@ from app.db.memos import (
     fetch_memos_needing_schedule_scan,
     mark_memo_schedule_scan_failed,
 )
+from app.db.profiles import fetch_profile_time_zone
 from app.db.schedule import replace_schedule_inbox_if_current
 from app.db.types import MemoRecord
 from app.db.utils import content_hash_for_memo
-from app.features.schedule.parser import extract_schedule_candidates
+from app.features.schedule.parser import SEOUL_TZ, extract_schedule_candidates
 
 
 class ScheduleInboxRunRequest(BaseModel):
@@ -28,6 +30,7 @@ def run_schedule_inbox_batch(
     request: ScheduleInboxRunRequest,
 ) -> ScheduleInboxRunResponse:
     memos = fetch_memos_needing_schedule_scan(request.user_id, request.limit)
+    time_zone = schedule_time_zone(request.user_id)
     suggestion_count = 0
 
     for memo in memos:
@@ -37,6 +40,7 @@ def run_schedule_inbox_batch(
                 memo.id,
                 memo.content,
                 base_time=memo_schedule_anchor_time(memo),
+                time_zone=time_zone,
             )
             rows = [
                 {
@@ -87,3 +91,10 @@ def memo_schedule_anchor_time(memo: MemoRecord) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def schedule_time_zone(user_id: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(fetch_profile_time_zone(user_id))
+    except ZoneInfoNotFoundError:
+        return SEOUL_TZ

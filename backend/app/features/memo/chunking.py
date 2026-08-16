@@ -4,6 +4,7 @@ from typing import Any
 
 from kiwipiepy import Kiwi
 from pydantic import BaseModel, Field
+from pysbd import Segmenter
 
 from app.core import constants
 from app.features.topics.discovery import encode_texts
@@ -38,6 +39,17 @@ def get_kiwi() -> Kiwi:
     return Kiwi()
 
 
+@lru_cache
+def get_english_segmenter() -> Segmenter:
+    """Return the non-destructive English splitter used after Kiwi.
+
+    ``char_span=True`` is important here: sentence chunks are persisted with
+    offsets into the original memo, so reconstructing offsets from returned
+    sentence strings would be unsafe around repeated text or whitespace.
+    """
+    return Segmenter(language="en", clean=False, char_span=True)
+
+
 def split_memo_chunks(request: MemoChunkRequest) -> MemoChunkResponse:
     sentence_chunks = split_sentences(request.text)
     network_chunks = build_network_chunks(sentence_chunks, request.text)
@@ -55,15 +67,11 @@ def split_memo_chunks(request: MemoChunkRequest) -> MemoChunkResponse:
         cursor_sentence_chunk=cursor_sentence_chunk,
         cursor_network_chunk=cursor_network_chunk,
         embeddings=embeddings,
-        embedding_model=constants.EMBEDDING_MODEL if embeddings is not None else None,
+        embedding_model=constants.EMBEDDING_MODEL_SIGNATURE if embeddings is not None else None,
     )
 
 
-ABBREVIATIONS = {
-    "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "vs", "etc", "eg", "ie", "ca",
-    "co", "corp", "inc", "ltd", "st", "ave", "rd", "jan", "feb", "mar", "apr",
-    "jun", "jul", "aug", "sep", "oct", "nov", "dec", "vol", "ed", "pp", "al"
-}
+LATIN_RE = re.compile(r"[A-Za-z]")
 
 LINK_RE = re.compile(r'\[(.*?)\]\((.*?)\)')
 IMAGE_RE = re.compile(r'!\[(.*?)\]\((.*?)\)')
@@ -80,6 +88,7 @@ HEADER_RE = re.compile(r'^#+\s+', re.MULTILINE)
 BLOCKQUOTE_RE = re.compile(r'^>\s?', re.MULTILINE)
 LIST_RE = re.compile(r'^\s*([-*+]|(?:\d+\.))\s+', re.MULTILINE)
 TASK_LIST_RE = re.compile(r'^\[([ xX])\]\s*', re.MULTILINE)
+
 
 def clean_enriched_markdown(text: str) -> str:
     # 1. Clean block prefixes
@@ -103,44 +112,80 @@ def clean_enriched_markdown(text: str) -> str:
     
     return text.strip()
 
+
 def split_english_sentences(text: str) -> list[tuple[str, int, int]]:
-    # Capture the punctuation AND any trailing quotes/parentheses/markdown tags immediately following it
-    candidates = list(re.finditer(r'([.!?])(["\')\]}*`~]*)(\s+|$)', text))
-    sentences = []
-    start = 0
-    
-    for match in candidates:
-        punc = match.group(1)
-        trailing_symbols = match.group(2)
-        end = match.end()
-        
-        if punc == '.':
-            preceding_part = text[start:match.start()]
-            words = re.findall(r'\b[a-zA-Z]+\b', preceding_part)
-            if words:
-                last_word = words[-1].lower()
-                if last_word in ABBREVIATIONS or len(last_word) == 1:
-                    continue
-        
-        next_part = text[end:]
-        next_words = re.findall(r'\S+', next_part)
-        if next_words:
-            first_next_char = next_words[0][0]
-            if first_next_char.islower():
-                continue
-                
-        # Split point is after the punctuation and trailing symbols
-        split_end = match.end(1) + len(trailing_symbols)
-        sent_text = text[start:split_end].strip()
-        if sent_text:
-            sentences.append((sent_text, start, split_end))
-        start = match.end()
-        
-    last_text = text[start:].strip()
-    if last_text:
-        sentences.append((last_text, start, len(text)))
-        
+    if not text.strip():
+        return []
+
+    # pySBD is only responsible for lines that contain Latin text. Korean-only
+    # segments continue to come from Kiwi unchanged in ``split_sentences``.
+    if not LATIN_RE.search(text):
+        return [(text.strip(), 0, len(text.rstrip()))]
+
+    # pySBD intentionally does not parse Markdown. Mask inline constructs while
+    # keeping their character count so its returned spans still index ``text``.
+    masked_text = mask_inline_markdown(text)
+    sentences: list[tuple[str, int, int]] = []
+    for span in get_english_segmenter().segment(masked_text):
+        start = int(span.start)
+        end = int(span.end)
+        # pySBD keeps the whitespace separating sentences in the preceding
+        # span. Existing chunk offsets end at the sentence content, not there.
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        if end <= start or not text[start:end].strip():
+            continue
+        sentences.append((text[start:end].strip(), start, end))
+
     return sentences
+
+
+def mask_inline_markdown(text: str) -> str:
+    """Mask inline Markdown spans without changing source offsets.
+
+    Fenced code and block math are already isolated before this function is
+    called. Inline code, links, emphasis, spoilers, and inline math can contain
+    periods that must not become English sentence boundaries.
+    """
+    spans: list[tuple[int, int, bool]] = []
+    for pattern, preserve_terminal_punctuation in (
+        (IMAGE_RE, False),
+        (LINK_RE, False),
+        (STRONG_RE, True),
+        (EM_RE, True),
+        (STRIKE_RE, True),
+        (SPOILER_RE, True),
+        (INLINE_CODE_RE, False),
+        (INLINE_MATH_RE, False),
+    ):
+        for match in pattern.finditer(text):
+            spans.append((match.start(), match.end(), preserve_terminal_punctuation))
+
+    masked = list(text)
+    occupied_until = -1
+    for start, end, preserve_terminal_punctuation in sorted(spans):
+        if start < occupied_until:
+            continue
+        terminal_punctuation = -1
+        if preserve_terminal_punctuation:
+            terminal_punctuation = end - 1
+            while terminal_punctuation >= start and text[terminal_punctuation] in "*_~|":
+                terminal_punctuation -= 1
+            if terminal_punctuation < start or text[terminal_punctuation] not in ".!?":
+                terminal_punctuation = -1
+        for index in range(start, end):
+            if masked[index] not in "\r\n":
+                if index == terminal_punctuation:
+                    masked[index] = text[index]
+                elif text[index] in "*_~|":
+                    # A closing emphasis marker must not touch a preserved
+                    # terminal period, otherwise pySBD treats it as a word.
+                    masked[index] = " "
+                else:
+                    masked[index] = "x"
+        occupied_until = end
+    return "".join(masked)
+
 
 def split_sentences(text: str) -> list[MemoChunk]:
     kiwi = get_kiwi()
@@ -197,8 +242,13 @@ def split_sentences(text: str) -> list[MemoChunk]:
                 kiwi_end = int(raw_sentence.end)
                 segment_text = line_text[kiwi_start:kiwi_end]
 
-                # 4. Refine each Kiwi segment for English/mixed sentence boundaries
-                refined_sentences = split_english_sentences(segment_text)
+                # 4. Refine only English/mixed segments. Korean-only segments
+                # remain exactly as Kiwi returned them.
+                refined_sentences = (
+                    split_english_sentences(segment_text)
+                    if LATIN_RE.search(segment_text)
+                    else [(segment_text.strip(), 0, len(segment_text.rstrip()))]
+                )
                 for sub_text, sub_start, sub_end in refined_sentences:
                     actual_start = seg_start + line_start + kiwi_start + sub_start
                     actual_end = seg_start + line_start + kiwi_start + sub_end

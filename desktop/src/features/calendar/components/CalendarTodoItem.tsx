@@ -1,7 +1,7 @@
-import { format } from 'date-fns';
-
+import TooltipIconButton from '../../../components/TooltipIconButton';
 import { CalendarBlockRow } from '../../../types';
 import { getBlockStart } from '../calendarUtils';
+import { getUiDateLocale, localize, useUiLanguage } from '../../../lib/uiLanguage';
 
 interface CalendarTodoItemProps {
   block: CalendarBlockRow;
@@ -10,21 +10,29 @@ interface CalendarTodoItemProps {
 }
 
 const CalendarTodoItem = ({ block, onEdit, onToggle }: CalendarTodoItemProps) => {
+  const language = useUiLanguage();
+  const t = (korean: string, english: string) => localize(language, korean, english);
   const completed = Boolean(block.is_completed);
 
   return (
     <div className={`cal-todo-item${completed ? ' completed' : ''}`}>
-      <button
-        aria-label={completed ? '완료 취소' : '완료'}
+      <TooltipIconButton
+        aria-label={completed ? t('완료 취소', 'Mark incomplete') : t('완료', 'Mark complete')}
         className="cal-todo-check"
         onClick={() => onToggle(block.id)}
-        type="button"
+        placement="left"
+        tooltip={completed ? t('완료 취소', 'Mark incomplete') : t('완료', 'Mark complete')}
       >
         {completed ? '✓' : ''}
-      </button>
+      </TooltipIconButton>
       <button className="cal-todo-title" onClick={() => onEdit(block)} type="button">
         {!block.all_day && (
-          <span className="cal-todo-time">{format(getBlockStart(block), 'a h:mm')}</span>
+          <span className="cal-todo-time">
+            {new Intl.DateTimeFormat(getUiDateLocale(language), {
+              hour: 'numeric',
+              minute: '2-digit',
+            }).format(getBlockStart(block))}
+          </span>
         )}
         <span className="cal-todo-text">{block.title}</span>
       </button>

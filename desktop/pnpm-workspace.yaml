@@ -1,6 +1,13 @@
 nodeLinker: hoisted
+overrides:
+  adm-zip: 0.6.0
+  sharp: 0.35.3
 allowBuilds:
   '@parcel/watcher': true
+  # core-js의 postinstall은 후원 안내를 출력할 뿐이라 실행할 이유가 없다.
+  # 다만 true/false를 정해 주지 않으면 pnpm이 ERR_PNPM_IGNORED_BUILDS로
+  # install을 실패시키고, deps 검사를 거치는 `pnpm start`까지 같이 죽는다.
+  core-js: false
   electron-winstaller: true
   esbuild: true
   fs-xattr: true

@@ -1,35 +1,31 @@
 #!/usr/bin/env bash
-#
-# Local release pipeline for Subnota Desktop.
-#
-# Builds a signed + notarised DMG and creates the GitHub release entirely on
-# this machine — no CI required. The flow is idempotent: it keys everything off
-# the current package.json version, and every step checks whether its output
-# already exists before doing the work. So if a run fails partway through, just
-# run it again (without changing the version) and it picks up where it left off.
-#
-# To ship a NEW release, bump the version first (e.g. `pnpm version patch
-# --no-git-tag-version`), commit it, then run this.
-#
-# Usage:
-#   pnpm run release                 # prompts for the release statement
-#   pnpm run release -- "My notes"   # pass the release statement non-interactively
-#   SKIP_TESTS=1 pnpm run release    # skip the test run
-#
+# Production macOS release: clean build, Developer ID signing, notarization,
+# Gatekeeper verification, checksums, tag, and GitHub release upload.
 set -euo pipefail
-trap 'echo "Error: script failed at line $LINENO" >&2' ERR
+trap 'echo "Error: release failed at line $LINENO" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# --- Resolve version ---
+fail() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+for command in gh git node pnpm security codesign spctl xcrun shasum; do
+  command -v "$command" >/dev/null || fail "Required command is missing: $command"
+done
+
+[ "$(uname -s)" = "Darwin" ] || fail "macOS releases must be built on macOS."
+[ "$(node -p 'process.versions.node.split(`.`)[0]')" = '24' ] || \
+  fail "Node 24 is required. Run 'nvm use' in the desktop directory."
+gh auth status >/dev/null 2>&1 || fail "GitHub CLI is not authenticated. Run: gh auth login"
+
 VERSION=$(node -p "require('./package.json').version")
 TAG="v${VERSION}"
 RELEASE_NOTE="${1:-}"
+CHECKSUM_PATH="out/make/SHA256SUMS.txt"
 
-echo "==> Releasing ${TAG}"
-
-# --- Short-circuit if already fully released ---
 release_exists() { gh release view "$TAG" >/dev/null 2>&1; }
 release_assets() {
   gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null
@@ -39,108 +35,130 @@ fully_released() {
   assets=$(release_assets) || return 1
   echo "$assets" | grep -qi '\.dmg$' \
     && echo "$assets" | grep -qi '\.zip$' \
-    && echo "$assets" | grep -qx 'RELEASES.json'
+    && echo "$assets" | grep -qx 'RELEASES.json' \
+    && echo "$assets" | grep -qx 'SHA256SUMS.txt'
 }
 
+echo "==> Releasing ${TAG}"
 if release_exists && fully_released; then
-  echo "==> ${TAG} is already released with DMG, ZIP, and RELEASES.json attached. Nothing to do."
-  echo "    Bump the version (pnpm version patch) to ship a new release."
+  echo "==> ${TAG} already has every verified release asset."
   exit 0
 fi
 
-# --- Run tests (mirrors the CI gate) ---
-if [ "${SKIP_TESTS:-}" = "1" ]; then
-  echo "==> Skipping tests (SKIP_TESTS=1)"
+[ -z "$(git status --porcelain)" ] || \
+  fail "The working tree must be completely clean before a release."
+git fetch --tags origin
+
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  [ "$(git rev-list -n 1 "$TAG")" = "$(git rev-parse HEAD)" ] || \
+    fail "Existing tag ${TAG} does not point to HEAD. Bump the version instead of reusing the tag."
+fi
+
+SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+if [ -z "$SIGNING_IDENTITY" ]; then
+  SIGNING_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' \
+    | head -1)
+fi
+[ -n "$SIGNING_IDENTITY" ] || \
+  fail "No Developer ID Application signing identity is installed."
+
+NOTARY_ARGS=()
+if [ -n "${APPLE_NOTARY_KEYCHAIN_PROFILE:-}" ]; then
+  NOTARY_ARGS=(--keychain-profile "$APPLE_NOTARY_KEYCHAIN_PROFILE")
+  if [ -n "${APPLE_NOTARY_KEYCHAIN:-}" ]; then
+    NOTARY_ARGS+=(--keychain "$APPLE_NOTARY_KEYCHAIN")
+  fi
+elif [ -n "${APPLE_API_KEY:-}" ] && [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
+  NOTARY_ARGS=(--key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER")
+elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_ID_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+  NOTARY_ARGS=(--apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID")
 else
-  echo "==> Running tests..."
-  pnpm test
+  fail "Notarization credentials are missing. Configure a keychain profile, App Store Connect API key, or Apple ID app-specific password."
 fi
 
-# --- Get the release statement ---
-# Only needed when the release does not yet exist; otherwise reuse the notes
-# already on the GitHub release.
-if ! release_exists; then
-  if [ -z "$RELEASE_NOTE" ]; then
-    echo ""
-    read -rp "Release statement for ${TAG}: " RELEASE_NOTE
-  fi
+if ! release_exists && [ -z "$RELEASE_NOTE" ]; then
+  read -rp "Release statement for ${TAG}: " RELEASE_NOTE
 fi
 
-# --- Build DMG + update ZIP (skip only if both already exist for this version) ---
-DMG_PATH=$(find out/make -maxdepth 3 -name "*${VERSION}*.dmg" 2>/dev/null | head -1)
-EXISTING_MANIFEST=$(find out/make/zip -maxdepth 4 -name 'RELEASES.json' 2>/dev/null | head -1)
+echo "==> Running release gates..."
+pnpm install --frozen-lockfile
+node --input-type=module <<'NODE'
+import { loadEnv } from 'vite';
 
-if [ -n "$DMG_PATH" ] && [ -n "$EXISTING_MANIFEST" ]; then
-  echo "==> DMG and RELEASES.json already built (skipping build)"
-else
-  if [ ! -f resources/icon.icns ]; then
-    echo "==> Generating icon..."
-    sh scripts/generate-icon.sh
-  fi
+const env = loadEnv('production', process.cwd(), '');
+for (const name of [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+  'VITE_MEMO_BACKEND_URL',
+]) {
+  if (!env[name]?.trim()) {
+    throw new Error(`Missing production build configuration: ${name}`);
+  }
+}
+for (const name of ['VITE_SUPABASE_URL', 'VITE_MEMO_BACKEND_URL']) {
+  const url = new URL(env[name]);
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error(`${name} must be a credential-free HTTPS URL.`);
+  }
+}
+NODE
+pnpm exec tsc --noEmit
+pnpm test
+pnpm run lint
+pnpm audit --prod
 
-  echo "==> Building signed + notarised DMG and update ZIP for ${TAG}..."
-  rm -rf out/
-  pnpm exec electron-forge make
-
-  APP_PATH=$(find out -maxdepth 2 -name "Subnota.app" -type d | head -1)
-  if [ -z "$APP_PATH" ]; then
-    echo "Error: Subnota.app not found in out/ after build." >&2
-    exit 1
-  fi
-  codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
-  DMG_PATH=$(find out/make -maxdepth 3 -name "*${VERSION}*.dmg" 2>/dev/null | head -1)
-  if [ -z "$DMG_PATH" ]; then
-    echo "Error: DMG not found in out/make/ after build." >&2
-    exit 1
-  fi
-  echo "==> DMG built: $DMG_PATH"
+if [ ! -f resources/icon.icns ]; then
+  sh scripts/generate-icon.sh
 fi
 
-# --- Locate + normalize the update ZIP and RELEASES.json manifest ---
-ZIP_PATH=$(find out/make/zip -maxdepth 4 -name "*${VERSION}*.zip" 2>/dev/null | head -1)
-RELEASES_JSON=$(find out/make/zip -maxdepth 4 -name 'RELEASES.json' 2>/dev/null | head -1)
-if [ -z "$ZIP_PATH" ] || [ -z "$RELEASES_JSON" ]; then
-  echo "Error: update ZIP or RELEASES.json not found under out/make/zip/." >&2
-  echo "       Remove out/ and re-run so the configured MakerZIP builds the native update feed." >&2
-  exit 1
-fi
+echo "==> Building a fresh signed and notarized app..."
+rm -rf out/
+node node_modules/@electron-forge/cli/dist/electron-forge.js make
+
+APP_PATH=$(find out -maxdepth 2 -name 'Subnota.app' -type d | head -1)
+DMG_PATH=$(find out/make -maxdepth 3 -name "*${VERSION}*.dmg" -type f | head -1)
+ZIP_PATH=$(find out/make/zip -maxdepth 4 -name "*${VERSION}*.zip" -type f | head -1)
+RELEASES_JSON=$(find out/make/zip -maxdepth 4 -name 'RELEASES.json' -type f | head -1)
+[ -n "$APP_PATH" ] || fail "Subnota.app was not produced."
+[ -n "$DMG_PATH" ] || fail "The release DMG was not produced."
+[ -n "$ZIP_PATH" ] || fail "The update ZIP was not produced."
+[ -n "$RELEASES_JSON" ] || fail "RELEASES.json was not produced."
 
 ZIP_PATH=$(node scripts/fix-mac-update-manifest.mjs "$RELEASES_JSON" "$ZIP_PATH")
-echo "==> Update ZIP: $ZIP_PATH"
-echo "==> Manifest: $RELEASES_JSON"
 
-# --- Tag ---
-if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  echo "==> Tag ${TAG} already exists (skipping)"
-else
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "Warning: working tree has uncommitted changes; tagging current HEAD anyway." >&2
-  fi
-  if [ -n "$RELEASE_NOTE" ]; then
-    git tag -a "$TAG" -m "$RELEASE_NOTE"
-  else
-    git tag "$TAG"
-  fi
-  echo "==> Created tag ${TAG}"
+echo "==> Signing and notarizing the DMG..."
+codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG_PATH"
+xcrun notarytool submit "$DMG_PATH" --wait "${NOTARY_ARGS[@]}"
+xcrun stapler staple "$DMG_PATH"
+sh scripts/verify-mac-release.sh "$APP_PATH" "$DMG_PATH"
+
+mkdir -p "$(dirname "$CHECKSUM_PATH")"
+: > "$CHECKSUM_PATH"
+for asset in "$DMG_PATH" "$ZIP_PATH" "$RELEASES_JSON"; do
+  digest=$(shasum -a 256 "$asset" | awk '{print $1}')
+  printf '%s  %s\n' "$digest" "$(basename "$asset")" >> "$CHECKSUM_PATH"
+done
+
+if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  git tag -a "$TAG" -m "${RELEASE_NOTE:-$TAG}"
 fi
-
-# --- Push (no-ops if already up to date) ---
-echo "==> Pushing commits and tag..."
-git push
+CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD || true)
+if [ -n "$CURRENT_BRANCH" ]; then
+  git push origin "$CURRENT_BRANCH"
+fi
 git push origin "$TAG"
 
-# --- GitHub release ---
 if release_exists; then
-  echo "==> Release ${TAG} exists; uploading DMG, ZIP, and RELEASES.json..."
-  gh release upload "$TAG" "$DMG_PATH" "$ZIP_PATH" "$RELEASES_JSON" --clobber
+  gh release upload "$TAG" \
+    "$DMG_PATH" "$ZIP_PATH" "$RELEASES_JSON" "$CHECKSUM_PATH" --clobber
   if [ -n "$RELEASE_NOTE" ]; then
     gh release edit "$TAG" --notes "$RELEASE_NOTE"
   fi
 else
-  echo "==> Creating GitHub release ${TAG}..."
-  gh release create "$TAG" "$DMG_PATH" "$ZIP_PATH" "$RELEASES_JSON" --title "$TAG" --notes "$RELEASE_NOTE"
+  gh release create "$TAG" \
+    "$DMG_PATH" "$ZIP_PATH" "$RELEASES_JSON" "$CHECKSUM_PATH" \
+    --title "$TAG" --notes "$RELEASE_NOTE"
 fi
 
-echo ""
-echo "Released ${TAG}: $(gh release view "$TAG" --json url -q .url 2>/dev/null)"
+echo "==> Released ${TAG}: $(gh release view "$TAG" --json url -q .url)"

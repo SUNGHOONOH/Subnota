@@ -13,7 +13,7 @@ describe('memo category helpers', () => {
     expect(getMemoCategory(null)).toBe(DEFAULT_MEMO_CATEGORY);
   });
 
-  it('splits Mini Subnota memos from normal memos', () => {
+  it('splits Quick Subnota memos from normal memos', () => {
     const { miniMemos, normalMemos } = splitMemoCategories([
       { category: DEFAULT_MEMO_CATEGORY, id: 'normal-1' },
       { category: MINI_SUBNOTA_CATEGORY, id: 'mini-1' },

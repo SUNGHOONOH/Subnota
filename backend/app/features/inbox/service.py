@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from app.core import constants
 from app.db.inbox import (
     delete_inbox_session,
+    delete_inbox_session_by_client_id,
     fetch_inbox_session,
     fetch_inbox_sessions,
     fetch_indexable_inbox_sessions,
@@ -77,6 +78,10 @@ def remove_inbox_session(user_id: str, session_id: str) -> bool:
     return delete_inbox_session(user_id, session_id)
 
 
+def remove_inbox_session_by_client_id(user_id: str, client_id: str) -> bool:
+    return delete_inbox_session_by_client_id(user_id, client_id)
+
+
 def list_inbox_sessions(user_id: str, limit: int = 50) -> InboxSessionListResponse:
     safe_limit = min(max(limit, 1), 100)
     return InboxSessionListResponse(items=fetch_inbox_sessions(user_id, safe_limit))
@@ -95,7 +100,7 @@ def index_inbox_summary_embeddings(
         status="ok",
         user_id=request.user_id,
         indexed_count=indexed_count,
-        model=constants.EMBEDDING_MODEL,
+        model=constants.EMBEDDING_MODEL_SIGNATURE,
     )
 
 

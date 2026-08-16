@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { desktopColorTokens } from '../../lib/colorTokens';
+import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 interface PasswordConfirmInputProps {
   passwordToMatch: string;
@@ -25,8 +26,9 @@ const PasswordConfirmInput = ({
   value,
   onChange,
   showPassword = false,
-  placeholder = '비밀번호를 한 번 더 입력',
+  placeholder,
 }: PasswordConfirmInputProps) => {
+  const language = useUiLanguage();
   const [shake, setShake] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,7 +60,12 @@ const PasswordConfirmInput = ({
       <input
         className="pw-confirm-input"
         type={showPassword ? 'text' : 'password'}
-        placeholder={value.length === 0 ? placeholder : ''}
+        placeholder={
+          value.length === 0
+            ? (placeholder ??
+              localize(language, '비밀번호를 한 번 더 입력', 'Enter password again'))
+            : ''
+        }
         value={value}
         onChange={handleChange}
         autoComplete="new-password"

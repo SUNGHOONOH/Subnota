@@ -5,9 +5,22 @@ import {
   DEFAULT_APP_SHORTCUT_SETTINGS,
   APP_SHORTCUT_LABELS,
   findShortcutConflictsForFields,
+  formatHotkeyKey,
   formatHotkeyHint,
+  formatHotkeyModifierHint,
   normalizeAppShortcutSettings,
 } from '../lib/shortcutSettings';
+
+describe('platform shortcut labels', () => {
+  it('공용 CommandOrControl을 OS별 단일 키로 표시한다', () => {
+    expect(formatHotkeyKey('CommandOrControl', true)).toBe('⌘');
+    expect(formatHotkeyKey('CommandOrControl', false)).toBe('Ctrl');
+    expect(formatHotkeyKey('Control', true)).toBe('⌃');
+    expect(formatHotkeyKey('Control', false)).toBe('Ctrl');
+    expect(formatHotkeyModifierHint(true)).toBe('⌘ · ⌥ · ⇧');
+    expect(formatHotkeyModifierHint(false)).toBe('Ctrl · Alt · ⇧');
+  });
+});
 
 describe('formatHotkeyHint', () => {
   it('macOS는 기호로, 그 외는 글자로 보여준다', () => {

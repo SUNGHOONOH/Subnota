@@ -9,8 +9,7 @@
     "lint": "eslint .",
     "prestart": "node scripts/build-editor.mjs",
     "start": "react-native start",
-    "test": "jest",
-    "windows:check": "node scripts/check-windows-release-prereqs.mjs"
+    "test": "jest"
   },
   "dependencies": {
     "@kky/ko-date-parse": "npm:@jsr/kky__ko-date-parse@^0.0.2",

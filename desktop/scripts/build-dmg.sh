@@ -19,7 +19,7 @@ rm -rf out/
 
 # --- Package ---
 echo "==> Packaging app for v${VERSION}..."
-pnpm exec electron-forge package
+SUBNOTA_LOCAL_BUILD=1 node node_modules/@electron-forge/cli/dist/electron-forge.js package
 
 APP_PATH=$(find out -maxdepth 2 -name "Subnota.app" -type d | head -1)
 if [ -z "$APP_PATH" ]; then
@@ -36,7 +36,7 @@ sh scripts/resign-local-mac-app.sh "$APP_PATH"
 
 # --- Build DMG ---
 echo "==> Building DMG for v${VERSION}..."
-pnpm exec electron-forge make --skip-package --targets @electron-forge/maker-dmg
+node node_modules/@electron-forge/cli/dist/electron-forge.js make --skip-package --targets @electron-forge/maker-dmg
 
 # --- Find DMG ---
 DMG_PATH=$(find out/make -name "*.dmg" -maxdepth 3 | head -1)

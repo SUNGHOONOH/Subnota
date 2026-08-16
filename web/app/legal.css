@@ -1,0 +1,197 @@
+.legal-page {
+  min-height: 100vh;
+  padding: 28px 20px 56px;
+}
+
+.legal-page-shell {
+  margin: 0 auto;
+  max-width: 860px;
+}
+
+.legal-page-header,
+.legal-page-footer {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.legal-page-header {
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 20px;
+}
+
+.legal-brand {
+  align-items: center;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.legal-brand-mark {
+  align-items: center;
+  background: var(--brand-mark);
+  border-radius: 999px;
+  color: white;
+  display: inline-flex;
+  font-size: 14px;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.legal-page-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: flex-end;
+}
+
+.legal-page-header nav a,
+.legal-page-footer a {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.legal-page-header nav a:hover,
+.legal-page-footer a:hover {
+  color: var(--ink);
+}
+
+.legal-article {
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+  margin: 36px 0 24px;
+  padding: clamp(28px, 6vw, 64px);
+}
+
+.legal-eyebrow {
+  color: var(--brand-mark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  margin-bottom: 10px;
+}
+
+.legal-article h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  letter-spacing: -.04em;
+  line-height: 1.2;
+}
+
+.legal-effective-date {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+.legal-content {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.85;
+  margin-top: 42px;
+}
+
+.legal-content h2 {
+  color: var(--ink);
+  font-size: 20px;
+  letter-spacing: -.02em;
+  line-height: 1.4;
+  margin: 38px 0 12px;
+}
+
+.legal-content h2:first-child {
+  margin-top: 0;
+}
+
+.legal-content p + p,
+.legal-content p + ul,
+.legal-content p + ol,
+.legal-content ul + p,
+.legal-content ol + p {
+  margin-top: 12px;
+}
+
+.legal-content a {
+  color: var(--brand-mark);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.legal-content ul,
+.legal-content ol {
+  padding-left: 22px;
+}
+
+.legal-content li + li {
+  margin-top: 7px;
+}
+
+.legal-content table {
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 18px 0;
+  width: 100%;
+}
+
+.legal-content th,
+.legal-content td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal-content th {
+  background: var(--paper-warm);
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.legal-content dt {
+  color: var(--ink);
+  font-weight: 750;
+  margin-top: 12px;
+}
+
+.legal-content dd {
+  margin-left: 0;
+}
+
+.legal-page-footer {
+  padding: 0 4px;
+}
+
+@media (max-width: 640px) {
+  .legal-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .legal-page-header nav {
+    justify-content: flex-start;
+  }
+
+  .legal-article {
+    padding: 28px 20px;
+  }
+
+  .legal-content {
+    font-size: 14px;
+    margin-top: 32px;
+  }
+
+  .legal-content table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .legal-page-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

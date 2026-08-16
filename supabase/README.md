@@ -39,6 +39,7 @@ supabase/migrations/20260706000100_memo_conflict_merge_optin.sql
 supabase/migrations/20260706020000_fix_network_rate_limit_timestamp.sql
 supabase/migrations/20260707190355_topic_memo_inbox_edges.sql
 supabase/migrations/20260708000000_topic_cluster_inbox_items.sql
+supabase/migrations/20260812113011_calendar_block_category_id.sql
 ```
 
 ## Production history
@@ -60,7 +61,7 @@ alias would duplicate an already reflected schema change.
 The migrations define and configure the following database structures:
 * `profiles` — User profile storage
 * `memos` — User memos (local-first synced rows)
-* `calendar_blocks` — Scheduled items, including completions and completion timestamps
+* `calendar_blocks` — Scheduled items, completion timestamps, and an optional local-category reference
 * `schedule_inbox` — Daily schedule suggestion items
 * `memo_chunks` & `chunk_embedding_cache` — Kiwi sentence splits and Hugging Face inference embeddings
 * `topic_clusters`, `topic_cluster_memos`, & `topic_memo_edges` — Graph clusters and memo edge representations

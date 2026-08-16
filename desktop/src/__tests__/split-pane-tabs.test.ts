@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  activeMemoIdsInPanes,
+  editorAtRelativeTab,
+  editorsAfterCloseTab,
+  editorsAfterMove,
   editorsAfterNewTab,
   editorsAfterOpenSource,
   editorsAfterOpenTab,
+  editorsAfterTransfer,
 } from '../lib/splitPaneTabs';
-import type { MemoSplitEditorState } from '../features/memo/components/MemoSplitWorkspace';
+import type {
+  MemoSplitEditorState,
+  MemoSplitPaneState,
+} from '../features/memo/components/MemoSplitWorkspace';
 import type { NetworkSearchResult } from '../services/backend/networkService';
 
 const networkTab: MemoSplitEditorState = { id: 'tab-network', view: 'network' };
@@ -79,6 +87,104 @@ describe('editorsAfterNewTab', () => {
       memoTab,
       nextEditor,
     ]);
+  });
+});
+
+describe('editorAtRelativeTab', () => {
+  it('cycles tabs within the current pane in either direction', () => {
+    const editors = [memoTab, networkTab, nextEditor];
+
+    expect(editorAtRelativeTab(editors, networkTab.id, 1)).toBe(nextEditor);
+    expect(editorAtRelativeTab(editors, networkTab.id, -1)).toBe(memoTab);
+    expect(editorAtRelativeTab(editors, nextEditor.id, 1)).toBe(memoTab);
+  });
+});
+
+describe('activeMemoIdsInPanes', () => {
+  it('protects only the live memo editor in each pane', () => {
+    const backgroundMemo: MemoSplitEditorState = {
+      id: 'tab-background',
+      memoId: 'memo-background',
+      mode: 'existing',
+      view: 'memo',
+    };
+    const panes: MemoSplitPaneState[] = [
+      {
+        activeEditorId: memoTab.id,
+        editors: [backgroundMemo, memoTab],
+        id: 'pane-a',
+        view: 'memo',
+      },
+      {
+        activeEditorId: networkTab.id,
+        editors: [nextEditor, networkTab],
+        id: 'pane-b',
+        view: 'network',
+      },
+    ];
+
+    expect([...activeMemoIdsInPanes(panes)]).toEqual(['memo-1']);
+  });
+
+  it('supports the legacy pane-as-editor shape', () => {
+    expect([
+      ...activeMemoIdsInPanes([
+        {
+          id: 'pane-a',
+          memoId: 'memo-legacy',
+          mode: 'existing',
+          view: 'memo',
+        },
+      ]),
+    ]).toEqual(['memo-legacy']);
+  });
+});
+
+describe('tab moves', () => {
+  it('reorders a tab within its pane', () => {
+    expect(editorsAfterMove([memoTab, networkTab, nextEditor], memoTab.id, 3)).toEqual([
+      networkTab,
+      nextEditor,
+      memoTab,
+    ]);
+  });
+
+  it('moves a tab into the requested position in another pane', () => {
+    expect(editorsAfterTransfer([memoTab, networkTab], [nextEditor], networkTab.id, 0)).toEqual({
+      sourceEditors: [memoTab],
+      targetEditors: [networkTab, nextEditor],
+    });
+  });
+});
+
+describe('editorsAfterCloseTab', () => {
+  it('returns an empty pane when its last tab is closed', () => {
+    expect(editorsAfterCloseTab([memoTab], memoTab.id, memoTab.id)).toEqual({
+      activeEditor: null,
+      editors: [],
+    });
+  });
+
+  it('selects the nearest remaining tab when the active tab closes', () => {
+    const result = editorsAfterCloseTab(
+      [memoTab, networkTab, nextEditor],
+      networkTab.id,
+      networkTab.id,
+    );
+
+    expect(result.editors).toEqual([memoTab, nextEditor]);
+    expect(result.activeEditor).toBe(nextEditor);
+  });
+
+  it('keeps the active tab when a background tab closes', () => {
+    const result = editorsAfterCloseTab(
+      [memoTab, networkTab],
+      memoTab.id,
+      networkTab.id,
+    );
+
+    expect(result.editors).toEqual([memoTab]);
+    expect(result.activeEditor).toBe(memoTab);
   });
 });
 

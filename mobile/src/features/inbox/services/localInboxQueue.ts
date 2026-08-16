@@ -86,6 +86,10 @@ const titleFor = (input: InboxSaveInput) => {
 export const listLocalInboxSessions = async (): Promise<LocalInboxSession[]> =>
   parseQueue(await appStorage.getItem(STORAGE_KEY));
 
+export const clearLocalInboxSessions = async () => {
+  await appStorage.removeItem(STORAGE_KEY);
+};
+
 export const enqueueLocalInboxSession = async (
   input: InboxSaveInput,
   syncStatus: LocalInboxSyncStatus = 'pending',

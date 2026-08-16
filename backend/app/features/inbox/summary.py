@@ -4,7 +4,13 @@ from typing import Any
 from app.core import constants as model_constants
 from app.core.config import settings
 from app.db.types import DatabaseRow
-from app.features.inbox.constants import MAX_EXTRACTED_TEXT_CHARS, SUMMARY_PROMPT_KO
+from app.features.inbox.constants import (
+    MAX_EXTRACTED_TEXT_CHARS,
+    SUMMARY_PROMPT_AUTO,
+    SUMMARY_PROMPT_EN,
+    SUMMARY_PROMPT_KO,
+)
+from app.features.language import ContentLanguage, detect_content_language
 from app.features.inbox.utils import clean_summary, clean_text, limit_chars, optional_str
 
 try:
@@ -27,7 +33,7 @@ def summarize_youtube_url(url: str | None) -> tuple[DatabaseRow | None, str | No
                 genai_types.Part(
                     file_data=genai_types.FileData(file_uri=url)
                 ),
-                genai_types.Part(text=SUMMARY_PROMPT_KO),
+                genai_types.Part(text=SUMMARY_PROMPT_AUTO),
             ]
         ),
         models=model_constants.URL_CONTENT_SUMMARY_MODELS,
@@ -47,8 +53,18 @@ def summarize_text(
     if len(trimmed) < min_chars:
         return None, None
 
-    title = optional_str(metadata.get("title")) or "제목 없음"
-    prompt = f"{SUMMARY_PROMPT_KO}\n\n제목: {title}\n\n본문:\n{trimmed[:MAX_EXTRACTED_TEXT_CHARS]}"
+    language = detect_content_language(trimmed)
+    title = optional_str(metadata.get("title")) or (
+        "Untitled" if language == "en" else "제목 없음"
+    )
+    title_label, body_label = (
+        ("Title", "Body") if language == "en" else ("제목", "본문")
+    )
+    prompt = (
+        f"{SUMMARY_PROMPT_EN if language == 'en' else SUMMARY_PROMPT_KO}\n\n"
+        f"{title_label}: {title}\n\n{body_label}:\n"
+        f"{trimmed[:MAX_EXTRACTED_TEXT_CHARS]}"
+    )
     client = genai.Client(api_key=settings.gemini_api_key)
     summary, model = generate_summary_content(
         client=client,
@@ -56,6 +72,13 @@ def summarize_text(
         models=model_constants.TEXT_SUMMARY_MODELS,
     )
     return parse_summary_payload(summary), model
+
+
+def summary_prompt_for_content(text: str | None) -> str:
+    """Choose the existing summary contract from the source's content language."""
+
+    language: ContentLanguage = detect_content_language(text)
+    return SUMMARY_PROMPT_EN if language == "en" else SUMMARY_PROMPT_KO
 
 
 def generate_summary_content(
@@ -192,11 +215,15 @@ def metadata_to_patch(metadata: DatabaseRow, keep_existing: bool = False) -> Dat
 def build_metadata_summary_payload(metadata: DatabaseRow) -> DatabaseRow | None:
     title = optional_str(metadata.get("title"))
     description = optional_str(metadata.get("description"))
+    language = detect_content_language(" ".join(value for value in (title, description) if value))
+    title_label, description_label = (
+        ("Title", "Description") if language == "en" else ("제목", "설명")
+    )
     lines: list[str] = []
     if title:
-        lines.append(f"- [제목] {title}")
+        lines.append(f"- [{title_label}] {title}")
     if description:
-        lines.append(f"- [설명] {description[:500].strip()}")
+        lines.append(f"- [{description_label}] {description[:500].strip()}")
     detail = "\n".join(lines) if lines else None
 
     if title and description:
@@ -209,12 +236,12 @@ def build_metadata_summary_payload(metadata: DatabaseRow) -> DatabaseRow | None:
         return {
             "one_liner": limit_chars(title, 140),
             "search_summary": title,
-            "detail_summary": f"- [제목] {title}",
+            "detail_summary": f"- [{title_label}] {title}",
         }
     if description:
         return {
             "one_liner": limit_chars(description, 140),
             "search_summary": clean_text(description),
-            "detail_summary": f"- [설명] {description[:500].strip()}",
+            "detail_summary": f"- [{description_label}] {description[:500].strip()}",
         }
     return None

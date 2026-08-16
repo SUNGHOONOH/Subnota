@@ -2,13 +2,14 @@ import {
   addDays,
   addMonths,
   differenceInCalendarDays,
-  format,
   isBefore,
   startOfDay,
 } from 'date-fns';
+import { getUiDateLocale, getUiNumericDateOrder, NumericDateOrder } from './uiLanguage';
 
 export type DateMatchKind =
   | 'relative'
+  | 'english-date'
   | 'numeric-date'
   | 'weekday'
   | 'month-day-kr'
@@ -67,12 +68,70 @@ const YEAR_MONTH_DAY_KR_REGEX = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/g;
 // Short date without year: 슬래시 형식만 (M/D). 점 형식(3.6)은 소수·버전·수치와
 // 구분이 불가능해 제외한다. 연도 포함 점 형식(26.3.6)은 NUMERIC_DATE_REGEX가 잡는다.
 const SHORT_DATE_REGEX = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])/g;
+const ENGLISH_NUMERIC_DATE_REGEX =
+  /(?<![\d/])(\d{1,4})\/(\d{1,2})\/(\d{1,4})(?![\d/])/g;
 
 // Time expression that may follow a date token. 맨 숫자("내일 100개")를
 // 시각으로 오인하지 않도록 시 / : 표지를 요구한다.
 // "3시간"의 시(時)는 시각이 아니므로 시(?!간)으로 제외한다.
 const TIME_AFTER_REGEX =
   /^\s*(오전|오후|아침|점심|저녁|낮|밤|새벽)?\s*(\d{1,2})(?:시(?!간)(?:\s*(\d{1,2})(?:\s*분)?|\s*(반))?|:(\d{1,2}))(?!\d)/;
+
+const ENGLISH_MONTHS: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+const ENGLISH_MONTH =
+  'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+const ENGLISH_MONTH_DAY_REGEX = new RegExp(
+  `\\b(${ENGLISH_MONTH})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?\\b`,
+  'gi',
+);
+const ENGLISH_DAY_MONTH_REGEX = new RegExp(
+  `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${ENGLISH_MONTH})\\.?(?:,?\\s*(\\d{4}))?\\b`,
+  'gi',
+);
+const ENGLISH_RELATIVE_DATE_REGEX = /\b(today|tomorrow|yesterday)\b/gi;
+const ENGLISH_OFFSET_REGEX =
+  /\bin\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,3})\s+(days?|weeks?|months?)\b/gi;
+const ENGLISH_WEEKDAY_REGEX =
+  /\b(this|next|coming)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+const ENGLISH_TIME_AFTER_REGEX =
+  /^\s*(?:at\s+)?(?:(noon|midnight)|([01]?\d)(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?))\b/i;
+const ENGLISH_NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+const ENGLISH_WEEKDAYS: Record<string, number> = {
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+  sunday: 0,
+};
 
 // ── Lookup tables ───────────────────────────────────────────────
 
@@ -270,19 +329,180 @@ const withParsedTime = (
   };
 };
 
+const buildEnglishMonthDayDate = (
+  monthText: string,
+  dayText: string,
+  yearText: string | undefined,
+  baseDate: Date,
+) => {
+  const month = ENGLISH_MONTHS[monthText.toLowerCase().slice(0, 3)];
+  const day = Number(dayText);
+  const year = yearText ? Number(yearText) : baseDate.getFullYear();
+  const date = new Date(year, month, day);
+
+  if (date.getMonth() !== month || date.getDate() !== day) {
+    return null;
+  }
+  if (!yearText && date < baseDate) {
+    date.setFullYear(date.getFullYear() + 1);
+    if (date.getMonth() !== month || date.getDate() !== day) {
+      return null;
+    }
+  }
+  return date;
+};
+
+const buildEnglishWeekdayDate = (
+  weekday: string,
+  prefix: string,
+  baseDate: Date,
+) => {
+  const targetDay = ENGLISH_WEEKDAYS[weekday.toLowerCase()];
+  if (targetDay === undefined) return null;
+
+  let delta = (targetDay - baseDate.getDay() + 7) % 7;
+  if (prefix.toLowerCase() === 'next') {
+    delta += 7;
+  }
+  return addDays(baseDate, delta);
+};
+
+const withParsedEnglishTime = (
+  text: string,
+  date: Date,
+  matchIndex: number,
+  matchLength: number,
+) => {
+  const timeMatch = ENGLISH_TIME_AFTER_REGEX.exec(
+    text.slice(matchIndex + matchLength),
+  );
+  if (!timeMatch) {
+    return { date, hasTime: false, length: matchLength };
+  }
+
+  const scheduledDate = new Date(date);
+  const special = timeMatch[1]?.toLowerCase();
+  let hour = special === 'noon' ? 12 : special === 'midnight' ? 0 : Number(timeMatch[2]);
+  const minute = special ? 0 : Number(timeMatch[3] ?? 0);
+  const meridiem = timeMatch[4]?.toLowerCase().replace(/\./g, '');
+  if (!special && meridiem) {
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+  }
+  if (hour > 23 || minute > 59) {
+    return { date, hasTime: false, length: matchLength };
+  }
+  scheduledDate.setHours(hour, minute, 0, 0);
+  return {
+    date: scheduledDate,
+    hasTime: true,
+    length: matchLength + timeMatch[0].length,
+  };
+};
+
 // ── Main parser ─────────────────────────────────────────────────
 
 export const parseDates = (
   text: string,
   baseTimestamp = Date.now(),
+  language: 'en' | 'ko' = 'ko',
+  numericDateOrder: NumericDateOrder = getUiNumericDateOrder(language),
 ): DateMatch[] => {
   const matches: DateMatch[] = [];
   const baseDate = startOfDay(new Date(baseTimestamp));
 
-  // 1. Full numeric dates: 26.03.06, 2026.03.06
+  const pushEnglishMatch = (
+    index: number,
+    length: number,
+    date: Date | null,
+  ) => {
+    if (!date) return;
+    const scheduled = withParsedEnglishTime(text, date, index, length);
+    matches.push({
+      text: text.slice(index, index + scheduled.length),
+      date: scheduled.date,
+      index,
+      length: scheduled.length,
+      kind: 'english-date',
+      hasTime: scheduled.hasTime,
+    });
+  };
+
+  // Numeric English dates are accepted only when the device locale exposes a
+  // clear MDY/DMY order. YMD or a missing region remains unparsed.
+  ENGLISH_MONTH_DAY_REGEX.lastIndex = 0;
+  let englishMatch: RegExpExecArray | null;
+  while ((englishMatch = ENGLISH_MONTH_DAY_REGEX.exec(text)) !== null) {
+    pushEnglishMatch(
+      englishMatch.index,
+      englishMatch[0].length,
+      buildEnglishMonthDayDate(
+        englishMatch[1],
+        englishMatch[2],
+        englishMatch[3],
+        baseDate,
+      ),
+    );
+  }
+
+  ENGLISH_DAY_MONTH_REGEX.lastIndex = 0;
+  while ((englishMatch = ENGLISH_DAY_MONTH_REGEX.exec(text)) !== null) {
+    pushEnglishMatch(
+      englishMatch.index,
+      englishMatch[0].length,
+      buildEnglishMonthDayDate(
+        englishMatch[2],
+        englishMatch[1],
+        englishMatch[3],
+        baseDate,
+      ),
+    );
+  }
+
+  ENGLISH_RELATIVE_DATE_REGEX.lastIndex = 0;
+  while ((englishMatch = ENGLISH_RELATIVE_DATE_REGEX.exec(text)) !== null) {
+    const offsets: Record<string, number> = {
+      today: 0,
+      tomorrow: 1,
+      yesterday: -1,
+    };
+    pushEnglishMatch(
+      englishMatch.index,
+      englishMatch[0].length,
+      addDays(baseDate, offsets[englishMatch[1].toLowerCase()]),
+    );
+  }
+
+  ENGLISH_OFFSET_REGEX.lastIndex = 0;
+  while ((englishMatch = ENGLISH_OFFSET_REGEX.exec(text)) !== null) {
+    const count =
+      ENGLISH_NUMBER_WORDS[englishMatch[1].toLowerCase()] ??
+      Number(englishMatch[1]);
+    const unit = englishMatch[2].toLowerCase();
+    const date = unit.startsWith('month')
+      ? addMonths(baseDate, count)
+      : addDays(baseDate, count * (unit.startsWith('week') ? 7 : 1));
+    pushEnglishMatch(englishMatch.index, englishMatch[0].length, date);
+  }
+
+  ENGLISH_WEEKDAY_REGEX.lastIndex = 0;
+  while ((englishMatch = ENGLISH_WEEKDAY_REGEX.exec(text)) !== null) {
+    pushEnglishMatch(
+      englishMatch.index,
+      englishMatch[0].length,
+      buildEnglishWeekdayDate(englishMatch[2], englishMatch[1], baseDate),
+    );
+  }
+
+  // 1. Full numeric dates: 26.03.06, 2026.03.06. English slash dates are
+  // handled below using the device region, so the Korean YYYY/MM/DD-style
+  // fallback cannot accidentally reinterpret an English M/D/Y input.
   NUMERIC_DATE_REGEX.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = NUMERIC_DATE_REGEX.exec(text)) !== null) {
+    if (language === 'en' && m[0].includes('/')) {
+      continue;
+    }
     const date = buildFullDate(m[1], m[2], m[3]);
     if (date) {
       const scheduled = withParsedTime(text, date, m.index, m[0].length);
@@ -430,25 +650,64 @@ export const parseDates = (
     }
   }
 
-  // 6. Short date without year: 3/6, 12/25
-  SHORT_DATE_REGEX.lastIndex = 0;
-  while ((m = SHORT_DATE_REGEX.exec(text)) !== null) {
-    const month = Number(m[1]);
-    const day = Number(m[2]);
-    if (month < 1 || month > 12 || day < 1 || day > 31) {
-      continue;
-    }
-    const date = buildMonthDayDate(month, day, baseDate);
-    if (date) {
-      const scheduled = withParsedTime(text, date, m.index, m[0].length);
+  // 6. Slash dates follow the user's region only when the locale has a clear
+  // MDY/DMY order. CLDR has both conventions in English locales; YMD or an
+  // unavailable region remains intentionally unparsed.
+  if (language === 'en' && numericDateOrder) {
+    ENGLISH_NUMERIC_DATE_REGEX.lastIndex = 0;
+    while ((m = ENGLISH_NUMERIC_DATE_REGEX.exec(text)) !== null) {
+      const first = Number(m[1]);
+      const second = Number(m[2]);
+      const year = Number(m[3]);
+      const isYearFirst = first >= 1000;
+      const month = isYearFirst
+        ? second
+        : numericDateOrder === 'mdy'
+          ? first
+          : second;
+      const day = isYearFirst
+        ? year
+        : numericDateOrder === 'mdy'
+          ? second
+          : first;
+      const fullYear = isYearFirst ? first : year < 100 ? 2000 + year : year;
+      const date = buildFullDate(String(fullYear), String(month), String(day));
+      if (!date) continue;
+      const scheduled = withParsedEnglishTime(text, date, m.index, m[0].length);
       matches.push({
         text: text.slice(m.index, m.index + scheduled.length),
         date: scheduled.date,
         index: m.index,
         length: scheduled.length,
-        kind: 'short-date',
+        kind: 'numeric-date',
         hasTime: scheduled.hasTime,
       });
+    }
+  }
+
+  if (
+    language === 'ko' ||
+    (language === 'en' && (numericDateOrder === 'mdy' || numericDateOrder === 'dmy'))
+  ) {
+    SHORT_DATE_REGEX.lastIndex = 0;
+    while ((m = SHORT_DATE_REGEX.exec(text)) !== null) {
+      const month = language === 'ko' || numericDateOrder === 'mdy' ? Number(m[1]) : Number(m[2]);
+      const day = language === 'ko' || numericDateOrder === 'mdy' ? Number(m[2]) : Number(m[1]);
+      if (month < 1 || month > 12 || day < 1 || day > 31) {
+        continue;
+      }
+      const date = buildMonthDayDate(month, day, baseDate);
+      if (date) {
+        const scheduled = withParsedTime(text, date, m.index, m[0].length);
+        matches.push({
+          text: text.slice(m.index, m.index + scheduled.length),
+          date: scheduled.date,
+          index: m.index,
+          length: scheduled.length,
+          kind: 'short-date',
+          hasTime: scheduled.hasTime,
+        });
+      }
     }
   }
 
@@ -520,13 +779,21 @@ export const findNearestDateMatch = (
   }, null);
 };
 
-export const formatDisplayDate = (date: Date): string => {
-  return format(date, 'yyyy.MM.dd');
+export const formatDisplayDate = (
+  date: Date,
+  language: 'en' | 'ko' = 'ko',
+): string => {
+  return new Intl.DateTimeFormat(getUiDateLocale(language), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
 };
 
 export const formatRelativeDisplayDate = (
   date: Date,
   baseTimestamp = Date.now(),
+  language: 'en' | 'ko' = 'ko',
 ): string => {
   const diff = differenceInCalendarDays(
     date,
@@ -534,25 +801,37 @@ export const formatRelativeDisplayDate = (
   );
 
   if (diff === 0) {
-    return `오늘 ${formatDisplayDate(date)}`;
+    return language === 'en'
+      ? `Today · ${formatDisplayDate(date, language)}`
+      : `오늘 ${formatDisplayDate(date, language)}`;
   }
 
   if (diff === 1) {
-    return `내일 ${formatDisplayDate(date)}`;
+    return language === 'en'
+      ? `Tomorrow · ${formatDisplayDate(date, language)}`
+      : `내일 ${formatDisplayDate(date, language)}`;
   }
 
   if (diff === 2) {
-    return `모레 ${formatDisplayDate(date)}`;
+    return language === 'en'
+      ? `In two days · ${formatDisplayDate(date, language)}`
+      : `모레 ${formatDisplayDate(date, language)}`;
   }
 
-  return formatDisplayDate(date);
+  return formatDisplayDate(date, language);
 };
 
-export const formatTimeIfPresent = (date: Date): string | null => {
+export const formatTimeIfPresent = (
+  date: Date,
+  language: 'en' | 'ko' = 'ko',
+): string | null => {
   const h = date.getHours();
   const m = date.getMinutes();
   if (h === 0 && m === 0) {
     return null;
   }
-  return format(date, 'HH:mm');
+  return new Intl.DateTimeFormat(getUiDateLocale(language), {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 };

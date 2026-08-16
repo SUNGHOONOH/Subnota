@@ -32,6 +32,7 @@ from app.db.memos import fetch_user_memos
 from app.db.topics import has_topic_dirty_memos, mark_topic_memos_clean, replace_topic_clusters
 from app.db.types import DatabaseRow, MemoRecord
 from app.db.utils import content_hash_for_memo
+from app.features.language import ContentLanguage, detect_content_language
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +50,25 @@ TOPIC_LABEL_BLOCKLIST = {
     "주제",
     "토픽",
 }
+TOPIC_LABEL_BLOCKLIST_EN = {
+    "content",
+    "general",
+    "information",
+    "misc",
+    "miscellaneous",
+    "miscellaneous notes",
+    "notes",
+    "thoughts",
+    "topic",
+}
 TOPIC_LABEL_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
         "label": {
             "type": "string",
             "description": (
-                "메모 묶음을 포괄하는 상위 개념 한국어 카테고리명 1개. "
-                "키워드 나열이나 문장이 아니라 폴더명처럼 짧은 명사구여야 한다."
+                "One short noun-phrase category name in the dominant language of "
+                "the memo group. Do not list keywords or write a sentence."
             ),
         },
     },
@@ -97,7 +109,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
             user_id=request.user_id,
             memo_count=0,
             cluster_count=0,
-            model=constants.EMBEDDING_MODEL,
+            model=constants.EMBEDDING_MODEL_SIGNATURE,
             clustering_method=None,
             clusters=[],
             message="No topic_dirty memos. State A topic discovery skipped.",
@@ -114,7 +126,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
             user_id=request.user_id,
             memo_count=len(memos),
             cluster_count=0,
-            model=constants.EMBEDDING_MODEL,
+            model=constants.EMBEDDING_MODEL_SIGNATURE,
             clustering_method=None,
             clusters=[],
             message=f"Need at least {constants.TOPIC_MIN_MEMOS} memos. Use force=true for testing.",
@@ -129,7 +141,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
             user_id=request.user_id,
             memo_count=0,
             cluster_count=0,
-            model=constants.EMBEDDING_MODEL,
+            model=constants.EMBEDDING_MODEL_SIGNATURE,
             clustering_method=None,
             clusters=[],
             message="No memos found.",
@@ -185,7 +197,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
         user_id=request.user_id,
         memo_count=len(memos),
         cluster_count=len(results),
-        model=constants.EMBEDDING_MODEL,
+        model=constants.EMBEDDING_MODEL_SIGNATURE,
         clustering_method=clustering_method,
         clusters=results,
         message="State A topic discovery completed.",
@@ -235,6 +247,7 @@ def encode_texts(texts: list[str]) -> FloatArray:
 
     client = InferenceClient(
         token=settings.hf_token,
+        provider="hf-inference",
         timeout=settings.hf_timeout_seconds,
     )
     batches: list[Any] = []
@@ -458,7 +471,7 @@ def build_topic_results(
                 "representative_memo_ids": representative_ids,
                 "memo_count": len(cluster_memos),
                 "confidence": confidence,
-                "model_version": f"{constants.EMBEDDING_MODEL}:{clustering_method}",
+                "model_version": f"{constants.EMBEDDING_MODEL_SIGNATURE}:{clustering_method}",
                 "input_hash": input_hash,
                 "source": "server",
             }
@@ -537,7 +550,14 @@ def extract_keywords_by_group(
         normalize_for_keywords(" ".join(memos[index].content for index in indices))
         for indices in grouped_indices
     ]
-    docs = [doc if doc else "흩어진 메모" for doc in docs]
+    language_by_group = [
+        detect_content_language(" ".join(memos[index].content for index in indices))
+        for indices in grouped_indices
+    ]
+    docs = [
+        doc if doc else ("miscellaneous notes" if language == "en" else "흩어진 메모")
+        for doc, language in zip(docs, language_by_group)
+    ]
 
     vectorizer = CountVectorizer(
         tokenizer=tokenize,
@@ -549,7 +569,10 @@ def extract_keywords_by_group(
     try:
         matrix: Any = vectorizer.fit_transform(docs)
     except ValueError:
-        return [["흩어진", "메모"] for _ in grouped_indices]
+        return [
+            (["miscellaneous", "notes"] if language == "en" else ["흩어진", "메모"])
+            for language in language_by_group
+        ]
 
     terms = [str(term) for term in vectorizer.get_feature_names_out()]
     counts: Any = np.asarray(matrix.toarray(), dtype=np.float64)
@@ -559,10 +582,23 @@ def extract_keywords_by_group(
     idf = np.log((1 + len(docs)) / (1 + doc_freq)) + 1
     scores = tf * idf
 
-    return [select_keywords_for_row(row_scores, terms) for row_scores in scores]
+    return [
+        select_keywords_for_row(
+            row_scores,
+            terms,
+            fallback=("miscellaneous", "notes")
+            if language == "en"
+            else ("흩어진", "메모"),
+        )
+        for row_scores, language in zip(scores, language_by_group)
+    ]
 
 
-def select_keywords_for_row(row_scores: Any, terms: list[str]) -> list[str]:
+def select_keywords_for_row(
+    row_scores: Any,
+    terms: list[str],
+    fallback: tuple[str, str] = ("흩어진", "메모"),
+) -> list[str]:
     ranked_indices = sorted(
         range(len(terms)),
         key=lambda index: float(row_scores[index]),
@@ -579,24 +615,32 @@ def select_keywords_for_row(row_scores: Any, terms: list[str]) -> list[str]:
         if len(keywords) >= constants.TOPIC_KEYWORD_CANDIDATES:
             break
 
-    return keywords or ["흩어진", "메모"]
+    return keywords or list(fallback)
 
 
 def build_label(keywords: list[str], memos: list[MemoRecord] | None = None) -> str:
-    llm_label = build_llm_topic_label(keywords, memos or [])
+    cluster_memos = memos or []
+    language = detect_content_language(" ".join(memo.content for memo in cluster_memos))
+    llm_label = build_llm_topic_label(keywords, cluster_memos)
     if llm_label:
         return llm_label
 
-    return build_keyword_label(keywords)
+    return build_keyword_label(keywords, language)
 
 
-def build_keyword_label(keywords: list[str]) -> str:
-    return " · ".join(keywords[: constants.TOPIC_LABEL_TERMS]) if keywords else "흩어진 메모"
+def build_keyword_label(
+    keywords: list[str], language: ContentLanguage = "ko"
+) -> str:
+    if keywords:
+        return " · ".join(keywords[: constants.TOPIC_LABEL_TERMS])
+    return "Miscellaneous notes" if language == "en" else "흩어진 메모"
 
 
 def build_llm_topic_label(keywords: list[str], memos: list[MemoRecord]) -> str | None:
     if not settings.gemini_api_key or genai is None or genai_types is None or not keywords:
         return None
+
+    language = detect_content_language(" ".join(memo.content for memo in memos))
 
     client = genai.Client(
         api_key=settings.gemini_api_key,
@@ -620,7 +664,7 @@ def build_llm_topic_label(keywords: list[str], memos: list[MemoRecord]) -> str |
         except Exception:
             continue
 
-        label = clean_topic_label(extract_topic_label_response(response))
+        label = clean_topic_label(extract_topic_label_response(response), language)
         if label:
             return label
 
@@ -631,6 +675,39 @@ def build_topic_label_prompt(keywords: list[str], memos: list[MemoRecord]) -> st
     representative_lines = [memo_title(memo) for memo in memos[:5]]
     keyword_text = ", ".join(keywords[: constants.TOPIC_KEYWORD_CANDIDATES])
     memo_text = "\n".join(f"- {line}" for line in representative_lines if line)
+
+    language = detect_content_language(" ".join(memo.content for memo in memos))
+    if language == "en":
+        return f"""Task: name a topic graph node in a personal knowledge-management app.
+
+Goal: create one broad, useful category name that covers the supplied memo group.
+
+Rules:
+- Use a short, intuitive folder-like noun phrase in English (2-4 words).
+- Abstract one level above specific incidents, numbers, times, or error symptoms.
+- Do not introduce a topic that is unsupported by the input.
+- Do not list keywords, write a sentence, or include explanations.
+- Technical abbreviations such as UI, API, or SQL are allowed.
+- Avoid generic labels such as notes, information, general, content, topic, or miscellaneous.
+
+Good examples:
+- Keywords: weekly calendar, all-day block, ellipsis, layout error -> {{"label":"Calendar UI"}}
+- Keywords: time, 200 degrees, oven, chicken breast -> {{"label":"Cooking"}}
+- Keywords: probability, distribution, expected value, Bayes -> {{"label":"Statistics"}}
+- Keywords: WAL, SQLite, sync, indexing -> {{"label":"Databases"}}
+
+Bad examples:
+- {{"label":"time · 200 degrees · 2 hours"}}
+- {{"label":"fixing an all-day block error"}}
+- {{"label":"Notes"}}
+
+Response: return JSON matching the schema only.
+
+Input keywords:
+{keyword_text}
+
+Representative memos:
+{memo_text or "- Untitled memo"}"""
 
     return f"""작업: 개인 지식관리 앱의 토픽 그래프 노드 이름을 정한다.
 
@@ -717,7 +794,9 @@ def extract_label_from_json_text(text: str) -> str | None:
     return None
 
 
-def clean_topic_label(value: Any) -> str | None:
+def clean_topic_label(
+    value: Any, language: ContentLanguage = "ko"
+) -> str | None:
     if not isinstance(value, str):
         return None
 
@@ -735,7 +814,8 @@ def clean_topic_label(value: Any) -> str | None:
         return None
     if len(label) > constants.TOPIC_LLM_LABEL_MAX_CHARS:
         return None
-    if label in TOPIC_LABEL_BLOCKLIST:
+    blocklist = TOPIC_LABEL_BLOCKLIST_EN if language == "en" else TOPIC_LABEL_BLOCKLIST
+    if label.casefold() in blocklist:
         return None
     if not re.search(r"[가-힣A-Za-z]", label):
         return None

@@ -1,6 +1,6 @@
 # Subnota database handoff
 
-Last verified: 2026-07-15 (Asia/Seoul)
+Last verified: 2026-08-15 (Asia/Seoul)
 
 This document describes the production Supabase database after the security and
 memo graph consistency migration. It is intended as the starting point for any
@@ -30,7 +30,7 @@ Google Secret Manager.
 The production schema was verified from the live catalog on 2026-07-15. The
 canonical production migration history is the 30-row
 `supabase_migrations.schema_migrations` table, whose latest recorded version is
-`20260707190355_topic_memo_inbox_edges`.
+`20260815071841_profile_time_zone`.
 
 The local SQL files are the reproducible source for future work, but their
 filenames do not exactly match every production history version. Several SQL
@@ -47,6 +47,7 @@ final edge migration:
 | `20260626000000_growth_events.sql` | `20260626055812_growth_events` | reflected in production |
 | `20260626000100_trees.sql` | `20260626062143_trees` | reflected in production |
 | `20260708000000_topic_cluster_inbox_items.sql` | `20260707181903_topic_cluster_inbox_items` + `20260707182219_topic_cluster_inbox_items_service_grant` | reflected in production |
+| `20260812113011_calendar_block_category_id.sql` | `20260812113112_calendar_block_category_id` | reflected in production |
 
 The production history is intentionally not duplicated with the local
 filenames. Do not mark these local aliases as new applied migrations and do not
@@ -75,9 +76,12 @@ All public tables have RLS enabled.
 
 ### User-facing, owner-scoped
 
-- `profiles`: profile, briefing preference and push metadata.
+- `profiles`: profile, briefing preference, push metadata, and an IANA
+  `time_zone` for schedule extraction. It defaults to `Asia/Seoul` so existing
+  users' schedule times do not shift before their desktop app reports a device
+  time zone.
 - `memos`: canonical synchronized memo rows, user content timestamp and indexing state hashes.
-- `calendar_blocks`: calendar entries linked to memos where applicable.
+- `calendar_blocks`: calendar entries linked to memos where applicable, including an optional local-category reference.
 - `schedule_inbox`: backend-generated schedule suggestions; owner read/update.
 - `briefings`: generated daily/weekly briefing history; currently daily only.
 - `memo_chunks`: BGE-M3 chunk embeddings; owner read.
@@ -166,7 +170,10 @@ not public RPC endpoints. Their direct application-role execution is revoked.
 
 ## Memo chunk indexing and graph consistency
 
-Embedding model: `dragonkue/BGE-m3-ko` (1024 dimensions).
+Embedding model: `BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181` (1024 dimensions).
+The revision is the cache/audit identifier observed on Hugging Face; the
+serverless inference API receives only the model id and does not guarantee a
+runtime Hub-commit pin.
 
 Current workflow:
 
@@ -214,6 +221,10 @@ to the user's memo content input time, not the cron execution time.
 - Existing data backfill: `content_updated_at = coalesce(created_at, updated_at, now())`
 - Backend parser fallback order: `content_updated_at` -> `created_at` -> current
   time only if legacy data is malformed.
+- The parser converts that anchor into `profiles.time_zone` before resolving a
+  relative expression. The Cloud Scheduler's `Asia/Seoul` execution setting
+  controls only when the maintenance job runs; it does not choose a user's
+  suggested schedule time.
 
 Do not use `memos.updated_at` as the parsing anchor. Maintenance writes such as
 `schedule_scanned_hash`, `indexed_content_hash`, and topic/index state updates
@@ -245,8 +256,8 @@ because topic discovery intentionally ignores empty content.
 - The previously exposed backend admin key was rotated; old Secret Manager
   versions 1 and 2 are disabled; version 3 is enabled. Retrieve the current key
   from Secret Manager only when an authorized maintenance call is required.
-- Production migration history contains 30 applied versions through
-  `20260707190355_topic_memo_inbox_edges`.
+- Production migration history contains the applied `profile_time_zone`
+  migration at `20260815071841`.
 - The live schema reflects all current local feature migrations, but several
   local filenames are aliases of production's generated migration versions;
   see the mapping table above.

@@ -72,7 +72,7 @@ describe('app quit on last window close', () => {
     }
   });
 
-  it('keeps the app alive on macOS for the menu bar Mini Subnota flow', () => {
+  it('keeps the app alive on macOS for the menu bar Quick Subnota flow', () => {
     const originalDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
 

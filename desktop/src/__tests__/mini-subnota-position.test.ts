@@ -69,7 +69,7 @@ describe('getMiniWindowType', () => {
 });
 
 describe('registerGlobalShortcuts', () => {
-  it('registers only Mini Subnota on Windows when capture is disabled', () => {
+  it('registers only Quick Subnota on Windows when capture is disabled', () => {
     expect(
       registerGlobalShortcuts(
         { onCapture: vi.fn(), onToggleMemo: vi.fn() },

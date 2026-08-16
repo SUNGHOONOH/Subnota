@@ -2,13 +2,16 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 const appHandlers: Record<string, (...args: unknown[]) => void> = {};
 const ipcEventHandlers: Record<string, (...args: unknown[]) => void> = {};
+const ipcInvokeHandlers: Record<string, (...args: unknown[]) => unknown> = {};
 const constructorOptions: Array<Record<string, unknown>> = [];
 const mockBuildFromTemplate = vi.fn((template: unknown) => ({ template }));
 const mockRegister = vi.fn(() => true);
 const mockSend = vi.fn();
 const mockSetContextMenu = vi.fn();
+const mockSetMaximumSize = vi.fn();
 
 vi.mock('../platform/policy', () => ({
+  COLD_START_ARG: '--subnota-cold-start',
   DESKTOP_PLATFORM_FEATURES: {
     browserExtensionClipper: false,
     captureShortcut: false,
@@ -54,9 +57,11 @@ vi.mock('electron', () => ({
     on() { return undefined; }
     restore() { return undefined; }
     setBounds() { return undefined; }
-    setMaximumSize() { return undefined; }
+    setMaximumSize(...args: unknown[]) { return mockSetMaximumSize(...args); }
     setMinimumSize() { return undefined; }
     show() { return undefined; }
+    getBounds() { return { height: 820, width: 860, x: 0, y: 0 }; }
+    static fromWebContents() { return new this({}); }
     static getAllWindows() { return []; }
   },
   globalShortcut: {
@@ -64,7 +69,9 @@ vi.mock('electron', () => ({
     unregisterAll: vi.fn(),
   },
   ipcMain: {
-    handle: vi.fn(),
+    handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+      ipcInvokeHandlers[channel] = fn;
+    },
     on: (channel: string, fn: (...args: unknown[]) => void) => {
       ipcEventHandlers[channel] = fn;
     },
@@ -123,12 +130,12 @@ beforeAll(async () => {
 });
 
 describe('Windows desktop policy wiring', () => {
-  it('keeps Mini Subnota in the notification area without capture UI', () => {
+  it('keeps Quick Subnota in the notification area without capture UI', () => {
     const templates = JSON.stringify(mockBuildFromTemplate.mock.calls);
 
-    expect(templates).toContain('새 Mini Subnota');
+    expect(/새 Quick Subnota|New Quick Subnota/.test(templates)).toBe(true);
     expect(templates).not.toContain('현재 페이지 저장');
-    expect(templates).not.toContain('최근 수집함');
+    expect(templates).not.toContain('최근 링크');
     expect(mockSetContextMenu).toHaveBeenCalled();
     expect(mockRegister).toHaveBeenCalledTimes(1);
     expect(constructorOptions[0]).not.toHaveProperty('titleBarStyle');
@@ -144,7 +151,21 @@ describe('Windows desktop policy wiring', () => {
     expect(mockSend).not.toHaveBeenCalledWith('inbox-capture', expect.anything());
   });
 
-  it('still accepts Mini Subnota save notifications', () => {
+  it('still accepts Quick Subnota save notifications', () => {
     expect(ipcEventHandlers['mini-saved']).toBeTypeOf('function');
+  });
+
+  it('clears the native maximum after leaving the auth screen', () => {
+    const setAuthWindowMode = ipcInvokeHandlers['set-auth-window-mode'];
+    expect(setAuthWindowMode).toBeTypeOf('function');
+
+    setAuthWindowMode({ sender: {} }, true);
+    expect(mockSetMaximumSize).toHaveBeenLastCalledWith(1000, 720);
+
+    setAuthWindowMode({ sender: {} }, false);
+    expect(mockSetMaximumSize).toHaveBeenLastCalledWith(
+      2_147_483_647,
+      2_147_483_647,
+    );
   });
 });

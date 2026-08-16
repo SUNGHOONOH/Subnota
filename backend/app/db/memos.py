@@ -87,7 +87,7 @@ def fetch_memo_chunk_refs(user_id: str, memo_id: str) -> list[DatabaseRow]:
         .select("id, chunk_text, start_index, end_index")
         .eq("user_id", user_id)
         .eq("memo_id", memo_id)
-        .eq("embedding_model", constants.EMBEDDING_MODEL)
+        .eq("embedding_model", constants.EMBEDDING_MODEL_SIGNATURE)
         .execute()
     )
     rows = cast(list[DatabaseRow], response.data or [])
@@ -116,7 +116,7 @@ def replace_memo_chunks(
         {
             "p_chunks": chunks,
             "p_content_hash": content_hash,
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_expected_content": expected_content,
             "p_memo_id": memo_id,
             "p_user_id": user_id,

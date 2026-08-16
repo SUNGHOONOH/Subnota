@@ -11,8 +11,12 @@ import { parseDates } from "../../lib/dateParser"
 // " 6일" — is still recognized as one token. Leaf nodes are replaced with a
 // single placeholder char so string offsets map 1:1 to document positions.
 const dateHighlightKey = new PluginKey("dateHighlight")
+export const DATE_HIGHLIGHT_LANGUAGE_META = "subnota:date-highlight-language"
 
-export const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
+export const buildDecorations = (
+  doc: ProseMirrorNode,
+  language: 'en' | 'ko' = 'ko',
+): DecorationSet => {
   const decorations: Decoration[] = []
 
   doc.descendants((node, pos) => {
@@ -24,7 +28,7 @@ export const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
     if (text) {
       let matches
       try {
-        matches = parseDates(text)
+        matches = parseDates(text, Date.now(), language)
       } catch {
         return false
       }
@@ -47,21 +51,38 @@ export const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
   return DecorationSet.create(doc, decorations)
 }
 
-export const DateHighlight = Extension.create({
+export const DateHighlight = Extension.create<{ language: 'en' | 'ko' }>({
   name: "dateHighlight",
+
+  addOptions() {
+    return { language: 'ko' }
+  },
 
   addProseMirrorPlugins() {
     return [
       new Plugin({
         key: dateHighlightKey,
         state: {
-          init: (_config, { doc }) => buildDecorations(doc),
-          apply: (tr, value) =>
-            tr.docChanged ? buildDecorations(tr.doc) : value,
+          init: (_config, { doc }) => ({
+            decorations: buildDecorations(doc, this.options.language),
+            language: this.options.language,
+          }),
+          apply: (tr, value) => {
+            const language = tr.getMeta(DATE_HIGHLIGHT_LANGUAGE_META) ?? value.language
+
+            if (!tr.docChanged && language === value.language) {
+              return value
+            }
+
+            return {
+              decorations: buildDecorations(tr.doc, language),
+              language,
+            }
+          },
         },
         props: {
           decorations(state) {
-            return dateHighlightKey.getState(state)
+            return dateHighlightKey.getState(state)?.decorations
           },
         },
       }),

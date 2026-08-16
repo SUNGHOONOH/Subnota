@@ -33,12 +33,11 @@
   outline: none;
   caret-color: var(--tt-cursor-color);
 
-  // Paragraph spacing — keep Enter (new paragraph) gap equal to the natural
-  // line-wrap rhythm (line-height 1.5) instead of an extra 20px, so wrapping
-  // and pressing Enter look consistent (Apple Notes-like).
+  // Paragraph spacing — keep Enter (new paragraph) gap equal to the editor's
+  // configured line rhythm instead of an extra fixed gap.
   p:not(:first-child):not(td p):not(th p) {
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: inherit;
+    line-height: inherit;
     font-weight: normal;
     margin-top: 0;
   }

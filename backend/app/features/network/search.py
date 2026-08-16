@@ -67,7 +67,7 @@ def search_state_b(request: NetworkSearchRequest) -> NetworkSearchResponse:
     if not query_text:
         return NetworkSearchResponse(
             status="skipped",
-            model=constants.EMBEDDING_MODEL,
+            model=constants.EMBEDDING_MODEL_SIGNATURE,
             query_chunk=None,
             results=[],
             message="검색할 메모가 비어 있습니다.",
@@ -83,7 +83,7 @@ def search_state_b(request: NetworkSearchRequest) -> NetworkSearchResponse:
         sentence_indices=[],
     )
 
-    chunk_hash = short_hash(f"{constants.EMBEDDING_MODEL}:{query_text}")
+    chunk_hash = short_hash(f"{constants.EMBEDDING_MODEL_SIGNATURE}:{query_text}")
     embedding = fetch_cached_embedding(request.user_id, chunk_hash)
     if embedding is None:
         embedding = encode_texts([query_text])[0]
@@ -120,7 +120,7 @@ def search_state_b(request: NetworkSearchRequest) -> NetworkSearchResponse:
 
     return NetworkSearchResponse(
         status="ok",
-        model=constants.EMBEDDING_MODEL,
+        model=constants.EMBEDDING_MODEL_SIGNATURE,
         query_chunk=query_chunk,
         results=results[: request.limit],
         message=None if results else "관련성이 충분한 연결을 찾지 못했습니다.",

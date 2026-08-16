@@ -1,4 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <rect width="1024" height="1024" rx="230" ry="230" fill="#1E1E1E"/>
-  <text x="512" y="756" font-family="Helvetica, Arial" font-weight="700" font-size="680" fill="white" text-anchor="middle">M</text>
+  <!--
+    Subnota 앱 아이콘 마스터. scripts/generate-icon.sh 가 이 파일에서
+    icon.icns(macOS Dock)와 Windows용 크기들을 만들어 낸다.
+
+    색은 두 가지다. 잎 네 장은 로고색, 오른쪽 잎 한 장만 말라카이트다.
+    같은 두 값이 desktop/src/styles/_color-tokens.scss 의
+    app-color-brand-mark / app-color-brand-petal 토큰과
+    web/app/globals.css 에도 있다. 빌드 계통이 셋 다 달라 공유가 안 된다.
+
+    오른쪽 잎을 고른 이유: 위쪽 잎이 가장 먼저 읽히고 왼아래가 가장 조용한데,
+    오른쪽은 그 중간이라 시선 흐름에 자연스럽게 걸린다.
+
+    말라카이트를 고른 이유는 명도다. 비리디언(#40826d)은 로고색과 명도가
+    0.003밖에 안 벌어져서 회색조 인쇄와 색각이상 조건에서 그 잎이 사라진다.
+    말라카이트는 0.076 벌어져 흑백에서도 남는다.
+
+    (XML 주석 안에서는 하이픈 두 개를 연달아 쓸 수 없다. 토큰 이름 앞의
+    대시를 뺀 이유다.)
+
+    잎 배치(-6, 68, 145, 210, 292도 / 크기 1.04~0.97)는 로고 원본 그대로다.
+    100 격자를 8.192배로 키우고 102.4만큼 밀어 1024 안에 앉혔다.
+  -->
+  <rect width="1024" height="1024" rx="230" ry="230" fill="#ffffff"/>
+  <g transform="translate(102.4,102.4) scale(8.192)">
+    <path fill="#4c71b7" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(49.7,47) rotate(-6) scale(1.04)"/>
+    <path fill="#0b6e4f" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(52.8,48.9) rotate(68) scale(0.97)"/>
+    <path fill="#4c71b7" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(51.7,52.5) rotate(145) scale(1.06)"/>
+    <path fill="#4c71b7" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(48.5,52.6) rotate(210) scale(0.98)"/>
+    <path fill="#4c71b7" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(47.2,48.9) rotate(292) scale(1.02)"/>
+  </g>
 </svg>

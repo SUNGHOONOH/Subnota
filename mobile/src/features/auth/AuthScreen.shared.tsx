@@ -335,6 +335,25 @@ const AuthScreen = ({ platformConfig }: { platformConfig: AuthPlatformConfig }) 
                 </Text>
               </Text>
             </Pressable>
+            <Text style={styles.legalNotice}>
+              계속하면{' '}
+              <Text
+                onPress={() => void Linking.openURL('https://subnota.com/terms')}
+                style={styles.legalLink}
+              >
+                서비스 이용약관
+              </Text>
+              에 동의하며,{' '}
+              <Text
+                onPress={() =>
+                  void Linking.openURL('https://subnota.com/privacy')
+                }
+                style={styles.legalLink}
+              >
+                개인정보 처리방침
+              </Text>
+              에 따라 개인정보가 처리됩니다.
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -560,6 +579,17 @@ const createStyles = (config: AuthPlatformConfig) =>
       color: COLORS.muted,
       fontSize: 13,
       fontWeight: '600',
+    },
+    legalLink: {
+      color: COLORS.primary,
+      fontWeight: '700',
+    },
+    legalNotice: {
+      color: COLORS.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 8,
+      textAlign: 'center',
     },
     title: {
       color: COLORS.body,

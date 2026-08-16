@@ -1,13 +1,8 @@
 import { app, net } from 'electron';
-
-function getReleaseRepo(): string | null {
-  const repo = (
-    process.env.SUBNOTA_RELEASE_REPO ||
-    process.env.GITHUB_REPOSITORY ||
-    ''
-  ).trim();
-  return repo.includes('/') ? repo : null;
-}
+import {
+  getReleaseRepository,
+  normalizeReleaseAssetUrl,
+} from './release-channel';
 
 export interface UpdateInfo {
   version: string;
@@ -27,7 +22,7 @@ function isNewer(latest: string, current: string): boolean {
 }
 
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  const repo = getReleaseRepo();
+  const repo = getReleaseRepository();
   if (!repo) return null;
 
   try {
@@ -54,10 +49,12 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
       return false;
     });
     if (!asset) return null;
+    const downloadUrl = normalizeReleaseAssetUrl(asset.browser_download_url, repo);
+    if (!downloadUrl) return null;
 
     return {
       version: latestVersion,
-      downloadUrl: asset.browser_download_url,
+      downloadUrl,
     };
   } catch {
     return null;

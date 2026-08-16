@@ -1,0 +1,303 @@
+/* 제품 화면 무대.
+
+   앱은 고정 논리 크기로 그려서 컨테이너 폭에 맞춰 통째로 축소한다. 앱의 28px
+   컨트롤과 13px 글자 규격을 그대로 유지한 채 어떤 폭에도 들어가는 유일한
+   방법이다 — 요소마다 반응형 값을 새로 정하면 그 순간 다른 앱이 된다.
+   그래서 화면 안 요소들 사이의 비율은 언제나 실제 앱의 비율이다.
+
+   창은 색 배경판 위에 떠 있다. 배경판은 챕터마다 색이 다르고, 그 색은 본문
+   하이라이트 칩과 짝을 이룬다. */
+
+/* ── 색 배경판 ── */
+.showcase {
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.showcase-blue {
+  background: linear-gradient(135deg, #e3f0fd 0%, #b9d5f5 55%, #8fb6ea 100%);
+}
+
+.showcase-green {
+  background: linear-gradient(135deg, #e6f4ea 0%, #c0e2ca 55%, #95cca7 100%);
+}
+
+.showcase-amber {
+  background: linear-gradient(135deg, #fdf1dd 0%, #f4dcb0 55%, #e9c483 100%);
+}
+
+.showcase-clay {
+  background: linear-gradient(135deg, #fbebe5 0%, #f2d0c2 55%, #e5b09b 100%);
+}
+
+/* ── 배경판 위에 뜬 창 ──
+   맥 창 크롬은 실제 앱에도 있는 것(hiddenInset 신호등)이라 그대로 둔다.
+   가운데 제목은 창을 창으로 읽히게 하는 최소한의 표시다. */
+.showcase-window {
+  background: var(--paper-strong);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.06),
+    0 24px 60px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  height: 80%;
+  left: 50%;
+  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 88%;
+}
+
+/* 앱 상단에는 바가 없다. 신호등만 작업공간 위 왼쪽에 얹힌다 — macOS
+   hiddenInset 이 그리는 그대로다. */
+.showcase-dots {
+  display: flex;
+  gap: 8px;
+  left: 18px;
+  position: absolute;
+  top: 16px;
+  z-index: 5;
+}
+
+.showcase-dots span {
+  border-radius: 50%;
+  height: 11px;
+  width: 11px;
+}
+
+.showcase-dots span:nth-child(1) {
+  background: #ee6a5f;
+}
+
+.showcase-dots span:nth-child(2) {
+  background: #f4bf4f;
+}
+
+.showcase-dots span:nth-child(3) {
+  background: #61c554;
+}
+
+/* 창 안쪽. 여기 폭에 맞춰 무대를 줄인다. */
+.showcase-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 사이드바 접힘 ──
+   레일이 레이아웃 폭을 전혀 차지하지 않고 작업공간이 창 끝까지 채워진다.
+   전역 컨트롤만 왼쪽 위 220px 를 쓰고, 첫 패널의 탭이 그만큼 밀린다. */
+.subnota-app.session-collapsed .split-workspace-commandbar {
+  gap: 2px;
+  padding-left: 78px;
+  width: var(--app-size-commandbar-content);
+}
+
+.subnota-app.session-collapsed .split-pane:first-child .split-pane-header {
+  padding-left: var(--app-size-commandbar-content);
+}
+
+/* ── 창 없이 조각만 보여줄 때 ──
+   일정 흐름처럼 앱 전체가 아니라 필요한 패널만 떼어 보여주는 자리. */
+.scene-frame {
+  position: relative;
+  width: 100%;
+}
+
+.scene-stage {
+  font-family: var(--app-font-ui);
+  left: 0;
+  line-height: normal;
+  position: absolute;
+  text-align: left;
+  top: 0;
+  transform-origin: top left;
+}
+
+.scene-stage *,
+.scene-stage *::before,
+.scene-stage *::after {
+  box-sizing: border-box;
+}
+
+/* 팝오버·Quick 패널처럼 무대 위에 떠 있는 것들. 앱에서 포털이나 별도 창으로
+   뜨는 것들이라 여기서도 문서 흐름 밖에 둔다. */
+.scene-float {
+  position: absolute;
+  z-index: 40;
+}
+
+.scene-float-bubble,
+.scene-float-confirm {
+  left: 286px;
+  top: 172px;
+}
+
+.scene-float-picker {
+  left: 421px;
+  top: 156px;
+}
+
+.scene-float-mini {
+  left: 50%;
+  top: 150px;
+  transform: translateX(-50%);
+}
+
+.scene-float-hotkey {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  left: 50%;
+  top: 232px;
+  transform: translateX(-50%);
+}
+
+.scene-float-hotkey kbd {
+  background: rgba(31, 30, 27, 0.92);
+  border-radius: 8px;
+  color: #faf9f5;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 40px;
+  padding: 11px 12px;
+  text-align: center;
+}
+
+/* 수집함 자리표시자 줄 — 앱의 납작한 회색 스켈레톤과 같은 값. */
+.inbox-skeleton-line {
+  background: var(--app-color-skeleton, #f1efe9);
+  border-radius: 4px;
+  display: block;
+  height: 10px;
+}
+
+@media (max-width: 640px) {
+  .showcase {
+    border-radius: 14px;
+  }
+
+  .showcase-window {
+    border-radius: 8px;
+    height: 88%;
+    width: 95%;
+  }
+}
+
+/* ── 조각 구성 ──
+   앱 창 하나가 아니라 관계가 드러나는 조각 둘을 나란히 놓는 자리.
+   좌표는 무대(1080×560) 기준이다. */
+.fragment-scene {
+  display: grid;
+  gap: 0;
+  grid-template-columns: 430px 110px minmax(0, 1fr);
+  height: 100%;
+  align-items: center;
+  padding: 16px 8px;
+}
+
+.fragment-memo {
+  position: relative;
+}
+
+.fragment-window {
+  background: var(--app-color-bg-paper);
+  position: relative;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(44, 37, 32, 0.05),
+    0 10px 30px rgba(44, 37, 32, 0.1);
+  overflow: hidden;
+}
+
+.fragment-dots {
+  display: flex;
+  gap: 7px;
+  left: 14px;
+  position: absolute;
+  top: 13px;
+  z-index: 5;
+}
+
+.fragment-dots span {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+}
+
+.fragment-dots span:nth-child(1) {
+  background: #ee6a5f;
+}
+
+.fragment-dots span:nth-child(2) {
+  background: #f4bf4f;
+}
+
+.fragment-dots span:nth-child(3) {
+  background: #61c554;
+}
+
+.fragment-memo-body {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  min-height: 260px;
+}
+
+.fragment-memo-rail {
+  background: var(--app-color-chrome-bg);
+  padding: 12px 8px;
+}
+
+.fragment-memo-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 4px 0 16px;
+}
+
+/* 조각 안에서는 신호등이 레일 위에 있으므로 목록을 그만큼 내린다. */
+.fragment-memo-rail {
+  padding-top: 34px;
+}
+
+/* 팝오버는 선택한 문장 바로 아래에 뜬다. */
+.fragment-float {
+  position: absolute;
+  z-index: 40;
+}
+
+.fragment-float-bubble {
+  left: 188px;
+  top: 264px;
+}
+
+.fragment-link {
+  align-self: center;
+  height: 120px;
+  overflow: visible;
+  width: 140px;
+}
+
+.fragment-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 흉내 낸 포인터. 무대 좌표에 얹히므로 문서 흐름 밖이다. */
+.sim-cursor {
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  z-index: 60;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+}

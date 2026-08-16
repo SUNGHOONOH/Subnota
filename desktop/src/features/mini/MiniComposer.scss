@@ -1,7 +1,7 @@
 .mini-composer {
-  background: var(--legacy-bg-app, #faf9f5);
+  background: var(--app-color-bg);
   box-sizing: border-box;
-  color: var(--legacy-ink, #2c2520);
+  color: var(--app-color-text);
   display: flex;
   flex-direction: column;
   font-family: var(
@@ -33,8 +33,9 @@
     -webkit-app-region: no-drag;
   }
 
-  &__main-button {
-    color: var(--legacy-muted-design, #5c4d3c);
+  &__main-button,
+  &__close-button {
+    color: var(--app-color-muted-design);
     position: relative;
     transition: background-color 140ms ease, color 140ms ease, transform 100ms ease;
 
@@ -45,8 +46,8 @@
     }
 
     &:hover {
-      background: var(--legacy-bg-hover, rgba(44, 37, 32, 0.08));
-      color: var(--legacy-ink, #2c2520);
+      background: var(--app-color-bg-hover);
+      color: var(--app-color-text);
     }
 
     &:active {
@@ -54,23 +55,36 @@
     }
   }
 
-  &__title {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+  /* 마크 + 제목은 한 덩어리다. 툴팁 대상이기도 해서 함께 감싼다. */
+  &__brand {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+    margin-right: auto;
+    /* 창 끌기 영역 위에 있지만 툴팁을 띄우려면 포인터를 받아야 한다. */
+    -webkit-app-region: no-drag;
   }
 
-  &__hint {
-    color: var(--legacy-muted-soft, #9c8e7c);
-    font-size: 11px;
+  &__mark {
+    color: var(--app-color-brand-mark);
+    flex: 0 0 auto;
+  }
+
+  /* 마크 옆 글자는 워드마크다. 메인 앱의 로그인 락업과 같은 얼굴을 쓴다 —
+     같은 로고가 창마다 다른 서체로 보이면 안 된다. */
+  &__title {
+    font-family: var(--legacy-font-wordmark);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.005em;
   }
 
   &__input {
-    background: var(--legacy-bg-paper, #fcfaf7);
-    border: 1px solid var(--legacy-border, #e5ddd0);
+    background: var(--app-color-bg-paper);
+    border: 1px solid var(--app-color-border);
     border-radius: 10px;
     box-sizing: border-box;
-    color: var(--legacy-ink, #2c2520);
+    color: var(--app-color-text);
     flex: 1;
     font-size: 14px;
     letter-spacing: -0.01em;
@@ -83,75 +97,21 @@
     -webkit-app-region: no-drag;
 
     &::placeholder {
-      color: var(--legacy-muted-soft, #9c8e7c);
+      color: var(--app-color-muted-soft);
     }
 
+    /* 코럴 링을 두지 않는다. 이 창은 열리자마자 입력란에 포커스가 가므로
+       링이 늘 켜져 있고, 강조가 아니라 경고처럼 읽힌다. `:focus-visible`도
+       답이 아니다 — 텍스트 입력 요소는 포커스를 어떻게 받았든 항상 그 선택자에
+       매칭된다. 포커스 표시는 테두리를 한 단계 진하게 하는 것으로 갈음한다. */
     &:focus {
-      background: var(--legacy-bg-surface, #fffdf8);
-      border-color: var(--app-color-action-primary);
-      box-shadow: 0 0 0 3px var(--app-color-focus-ring);
-    }
-  }
-
-  &__shortcuts {
-    display: grid;
-    gap: 6px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    -webkit-app-region: no-drag;
-  }
-
-  &__shortcut {
-    align-items: center;
-    background: var(--legacy-bg-paper, #fcfaf7);
-    border-radius: 8px;
-    color: var(--legacy-accent-dark, #5c4d3c);
-    display: flex;
-    font-size: 10px;
-    gap: 6px;
-    justify-content: space-between;
-    min-height: 40px;
-    min-width: 0;
-    padding: 0 8px;
-    transition: background-color 140ms ease, color 140ms ease, transform 100ms ease;
-
-    &:hover,
-    &.recording {
-      background: var(--app-color-brand-100);
-      color: var(--legacy-ink, #2c2520);
-    }
-
-    &:active {
-      transform: scale(0.96);
-    }
-  }
-
-  &__shortcut-keys {
-    align-items: center;
-    display: flex;
-    flex-shrink: 0;
-    gap: 2px;
-
-    em {
-      color: var(--app-color-action-primary);
-      font-size: 10px;
-      font-style: normal;
-    }
-
-    .mantine-Kbd-root {
-      background: var(--legacy-bg-surface, #fffdf8);
-      border: 0;
-      box-shadow: 0 1px 1px rgb(0 0 0 / 8%), 0 0 0 1px rgb(0 0 0 / 6%);
-      color: var(--legacy-accent-dark, #5c4d3c);
-      font-family: inherit;
-      font-size: 9px;
-      height: 18px;
-      min-width: 18px;
-      padding: 0 4px;
+      background: var(--app-color-bg-surface);
+      border-color: var(--app-color-border-strong);
     }
   }
 
   &__recent {
-    border-top: 1px solid var(--legacy-border, #e5ddd0);
+    border-top: 1px solid var(--app-color-border);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -160,8 +120,24 @@
     -webkit-app-region: no-drag;
   }
 
+  /* 머리글과 두 저장 버튼이 한 줄에 선다. 머리글은 최근 링크를 내보내지 않는
+     플랫폼에서 빠지므로 버튼이 왼쪽으로 흘러내리지 않게 auto 마진으로 민다. */
+  &__recent-head {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    min-height: var(--control-size-compact, 24px);
+  }
+
+  &__actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+
   &__recent-title {
-    color: var(--legacy-muted-design, #8b7355);
+    color: var(--app-color-muted-design);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -178,7 +154,7 @@
     align-items: center;
     background: transparent;
     border: 0;
-    color: var(--legacy-ink-soft, #4f4b42);
+    color: var(--app-color-text-soft);
     cursor: pointer;
     display: grid;
     font: inherit;
@@ -191,12 +167,12 @@
     width: 100%;
 
     &:hover {
-      color: var(--app-color-action-primary);
+      color: var(--app-color-text-strong);
     }
   }
 
   &__recent-source {
-    color: var(--legacy-accent, #8b7355);
+    color: var(--app-color-accent);
     font-size: 10px;
     font-weight: 600;
     max-width: 72px;
@@ -213,48 +189,47 @@
     white-space: nowrap;
   }
 
-  &__recent-empty {
-    color: var(--legacy-muted-soft, #9c8e7c);
+  /* 제 줄을 갖는다. 버튼과 폭을 다투면 정작 조치가 필요한 실패 문구가
+     ellipsis로 잘려 안 보인다. 빈 줄이어도 높이를 예약해 레이아웃이 튀지 않게. */
+  &__status {
+    color: var(--app-color-muted-soft);
+    display: -webkit-box;
     font-size: 11px;
     margin: 0;
-  }
-
-  &__footer {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-    justify-content: space-between;
-  }
-
-  &__status {
-    color: var(--legacy-muted-soft, #9c8e7c);
-    flex: 1;
-    font-size: 11px;
+    min-height: 15px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
+  /* 두 저장 동작은 같은 흰 표면을 쓴다. 코럴은 이 창에서 브랜드 마크가
+     이미 쓰고 있고, 작은 패널에 원색 버튼까지 얹으면 시선이 분산된다. */
+  &__secondary,
   &__save {
-    background: var(--app-color-action-primary);
-    border: 0;
+    background: var(--app-color-action-secondary-bg);
+    border: 1px solid var(--app-color-action-secondary-border);
     border-radius: 8px;
-    color: var(--app-color-action-primary-text);
+    color: var(--app-color-action-secondary-text);
     cursor: pointer;
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--control-font-compact, 12px);
     font-weight: 500;
-    height: 32px;
-    padding: 0 16px;
+    height: var(--control-size-compact, 24px);
+    padding: 0 var(--control-padding-compact, 8px);
     transition: background-color 140ms ease, transform 100ms ease;
     -webkit-app-region: no-drag;
 
-    &:hover {
-      background: var(--app-color-action-primary-hover);
+    &:hover:not(:disabled) {
+      background: var(--app-color-action-secondary-hover);
     }
 
-    &:active {
+    &:active:not(:disabled) {
       transform: scale(0.96);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.6;
     }
   }
 }

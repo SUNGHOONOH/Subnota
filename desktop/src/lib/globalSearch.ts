@@ -97,7 +97,7 @@ export const buildGlobalSearchItems = ({
       item.description ??
       item.summary ??
       item.domain ??
-      '웹 수집함',
+      '링크 저장함',
     timestamp: toTimestamp(item.createdAt),
     title: item.title ?? item.domain ?? '제목 없는 수집 항목',
   })),
@@ -122,19 +122,28 @@ export const buildGlobalSearchItems = ({
 ];
 
 export const buildGlobalSearchCatalog = (items: GlobalSearchItem[]) => {
+  // Refresh and local-first merge can briefly contain the same Inbox row twice
+  // while a server response and a queued local row settle. MiniSearch requires
+  // unique idField values; duplicate input must not take down the whole app.
+  const seenKeys = new Set<string>();
+  const uniqueItems = items.filter(item => {
+    if (seenKeys.has(item.key)) return false;
+    seenKeys.add(item.key);
+    return true;
+  });
   const index = new MiniSearch({
     fields: ['title', 'subtitle', 'searchText'],
     idField: 'key',
   });
-  const itemsByKey = new Map(items.map(item => [item.key, item]));
+  const itemsByKey = new Map(uniqueItems.map(item => [item.key, item]));
 
-  index.addAll(items);
+  index.addAll(uniqueItems);
 
   return {
     search(query: string, limit = 20) {
       const normalizedQuery = query.trim();
       if (!normalizedQuery) {
-        return items
+        return uniqueItems
           .filter(item => item.timestamp > 0)
           .sort((a, b) => b.timestamp - a.timestamp)
           .slice(0, limit);

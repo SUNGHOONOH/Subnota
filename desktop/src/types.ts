@@ -3,6 +3,7 @@ export interface MemoRow {
   content: string;
   content_hash: string | null;
   content_updated_at?: string | null;
+  conflict_of?: string | null;
   created_at: string;
   id: string;
   is_archived: boolean | null;
@@ -28,6 +29,7 @@ export type MemoSaveState =
 export interface CalendarBlockRow {
   all_day: boolean | null;
   all_day_date?: string | null;
+  category_id?: string | null;
   color: string | null;
   completed_at: string | null;
   created_at: string;
@@ -41,6 +43,29 @@ export interface CalendarBlockRow {
   title: string;
   time_zone?: string | null;
   updated_at: string;
+}
+
+export interface CalendarBlockDraft {
+  allDay: boolean;
+  categoryId?: string | null;
+  color: string;
+  endDate?: string | null;
+  id?: string;
+  note: string | null;
+  order?: number;
+  startDate: string;
+  title: string;
+}
+
+export interface CalendarCategoryRow {
+  color: string;
+  id: string;
+  name: string;
+}
+
+export interface CalendarCategoryDraft {
+  color: string;
+  name: string;
 }
 
 export interface ScheduleInboxRow {
@@ -107,6 +132,7 @@ export interface TopicMapData {
   inboxEdges: TopicMemoInboxEdge[];
   inboxMemberships: TopicInboxMembership[];
   memberships: TopicMembership[];
+  updatedAt?: string | null;
 }
 
 export type TabKey = 'memo' | 'calendar' | 'inbox' | 'briefing';

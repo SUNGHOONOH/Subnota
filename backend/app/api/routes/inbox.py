@@ -13,6 +13,7 @@ from app.features.inbox.service import (
     index_inbox_summary_embeddings,
     list_inbox_sessions,
     remove_inbox_session,
+    remove_inbox_session_by_client_id,
     set_inbox_session_liked,
 )
 
@@ -61,6 +62,15 @@ def delete_inbox_session_endpoint(
 ) -> dict:
     # 멱등 삭제 — 이미 없는(또는 다른 사용자의) 세션이어도 성공으로 응답한다.
     deleted = remove_inbox_session(user_id, session_id)
+    return {"status": "ok", "deleted": deleted}
+
+
+@router.delete("/inbox/sessions/by-client-id/{client_id}")
+def delete_inbox_session_by_client_id_endpoint(
+    client_id: str,
+    user_id: str = Depends(require_user_id),
+) -> dict:
+    deleted = remove_inbox_session_by_client_id(user_id, client_id)
     return {"status": "ok", "deleted": deleted}
 
 

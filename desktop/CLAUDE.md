@@ -20,8 +20,8 @@ It replaces the legacy platform-folder guides. Read `docs/CODEMAP.md` and
 - The current macOS implementation is the canonical UI/UX baseline.
 - Shared renderer components, layout, typography, spacing, colors, motion, and
   styles must remain identical on macOS and Windows.
-- Do not restore UI or state logic from the legacy `windows/` folder. It was
-  behind macOS and is retained only as a migration safety copy.
+- Do not restore UI or state logic from the deleted `macos/`/`windows/` folders,
+  including out of git history. Windows was a generation behind macOS.
 - Do not create platform-specific copies of renderer components or SCSS.
 - Platform differences must be the smallest possible feature exposure branch,
   driven by `src/platform/policy.ts`.
@@ -38,9 +38,9 @@ else is shared and must look and behave the same.
 | Main memo/calendar/inbox/briefing UI | Yes | Yes, identical shared UI |
 | Manual URL entry in Inbox | Yes | Yes |
 | Existing Inbox sync/read/open flows | Yes | Yes |
-| Mini Subnota quick memo | Yes | Yes |
+| Quick Subnota quick memo | Yes | Yes |
 | System surface | Menu bar | Notification-area tray |
-| Mini global shortcut | Yes | Yes |
+| Quick Subnota global shortcut | Yes | Yes |
 | Current browser page capture | AppleScript | Not released |
 | Capture global shortcut | Yes | Hidden/not registered |
 | Recent captures in tray/Mini | Yes | Hidden |
@@ -140,16 +140,18 @@ See `docs/CODEMAP.md` for the full path map and data flows.
   menu-bar recent captures, Squirrel.Mac, DMG, and ZIP.
 - Windows uses native window chrome, notification-area tray behavior, Squirrel
   Setup EXE, and the GitHub release checker fallback.
-- Mini Subnota is shared. Do not disable it on Windows.
+- Quick Subnota is shared. Do not disable it on Windows.
 - Keep Windows close-to-tray preference behavior intact.
 - Do not implement the deferred browser extension unless explicitly requested.
 
-## Migration safety
+## Migration status: complete
 
-- `macos/` and `windows/` are read-only safety copies until Windows EXE install
-  and visual parity have been verified.
-- Do not delete either folder or the legacy macOS CI workflow yet.
-- The old `docs/` and `CLAUDE.md` files inside those folders are historical and
-  must not override these unified documents.
-- The populated environment values still require a local `desktop/.env`; use
-  `.env.example` as the key list.
+- The split `macos/` and `windows/` trees and the legacy `desktop-macos.yml`
+  workflow have been **deleted**. Every unique file in them was either already
+  ported into `desktop/` or was dead code with no caller but its own test.
+- Do not recreate them, and do not reach for them in git history as a design or
+  behavior reference — `desktop/` supersedes both.
+- `.github/workflows/desktop-unified.yml` is the only desktop workflow; it runs
+  tsc, tests, lint, and the platform build on a macOS/Windows matrix.
+- Environment values still require a local `desktop/.env`; use `.env.example`
+  as the key list.

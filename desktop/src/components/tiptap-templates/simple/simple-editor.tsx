@@ -1,23 +1,29 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import type { Editor } from "@tiptap/core"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { Extension, type Editor } from "@tiptap/core"
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
 // moduleResolution:node은 exports 서브패스를 못 읽어 tsconfig paths로 매핑됨.
 import { BubbleMenu } from "@tiptap/react/menus"
 import { useHotkeys } from "react-hotkeys-hook"
+import { Plugin, PluginKey } from "@tiptap/pm/state"
+import { Decoration, DecorationSet } from "@tiptap/pm/view"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
 import { Image } from "@tiptap/extension-image"
 import { TaskItem, TaskList } from "@tiptap/extension-list"
 import { TextAlign } from "@tiptap/extension-text-align"
-import { Typography } from "@tiptap/extension-typography"
 import { Highlight } from "@tiptap/extension-highlight"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import { Selection } from "@tiptap/extensions"
-import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table"
 import { Markdown } from "@tiptap/markdown"
 
 // --- UI Primitives ---
@@ -26,8 +32,15 @@ import { Spacer } from "@/components/tiptap-ui-primitive/spacer/spacer"
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar/toolbar"
 
 // --- Tiptap Node ---
-import { attachAmbientIdle } from "@/lib/ambientIdle"
-import { DateHighlight } from "@/components/tiptap-extension/date-highlight-extension"
+import {
+  attachAmbientIdle,
+  type AmbientIdleAnchor as AmbientIdleAnchorState,
+} from "@/lib/ambientIdle"
+import { getLinkHrefAtPosition, sanitizeUrl } from "@/lib/tiptap-utils"
+import {
+  DATE_HIGHLIGHT_LANGUAGE_META,
+  DateHighlight,
+} from "@/components/tiptap-extension/date-highlight-extension"
 import { FormattingShortcuts } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
 import { CodeBlock } from "@/components/tiptap-node/code-block-node/code-block-node-extension"
@@ -40,12 +53,10 @@ import "@/components/tiptap-node/list-node/list-node.scss"
 import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
-import "@/components/tiptap-node/table-node/table-node.scss"
 
 // --- Tiptap UI ---
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu/heading-dropdown-menu"
 import { CopyMarkdownButton } from "@/components/tiptap-ui/copy-markdown-button/copy-markdown-button"
-import { CopyFilePathButton } from "@/components/tiptap-ui/copy-file-path-button/copy-file-path-button"
 import { SaveButton } from "@/components/tiptap-ui/save-button/save-button"
 import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/list-dropdown-menu"
 import { ListButton } from "@/components/tiptap-ui/list-button/list-button"
@@ -64,14 +75,16 @@ import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Selection bubble toolbar (responsive with overflow) ---
-import { SelectionBubbleToolbar } from "@/components/tiptap-templates/simple/selection-bubble-toolbar"
+import {
+  SelectionBubbleToolbar,
+  type SelectionBubbleAnchor,
+} from "@/components/tiptap-templates/simple/selection-bubble-toolbar"
 
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
 import { useWindowSize } from "@/hooks/use-window-size"
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
-
-// --- Components ---
+import { localize, useUiLanguage } from "@/lib/uiLanguage"
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
@@ -83,14 +96,12 @@ const MainToolbarContent = ({
   isMobile,
   onSave,
   canSave,
-  currentFilePath,
 }: {
   onHighlighterClick: () => void
   onLinkClick: () => void
   isMobile: boolean
   onSave: () => Promise<void>
   canSave: boolean
-  currentFilePath: string | null
 }) => {
   return (
     <>
@@ -126,7 +137,7 @@ const MainToolbarContent = ({
         ) : (
           <ColorHighlightPopoverButton onClick={onHighlighterClick} />
         )}
-        {!isMobile ? <LinkPopover currentFilePath={currentFilePath} /> : <LinkButton onClick={onLinkClick} />}
+        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -134,7 +145,6 @@ const MainToolbarContent = ({
       <ToolbarGroup>
         <SaveButton onSave={onSave} canSave={canSave} />
         <CopyMarkdownButton />
-        <CopyFilePathButton filePath={currentFilePath} />
       </ToolbarGroup>
 
       <Spacer />
@@ -152,11 +162,9 @@ const MainToolbarContent = ({
 const MobileToolbarContent = ({
   type,
   onBack,
-  currentFilePath,
 }: {
   type: "highlighter" | "link"
   onBack: () => void
-  currentFilePath: string | null
 }) => (
   <>
     <ToolbarGroup>
@@ -175,7 +183,7 @@ const MobileToolbarContent = ({
     {type === "highlighter" ? (
       <ColorHighlightPopoverContent />
     ) : (
-      <LinkContent currentFilePath={currentFilePath} />
+      <LinkContent />
     )}
   </>
 )
@@ -187,19 +195,115 @@ const containsImageFile = (data: DataTransfer | null) =>
     data && Array.from(data.files).some(file => file.type.startsWith("image/")),
   )
 
+type MarkdownEditor = Editor & { getMarkdown: () => string }
+const getEditorMarkdown = (editor: Editor) =>
+  (editor as MarkdownEditor).getMarkdown()
+
+export interface AmbientIdleAnchor {
+  from: number;
+  to: number;
+}
+
+export interface AmbientGhost {
+  from: number;
+  to: number;
+  key: string;
+  meta: string;
+  text: string;
+  hint?: string;
+  onClick: () => void;
+}
+
+const ambientGhostPluginKey = new PluginKey<AmbientGhost | null>("ambientGhost")
+
+const createAmbientGhostElement = (ghost: AmbientGhost) => {
+  const wrapper = document.createElement("span")
+  wrapper.className = "ambient-ghost-widget"
+  wrapper.contentEditable = "false"
+
+  const button = document.createElement("button")
+  button.className = "ambient-ghost"
+  button.type = "button"
+  button.setAttribute("aria-label", `${ghost.meta} ${ghost.text}`)
+  button.addEventListener("mousedown", event => event.preventDefault())
+  button.addEventListener("click", ghost.onClick)
+
+  const meta = document.createElement("span")
+  meta.className = "ambient-ghost-meta"
+  meta.textContent = ghost.meta
+
+  const text = document.createElement("span")
+  text.className = "ambient-ghost-text"
+  text.textContent = ghost.text
+
+  button.append(meta, text)
+
+  if (ghost.hint) {
+    const hint = document.createElement("span")
+    hint.className = "ambient-ghost-hint"
+    hint.setAttribute("aria-hidden", "true")
+    hint.textContent = ghost.hint
+    button.append(hint)
+  }
+
+  wrapper.append(button)
+  return wrapper
+}
+
+const AmbientGhostExtension = Extension.create({
+  name: "ambientGhost",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<AmbientGhost | null>({
+        key: ambientGhostPluginKey,
+        state: {
+          apply(transaction, current) {
+            const next = transaction.getMeta(ambientGhostPluginKey)
+            if (next !== undefined) return next as AmbientGhost | null
+            return transaction.docChanged ? null : current
+          },
+          init: () => null,
+        },
+        props: {
+          decorations: state => {
+            const ghost = ambientGhostPluginKey.getState(state)
+            if (!ghost) return null
+
+            const position = Math.max(
+              0,
+              Math.min(ghost.to, state.doc.content.size),
+            )
+
+            return DecorationSet.create(state.doc, [
+              Decoration.widget(
+                position,
+                () => createAmbientGhostElement(ghost),
+                { key: ghost.key, side: 1 },
+              ),
+            ])
+          },
+        },
+      }),
+    ]
+  },
+})
 export interface SimpleEditorProps {
   hideToolbar?: boolean;
   insertTextRequest?: { id: string; text: string } | null;
-  onAmbientIdle?: (chunkText: string) => void;
+  onAmbientIdle?: (chunkText: string, anchor?: AmbientIdleAnchor) => void;
+  ambientGhost?: AmbientGhost | null;
+  onAmbientDismiss?: (suppressCurrentQuery?: boolean) => void;
   onEditorFocus?: () => void;
   onEditorReady?: (editor: Editor | null) => void;
   onInsertTextRequestHandled?: (id: string) => void;
+  // 제공되면 드래그 선택 팝업에 "선택한 문장 검색" 버튼이 나타난다.
+  onSearchSelection?: () => void;
   // 제공되면 드래그 선택 팝업에 "일정 등록" 버튼이 나타난다.
-  onRegisterSchedule?: () => void;
+  onRegisterSchedule?: (anchor: SelectionBubbleAnchor) => void;
   value: string;
-  onChange: (markdown: string) => void;
+  onChange: (markdown: string, previousMarkdown: string) => void;
   onSelectionChange?: (selectedText: string, from: number, to: number) => void;
-  placeholder?: string;
   autoFocus?: boolean;
   showVersionLabel?: boolean;
 }
@@ -214,30 +318,33 @@ export function NoteFixedToolbar({
   editor: Editor | null
   children?: ReactNode
 }) {
+  const language = useUiLanguage()
+  const t = (korean: string, english: string) => localize(language, korean, english)
   return (
     <div
-      aria-label="본문 서식 도구"
+      aria-label={t("본문 서식 도구", "Note formatting tools")}
       className="note-fixed-toolbar"
       role="toolbar"
     >
       <EditorContext.Provider value={{ editor }}>
-        <MarkButton aria-label="굵게" tooltip="굵게" type="bold" />
-        <MarkButton aria-label="기울임" tooltip="기울임" type="italic" />
+        <MarkButton aria-label={t("굵게", "Bold")} tooltip={t("굵게", "Bold")} type="bold" />
+        <MarkButton aria-label={t("기울임", "Italic")} tooltip={t("기울임", "Italic")} type="italic" />
         <HeadingDropdownMenu
-          aria-label="본문 제목"
+          aria-label={t("본문 제목", "Heading")}
           levels={[1, 2, 3, 4]}
           modal={false}
-          tooltip="본문 제목"
+          tooltip={t("본문 제목", "Heading")}
         />
         <ListDropdownMenu
-          aria-label="목록"
+          aria-label={t("목록", "List")}
           modal={false}
-          tooltip="목록"
+          tooltip={t("목록", "List")}
           types={["bulletList", "orderedList"]}
         />
-        <ListButton aria-label="체크리스트" tooltip="체크리스트" type="taskList" />
-        <BlockquoteButton aria-label="인용" tooltip="인용" />
-        <CodeBlockButton aria-label="코드 블록" tooltip="코드 블록" />
+        <ListButton aria-label={t("체크리스트", "Checklist")} tooltip={t("체크리스트", "Checklist")} type="taskList" />
+        <BlockquoteButton aria-label={t("인용", "Quote")} tooltip={t("인용", "Quote")} />
+        <CodeBlockButton aria-label={t("코드 블록", "Code block")} tooltip={t("코드 블록", "Code block")} />
+        <LinkPopover editor={editor} />
       </EditorContext.Provider>
       {children && (
         <div className="note-fixed-toolbar-trailing">{children}</div>
@@ -250,17 +357,20 @@ export function SimpleEditor({
   hideToolbar = false,
   insertTextRequest = null,
   onAmbientIdle,
+  ambientGhost = null,
+  onAmbientDismiss,
   onEditorFocus,
   onEditorReady,
   onInsertTextRequestHandled,
+  onSearchSelection,
   onRegisterSchedule,
   value,
   onChange,
   onSelectionChange,
-  placeholder = "메모를 시작하세요",
   autoFocus = true,
   showVersionLabel = true,
 }: SimpleEditorProps) {
+  const language = useUiLanguage()
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
@@ -268,9 +378,10 @@ export function SimpleEditor({
   )
   const toolbarRef = useRef<HTMLDivElement>(null)
   const lastInsertTextRequestIdRef = useRef<string | null>(null)
-  const lastInjectedTextRef = useRef<string>("")
+  const lastMarkdownRef = useRef(value)
   const onAmbientIdleRef = useRef(onAmbientIdle)
   const onEditorReadyRef = useRef(onEditorReady)
+  const ambientGhostRef = useRef<AmbientGhost | null>(ambientGhost)
 
   useEffect(() => {
     onAmbientIdleRef.current = onAmbientIdle
@@ -280,6 +391,10 @@ export function SimpleEditor({
     onEditorReadyRef.current = onEditorReady
   }, [onEditorReady])
 
+  useEffect(() => {
+    ambientGhostRef.current = ambientGhost
+  }, [ambientGhost])
+
   const editor = useEditor({
     immediatelyRender: false,
     editorProps: {
@@ -287,6 +402,7 @@ export function SimpleEditor({
         autocomplete: "off",
         autocorrect: "off",
         autocapitalize: "off",
+        spellcheck: "false",
         "aria-label": "Main content area, start typing to enter text.",
         class: "simple-editor",
       },
@@ -295,6 +411,20 @@ export function SimpleEditor({
           onEditorFocus?.()
           return false
         },
+      },
+      // Link.openOnClick is disabled so links do not open an in-app window.
+      // Route clicks through the preload IPC instead, which opens them in the
+      // user's default browser and keeps URL validation in the main process.
+      handleClick: (view, position, event) => {
+        const href = getLinkHrefAtPosition(view.state.doc, position)
+        if (!href) return false
+
+        event.preventDefault()
+        const safeUrl = sanitizeUrl(href, window.location.href)
+        if (safeUrl !== "#") {
+          void window.electronAPI?.openExternal(safeUrl)
+        }
+        return true
       },
       // 이미지 파일 드롭/붙여넣기 차단 (이미지 업로드 비활성화 정책).
       handleDrop: (_view, event) => containsImageFile(event.dataTransfer),
@@ -317,21 +447,43 @@ export function SimpleEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       Highlight.configure({ multicolor: true }),
-      DateHighlight,
+      DateHighlight.configure({ language }),
+      AmbientGhostExtension,
       Image,
-      Typography,
       Superscript,
       Subscript,
       Selection,
-      Table,
-      TableRow,
-      TableCell,
-      TableHeader,
       Markdown,
     ],
+    // value는 이 Tiptap 인스턴스의 초기 문서다. 활성 탭이 바뀌면 상위에서
+    // editor.id key로 인스턴스를 새로 만든다. 편집 중 직렬화된 Markdown prop을
+    // setContent로 되넣으면 문서 전체·선택·IME 조합이 교체되므로 적용하지 않는다.
     content: value,
+    contentType: "markdown",
     autofocus: autoFocus,
   })
+
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dispatch(
+      editor.state.tr.setMeta(ambientGhostPluginKey, ambientGhostRef.current),
+    )
+  }, [
+    ambientGhost?.from,
+    ambientGhost?.hint,
+    ambientGhost?.key,
+    ambientGhost?.meta,
+    ambientGhost?.text,
+    ambientGhost?.to,
+    editor,
+  ])
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    editor.view.dispatch(
+      editor.state.tr.setMeta(DATE_HIGHLIGHT_LANGUAGE_META, language),
+    )
+  }, [editor, language])
 
   useEffect(() => {
     if (!editor) return undefined
@@ -344,25 +496,6 @@ export function SimpleEditor({
     editor,
     overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
   })
-
-  // ── value prop 변경 시 에디터 동기화 (루프 방지) ──
-  useEffect(() => {
-    if (!editor) return
-
-    if (value === lastInjectedTextRef.current) {
-      return
-    }
-
-    // 한글 등 IME 조합 중에는 setContent가 조합을 깨뜨린다(예: "오늘"→"오느늘").
-    // 들어온 값은 사용자가 방금 입력한 내용의 (지연된) 에코이므로, 조합 중이면
-    // 재주입을 건너뛰고 조합이 끝난 뒤의 값 변경에서 다시 동기화한다.
-    if (editor.view.composing) {
-      return
-    }
-
-    lastInjectedTextRef.current = value
-    editor.commands.setContent(value, { emitUpdate: false, contentType: 'markdown' })
-  }, [value, editor])
 
   useEffect(() => {
     if (!editor || !insertTextRequest) return
@@ -378,9 +511,10 @@ export function SimpleEditor({
     if (!editor) return
 
     const onUpdate = () => {
-      const markdown = (editor as any).getMarkdown() as string
-      lastInjectedTextRef.current = markdown
-      onChange(markdown)
+      const markdown = getEditorMarkdown(editor)
+      const previousMarkdown = lastMarkdownRef.current
+      lastMarkdownRef.current = markdown
+      onChange(markdown, previousMarkdown)
     }
 
     editor.on('update', onUpdate)
@@ -406,7 +540,14 @@ export function SimpleEditor({
     // onAmbientIdle을 deps에 두면 인라인 콜백의 새 identity마다 cleanup이
     // 대기 중인 idle 타이머를 제거해 트리거가 영영 발화하지 않는다.
     // 핸들러는 ref로 읽고 effect는 editor에만 묶는다.
-    return attachAmbientIdle(editor, () => onAmbientIdleRef.current)
+    return attachAmbientIdle(editor, () => {
+      const handler = onAmbientIdleRef.current
+      if (!handler) return undefined
+
+      return (chunkText, anchor?: AmbientIdleAnchorState) => {
+        handler(chunkText, anchor)
+      }
+    })
   }, [editor])
 
   // Escape → 선택 해제(= 선택형 팝업 닫힘). 슬래시 메뉴가 열려 있으면 그쪽
@@ -416,7 +557,16 @@ export function SimpleEditor({
 
     const dom = editor.view.dom
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.isComposing) return
+      if (event.isComposing) return
+      if (event.key === "Escape") {
+        onAmbientDismiss?.(true)
+      } else if (event.key === "Enter" || event.key === " ") {
+        onAmbientDismiss?.(true)
+      } else {
+        return
+      }
+
+      if (event.key !== "Escape") return
       const { empty, to } = editor.state.selection
       if (!empty) {
         event.preventDefault()
@@ -426,7 +576,7 @@ export function SimpleEditor({
 
     dom.addEventListener("keydown", onKeyDown)
     return () => dom.removeEventListener("keydown", onKeyDown)
-  }, [editor])
+  }, [editor, onAmbientDismiss])
 
   const handleSave = useCallback(async () => {
     // PWA 환경에서는 자동 저장이 동작하므로 수동 저장 단축키는 무시
@@ -459,13 +609,11 @@ export function SimpleEditor({
                 isMobile={isMobile}
                 onSave={handleSave}
                 canSave={false}
-                currentFilePath={null}
               />
             ) : (
               <MobileToolbarContent
                 type={mobileView === "highlighter" ? "highlighter" : "link"}
                 onBack={() => setMobileView("main")}
-                currentFilePath={null}
               />
             )}
           </Toolbar>
@@ -493,6 +641,7 @@ export function SimpleEditor({
           >
             <SelectionBubbleToolbar
               editor={editor}
+              onSearchSelection={onSearchSelection}
               onRegisterSchedule={onRegisterSchedule}
             />
           </BubbleMenu>

@@ -1,4 +1,6 @@
+import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../supabase/client';
+import { createKeyedMutationQueue } from '../../lib/keyedMutationQueue';
 
 export type InboxSourceType = 'youtube' | 'instagram' | 'url' | 'image';
 export type InboxSummaryStatus =
@@ -69,82 +71,124 @@ const getBackendUrl = () => {
   return (import.meta.env.VITE_MEMO_BACKEND_URL ?? '').trim();
 };
 
-const getAccessToken = async (refresh = false) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Supabase is not configured.');
-  }
+export const INBOX_REQUEST_TIMEOUT_MS = 20000;
 
-  if (refresh) {
-    const {
-      data: { session },
-    } = await supabase.auth.refreshSession();
-    return session?.access_token ?? null;
-  }
+interface InboxRequestAuth {
+  initialAccessToken: string;
+  ownerId: string;
+}
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+const captureInboxRequestAuth = (session: Session): InboxRequestAuth => ({
+  initialAccessToken: session.access_token,
+  ownerId: session.user.id,
+});
 
-  if (!session?.access_token) {
-    throw new Error('Inbox requires login.');
-  }
-
-  return session.access_token;
-};
-
-const requestBackend = async <T>(path: string, init: RequestInit = {}) => {
+const requestBackend = async <T>(
+  auth: InboxRequestAuth,
+  path: string,
+  init: RequestInit = {},
+) => {
   const backendUrl = getBackendUrl();
   if (!backendUrl) {
     throw new Error('VITE_MEMO_BACKEND_URL is not configured.');
   }
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured.');
+  }
 
-  const token = await getAccessToken();
-  const request = (accessToken: string) =>
-    fetch(`${backendUrl.replace(/\/$/, '')}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
-    });
+  const { initialAccessToken, ownerId } = auth;
+  if (!ownerId || !initialAccessToken) {
+    throw new Error('Inbox requires login.');
+  }
 
-  let response = await request(token);
-  if (response.status === 401) {
-    const refreshedToken = await getAccessToken(true);
-    if (refreshedToken && refreshedToken !== token) {
-      response = await request(refreshedToken);
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  const abortFromCaller = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    abortFromCaller();
+  } else {
+    callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      controller.abort();
+      reject(new Error('Inbox request timed out.'));
+    }, INBOX_REQUEST_TIMEOUT_MS);
+  });
+  const operation = (async () => {
+    const request = (accessToken: string) =>
+      fetch(`${backendUrl.replace(/\/$/, '')}${path}`, {
+        ...init,
+        headers: {
+          ...(init.headers ?? {}),
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+    let response = await request(initialAccessToken);
+    if (response.status === 401) {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      if (
+        !currentSession?.access_token ||
+        currentSession.user.id !== ownerId
+      ) {
+        throw new Error('Inbox session changed during request.');
+      }
+      response = await request(currentSession.access_token);
     }
-  }
 
-  if (!response.ok) {
-    throw new Error(`Inbox request failed: ${response.status}`);
-  }
+    if (!response.ok) {
+      throw new Error(`Inbox request failed: ${response.status}`);
+    }
 
-  return (await response.json()) as T;
+    return (await response.json()) as T;
+  })();
+
+  try {
+    // The same upper bound covers connection setup and reading a stalled body.
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      globalThis.clearTimeout(timeoutId);
+    }
+    callerSignal?.removeEventListener('abort', abortFromCaller);
+  }
 };
 
-export const fetchInboxSessions = async () => {
+export const fetchInboxSessions = async (session: Session) => {
+  const auth = captureInboxRequestAuth(session);
   const payload = await requestBackend<{ items: InboxSessionRow[] }>(
+    auth,
     '/inbox/sessions?limit=50',
   );
   return payload.items.map(mapInboxSession);
 };
 
-export const createInboxSession = async ({
-  clientId,
-  rawSharedText,
-  selectedText,
-  url,
-  userNote,
-}: {
-  clientId?: string | null;
-  rawSharedText?: string | null;
-  selectedText?: string | null;
-  url: string;
-  userNote?: string | null;
-}) => {
+export const createInboxSession = async (
+  session: Session,
+  {
+    clientId,
+    rawSharedText,
+    selectedText,
+    url,
+    userNote,
+  }: {
+    clientId?: string | null;
+    rawSharedText?: string | null;
+    selectedText?: string | null;
+    url: string;
+    userNote?: string | null;
+  },
+) => {
+  const auth = captureInboxRequestAuth(session);
   const payload = await requestBackend<{ item: InboxSessionRow }>(
+    auth,
     '/inbox/sessions',
     {
       body: JSON.stringify({
@@ -160,22 +204,67 @@ export const createInboxSession = async ({
   return mapInboxSession(payload.item);
 };
 
+// 요약 재시도는 실패한 항목을 사용자가 명시적으로 요청했을 때만 한다.
+// 새 세션을 만들지 않고 같은 session_id를 다시 분석하므로 카드가 중복되지 않는다.
+export const retryInboxSessionSummary = async (
+  session: Session,
+  sessionId: string,
+) => {
+  const auth = captureInboxRequestAuth(session);
+  const payload = await requestBackend<{ item: InboxSessionRow }>(
+    auth,
+    '/inbox/sessions/analyze',
+    {
+      body: JSON.stringify({ session_id: sessionId }),
+      method: 'POST',
+    },
+  );
+  return mapInboxSession(payload.item);
+};
+
 // Like/favorite toggle goes through the backend: inbox_sessions has no client
 // RLS policy (client grants were revoked in the 2026-06-23 security migration),
 // so a direct Supabase update silently fails. The backend scopes the row by the
 // user id derived from the bearer token.
-export const setInboxLiked = async (id: string, liked: boolean) => {
-  await requestBackend(`/inbox/sessions/${encodeURIComponent(id)}/liked`, {
-    body: JSON.stringify({ liked }),
-    method: 'PATCH',
+const inboxLikeWriteQueue = createKeyedMutationQueue();
+
+export const setInboxLiked = (session: Session, id: string, liked: boolean) => {
+  const auth = captureInboxRequestAuth(session);
+  return inboxLikeWriteQueue.enqueue(`${auth.ownerId}\u0000${id}`, async () => {
+    await requestBackend(
+      auth,
+      `/inbox/sessions/${encodeURIComponent(id)}/liked`,
+      {
+        body: JSON.stringify({ liked }),
+        method: 'PATCH',
+      },
+    );
   });
 };
 
 // 백엔드 멱등 삭제 — 이미 없는 세션이어도 성공으로 응답한다.
-export const deleteInboxSession = async (id: string) => {
-  await requestBackend(`/inbox/sessions/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
+export const deleteInboxSession = async (session: Session, id: string) => {
+  const auth = captureInboxRequestAuth(session);
+  await requestBackend(
+    auth,
+    `/inbox/sessions/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+};
+
+export const deleteInboxSessionByClientId = async (
+  session: Session,
+  clientId: string,
+) => {
+  const auth = captureInboxRequestAuth(session);
+  const payload = await requestBackend<{ deleted: boolean }>(
+    auth,
+    `/inbox/sessions/by-client-id/${encodeURIComponent(clientId)}`,
+    { method: 'DELETE' },
+  );
+  return payload.deleted;
 };
 
 const mapInboxSession = (row: InboxSessionRow): InboxSession => ({

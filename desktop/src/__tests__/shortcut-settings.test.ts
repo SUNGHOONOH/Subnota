@@ -3,13 +3,16 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_SHORTCUT_FIELDS,
   APP_SHORTCUT_LABELS,
+  APP_SHORTCUT_RESERVED,
   DEFAULT_APP_SHORTCUT_SETTINGS,
   DEFAULT_SHORTCUT_SETTINGS,
   canonicalizeAccelerator,
   findShortcutConflicts,
   findShortcutConflictsForFields,
+  formatHotkeyTooltip,
   keyboardEventToAccelerator,
   matchesKeyboardShortcut,
+  normalizeAppShortcutSettings,
   toMantineHotkey,
 } from '../lib/shortcutSettings';
 
@@ -27,6 +30,27 @@ const keyEvent = (
   }) as KeyboardEvent;
 
 describe('shortcut settings', () => {
+  it('adds the tab, sidebar, and Topics defaults without discarding saved settings', () => {
+    const settings = normalizeAppShortcutSettings({
+      createMemo: 'CommandOrControl+Shift+N',
+    });
+
+    expect(settings.createMemo).toBe('CommandOrControl+Shift+N');
+    expect(settings.createTab).toBe('CommandOrControl+T');
+    expect(settings.closeActiveTab).toBe('CommandOrControl+W');
+    expect(settings.focusPreviousTab).toBe('Control+Shift+Tab');
+    expect(settings.focusNextTab).toBe('Control+Tab');
+    expect(settings.openTopics).toBe('CommandOrControl+4');
+    expect(settings.toggleSidebar).toBe('CommandOrControl+Alt+S');
+  });
+
+  it('adds the configured shortcut to a tooltip label', () => {
+    expect(formatHotkeyTooltip('새 탭', null)).toBe('새 탭');
+    expect(formatHotkeyTooltip('새 탭', 'CommandOrControl+T')).toMatch(
+      /^새 탭 · /,
+    );
+  });
+
   it('converts modifier key presses into Electron accelerators', () => {
     expect(
       keyboardEventToAccelerator(keyEvent('s', { metaKey: true, shiftKey: true })),
@@ -70,7 +94,7 @@ describe('shortcut settings', () => {
 const LABELS = {
   capturePage: '현재 페이지 저장',
   openSearch: '메모 검색',
-  toggleMini: 'Mini Subnota 열기',
+  toggleMini: 'Quick Subnota 열기',
 };
 
 describe('shortcut conflicts', () => {
@@ -136,6 +160,42 @@ describe('shortcut conflicts', () => {
     expect(conflicts.openSearch).toBe('새 메모 생성');
     expect(conflicts.capturePage).toBeUndefined();
     expect(conflicts.toggleMini).toBeUndefined();
+  });
+
+  it('keeps the native window-close shortcut unavailable to app actions', () => {
+    const conflicts = findShortcutConflictsForFields(
+      {
+        ...DEFAULT_APP_SHORTCUT_SETTINGS,
+        createTab: 'CommandOrControl+Shift+W',
+      },
+      {
+        fields: APP_SHORTCUT_FIELDS,
+        labels: APP_SHORTCUT_LABELS,
+        reserved: APP_SHORTCUT_RESERVED,
+      },
+    );
+
+    expect(conflicts.createTab).toBe('창 닫기');
+  });
+
+  it('keeps native edit and application menu shortcuts unavailable', () => {
+    const conflicts = findShortcutConflictsForFields(
+      {
+        ...DEFAULT_APP_SHORTCUT_SETTINGS,
+        createMemo: 'CommandOrControl+Z',
+        createTab: 'CommandOrControl+,',
+        openInbox: 'CommandOrControl+Q',
+      },
+      {
+        fields: APP_SHORTCUT_FIELDS,
+        labels: APP_SHORTCUT_LABELS,
+        reserved: APP_SHORTCUT_RESERVED,
+      },
+    );
+
+    expect(conflicts.createMemo).toBe('실행 취소');
+    expect(conflicts.createTab).toBe('설정 열기');
+    expect(conflicts.openInbox).toBe('앱 종료');
   });
 
   it('ignores fields that are not editable on this platform', () => {

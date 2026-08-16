@@ -3,23 +3,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-SVG="$ROOT_DIR/resources/icon.svg"
-TMP_DIR="$(mktemp -d)"
 ICONSET="$ROOT_DIR/resources/icon.iconset"
 ICNS="$ROOT_DIR/resources/icon.icns"
+MASTER_PNG="$ROOT_DIR/resources/icon-1024.png"
 
-cleanup() { rm -rf "$TMP_DIR"; }
-trap cleanup EXIT
+# 예전에는 여기서 qlmanage로 SVG를 래스터화했다. Quick Look 썸네일은 투명
+# 배경을 흰색으로 채워서 아이콘의 둥근 모서리가 흰 사각형이 됐다.
+# 이제 sharp로 알파를 보존해 굽고(generate-brand-assets.mjs), 여기서는
+# 그 결과물을 크기별로 자르기만 한다.
+echo "Generating brand rasters..."
+node "$SCRIPT_DIR/generate-brand-assets.mjs"
 
-echo "Generating icon from $SVG..."
-
-# Convert SVG → 1024×1024 PNG using qlmanage (built-in macOS tool)
-qlmanage -t -s 1024 -o "$TMP_DIR" "$SVG" 2>/dev/null || true
-
-# qlmanage appends .png to the original filename
-MASTER_PNG="$TMP_DIR/icon.svg.png"
 if [ ! -f "$MASTER_PNG" ]; then
-  echo "Error: qlmanage did not produce a PNG. Make sure you're on macOS." >&2
+  echo "Error: $MASTER_PNG missing." >&2
   exit 1
 fi
 

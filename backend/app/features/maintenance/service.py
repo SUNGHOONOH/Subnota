@@ -241,7 +241,7 @@ def run_topic_discovery_for_dirty_users(
                     user_id=user_id,
                     memo_count=0,
                     cluster_count=0,
-                    model=constants.EMBEDDING_MODEL,
+                    model=constants.EMBEDDING_MODEL_SIGNATURE,
                     clustering_method=None,
                     clusters=[],
                     message="Topic discovery failed. See backend logs.",

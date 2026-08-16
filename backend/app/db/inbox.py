@@ -105,6 +105,19 @@ def delete_inbox_session(user_id: str, session_id: str) -> bool:
     return bool(rows)
 
 
+def delete_inbox_session_by_client_id(user_id: str, client_id: str) -> bool:
+    client = get_supabase()
+    response = (
+        client.table("inbox_sessions")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("client_id", client_id)
+        .execute()
+    )
+    rows = cast(list[DatabaseRow], response.data or [])
+    return bool(rows)
+
+
 def replace_inbox_session_embedding(
     user_id: str,
     inbox_session_id: str,
@@ -125,7 +138,7 @@ def replace_inbox_session_embedding(
             **row,
             "user_id": user_id,
             "inbox_session_id": inbox_session_id,
-            "embedding_model": constants.EMBEDDING_MODEL,
+            "embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
         }
     ).execute()
 

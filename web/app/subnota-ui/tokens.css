@@ -1,0 +1,144 @@
+/* Subnota 데스크톱 앱 토큰의 이식본.
+   원본은 desktop/src/styles/_color-tokens.scss 와 subnota-workspace.scss 의
+   :root 블록이다. 두 프로젝트는 빌드 계통이 달라 파일을 공유할 수 없으므로,
+   랜딩이 실제로 그리는 화면에 필요한 값만 옮겨 둔다.
+
+   값을 바꿀 일이 생기면 앱 쪽을 먼저 고치고 여기로 반영할 것. 반대 방향은 없다.
+   라이트 모드만 옮긴다 — 랜딩은 앱의 기본 모습 하나만 보여준다. */
+
+/* `.scene-stage` 와 `.feature-piece` 도 함께 받는다. Quick 패널·날짜 팝오버처럼
+   앱에서 별도 창·포털로 뜨는 것들, 그리고 상세 카드에 얹는 UI 조각은
+   `.subnota-app` 바깥에 놓이는데, 토큰이 앱 안에만 있으면 배경과 테두리를 잃는다. */
+.subnota-app,
+.scene-stage,
+.feature-piece {
+  /* ── 표면 ── */
+  --app-color-bg: #fdfdfb;
+  --app-color-bg-canvas: #ffffff;
+  --app-color-bg-surface: #ffffff;
+  --app-color-bg-toolbar: #fbfbfa;
+  --app-color-bg-paper: #ffffff;
+  --app-color-bg-muted: #f7f7f4;
+  --app-color-bg-hover: #f7f7f4;
+  --app-color-bg-pressed: #f1f0ed;
+  --app-color-bg-code: #1f1e1b;
+
+  /* 상태는 명도로만 말한다. 알파라서 종이 사이드바 위와 흰 캔버스 위에
+     같은 세기로 얹힌다. */
+  --app-color-state-hover: rgba(20, 20, 19, 0.04);
+  --app-color-state-selected: rgba(20, 20, 19, 0.06);
+  --app-color-state-raised: #f9f8f2;
+  --app-color-state-raised-shadow:
+    -3px -3px 6px rgba(255, 255, 255, 0.95),
+    3px 3px 6px rgba(40, 34, 26, 0.12);
+  --app-color-state-inset-shadow:
+    inset 2px 2px 4px rgba(40, 34, 26, 0.1),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+
+  /* 종이 사이드바. 앱에서 색을 갖는 면은 여기 하나뿐이라 이 값이 온도를 정한다. */
+  --app-color-chrome-bg: #f3f1e9;
+
+  /* ── 선 ── */
+  --app-color-border-soft: #eeece7;
+  --app-color-border: #e9e7e1;
+  --app-color-border-strong: #dedbd2;
+  --app-color-border-subtle: rgba(29, 29, 31, 0.05);
+
+  /* ── 글자 ── */
+  --app-color-text: #2c2520;
+  --app-color-text-strong: #1d1d1f;
+  --app-color-text-soft: #3b332b;
+  --app-color-muted: #9c8e7c;
+  --app-color-muted-soft: #8e8b82;
+  --app-color-muted-control: #786b5f;
+  --app-color-muted-icon: #8a8175;
+  --app-color-accent: #8b7355;
+  --app-color-accent-dark: #5c4d3c;
+
+  /* ── 잉크 블루. 로고와 같은 색상각(262°)이다. ──
+     쓰이는 자리는 일곱 곳뿐: 화면당 하나의 주 행동, focus 링, 선택 메모 레일,
+     캘린더의 오늘/지금, 캐럿과 선택 영역, 진짜 링크, 진행/알림 점. */
+  --app-color-brand-300: #94b6f5;
+  --app-color-brand-500: #325496;
+  --app-color-brand-600: #254582;
+  --app-color-brand-700: #1b376b;
+  --app-color-selection: rgba(50, 84, 150, 0.2);
+  /* 마크는 UI 강조색보다 한 단계 밝다 — 로고는 글자 대비 규정 밖이다.
+     다섯 잎 중 오른쪽 한 장만 말라카이트다. */
+  --app-color-brand-mark: #4c71b7;
+  --app-color-brand-petal: #0b6e4f;
+
+  --app-color-action-primary: var(--app-color-brand-500);
+  --app-color-action-primary-hover: var(--app-color-brand-600);
+  --app-color-action-primary-text: #ffffff;
+  --app-color-action-primary-border: var(--app-color-brand-300);
+  --app-color-action-primary-ink: var(--app-color-brand-700);
+  --app-color-action-secondary-bg: #ffffff;
+  --app-color-action-secondary-border: var(--app-color-border);
+  --app-color-action-secondary-text: var(--app-color-text-soft);
+  --app-color-action-secondary-hover: var(--app-color-bg-muted);
+
+  --app-color-danger: #b42318;
+  --app-color-skeleton: #f1efe9;
+
+  /* ── 서체 ── */
+  --app-font-ui:
+    'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* 워드마크 전용. 본문과 일부러 다른 얼굴을 쓴다 — 같은 서체면 로고가 아니라
+     그냥 큰 라벨로 읽힌다. */
+  --app-font-wordmark: 'Alegreya Sans', Optima, Candara, sans-serif;
+  --app-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --app-font-xxs: 10px;
+  --app-font-xs: 11px;
+  --app-font-sm: 12px;
+  --app-font-md: 13px;
+  --app-font-lg: 15px;
+  --app-font-editor: 16px;
+  --app-font-title: 18px;
+  --app-font-heading-sm: 22px;
+  --app-font-heading-md: 28px;
+
+  /* 굵기는 절제한다. 위계를 800/900으로 보상하지 않는다. */
+  --app-weight-regular: 400;
+  --app-weight-medium: 500;
+  --app-weight-semibold: 600;
+  --app-weight-heavy: 650;
+  --app-weight-black: 700;
+
+  /* ── 구조 ── */
+  --app-size-nav-rail: 58px;
+  --app-size-session-rail: 200px;
+  --app-size-commandbar: 44px;
+  /* 사이드바를 접었을 때 전역 컨트롤이 차지하는 폭. */
+  --app-size-commandbar-content: 220px;
+  --app-size-split-header: 32px;
+  --app-size-tab-height: 25px;
+  --control-size-compact: 24px;
+  --control-size-standard: 28px;
+  --control-icon-compact: 14px;
+  --control-icon-standard: 16px;
+  --control-font-compact: 12px;
+  --control-padding-compact: 8px;
+
+  /* radius는 4–13px 안에서 움직인다. 999px은 짧은 라벨 세그먼트·칩·점만. */
+  --app-radius-xs: 4px;
+  --app-radius-tab: 5px;
+  --app-radius-row: 6px;
+  --app-radius-card: 8px;
+  --app-radius-control: 10px;
+  --app-radius-panel: 14px;
+  --app-radius-pill: 999px;
+
+  --app-press-scale: 0.96;
+  --app-shadow-menu:
+    0 0 0 1px rgba(44, 37, 32, 0.08), 0 2px 4px rgba(92, 77, 60, 0.06);
+  --app-shadow-panel: 0 2px 6px rgba(92, 77, 60, 0.06);
+
+  /* 캘린더 전용 파생값 */
+  --cal-line: #ece9e2;
+  --cal-muted: #8a8175;
+  --cal-sunday: #b42318;
+  --cal-accent: var(--app-color-brand-500);
+}

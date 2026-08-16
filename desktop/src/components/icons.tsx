@@ -4,18 +4,22 @@ import {
   ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   ArrowTopRightOnSquareIcon,
+  Bars3BottomLeftIcon,
   CalendarDaysIcon,
   LinkIcon,
   CheckCircleIcon,
   CheckIcon,
   CommandLineIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClipboardDocumentIcon,
+  CloudIcon,
   Cog6ToothIcon,
+  ChartBarIcon,
   DocumentDuplicateIcon,
   DocumentTextIcon,
   EllipsisHorizontalIcon,
@@ -36,7 +40,6 @@ import {
   TrashIcon,
   UserCircleIcon,
   ViewfinderCircleIcon,
-  ViewColumnsIcon,
   WindowIcon,
   XCircleIcon,
   XMarkIcon,
@@ -71,10 +74,13 @@ const adapt = (Base: ComponentType<SVGProps<SVGSVGElement>>) => {
 // Direct matches.
 export const AppWindow = adapt(WindowIcon);
 export const CalendarDays = adapt(CalendarDaysIcon);
+export const ChartBar = adapt(ChartBarIcon);
 export const Check = adapt(CheckIcon);
+export const Cloud = adapt(CloudIcon);
 export const CheckCircle2 = adapt(CheckCircleIcon);
 export const CommandLine = adapt(CommandLineIcon);
 export const ChevronDown = adapt(ChevronDownIcon);
+export const ChevronUp = adapt(ChevronUpIcon);
 export const ChevronLeft = adapt(ChevronLeftIcon);
 export const ChevronRight = adapt(ChevronRightIcon);
 export const ExternalLink = adapt(ArrowTopRightOnSquareIcon);
@@ -100,6 +106,25 @@ export const UserCircle = adapt(UserCircleIcon);
 export const FocusNode = adapt(ViewfinderCircleIcon);
 export const X = adapt(XMarkIcon);
 export const XCircle = adapt(XCircleIcon);
+
+export const Tree = ({ size, width, height, ...props }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height={height ?? size ?? 24}
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="1.5"
+    viewBox="0 0 24 24"
+    width={width ?? size ?? 24}
+    {...props}
+  >
+    <path d="M12 3 7.5 9h2.25l-3 4.25h3.5L8.5 17h7l-1.75-3.75h3.5L14.25 9h2.25z" />
+    <path d="M12 17v4M9.5 21h5" />
+  </svg>
+);
+Tree.displayName = 'Icon(Tree)';
 
 // Solid variants for selected/active states (outline reads too faint there).
 export const NotebookTextSolid = adapt(DocumentTextSolidIcon);
@@ -138,12 +163,35 @@ export const PinSolid = makePinIcon(true);
 
 // Closest available Heroicons (no exact equivalent in the set).
 export const CalendarPlus = adapt(CalendarDaysIcon);
-export const Columns2 = adapt(ViewColumnsIcon);
+/** Two-pane split affordance. ViewColumnsIcon has three columns, which makes
+ * the action look like it can create three panes even though the workspace
+ * intentionally caps at two. */
+export const Columns2 = ({ size, width, height, ...props }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height={height ?? size ?? 24}
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="1.5"
+    viewBox="0 0 24 24"
+    width={width ?? size ?? 24}
+    {...props}
+  >
+    <rect height="15" rx="1.25" width="7.5" x="3.25" y="4.5" />
+    <rect height="15" rx="1.25" width="7.5" x="13.25" y="4.5" />
+  </svg>
+);
+Columns2.displayName = 'Icon(Columns2)';
 export const ClipboardCopy = adapt(ClipboardDocumentIcon);
 export const Copy = adapt(DocumentDuplicateIcon);
 export const Download = adapt(ArrowDownTrayIcon);
 export const Link = adapt(LinkIcon);
+export const List = adapt(Bars3BottomLeftIcon);
 export const Network = adapt(ShareIcon);
 export const StickyNote = adapt(PencilSquareIcon);
 export const PanelLeft = adapt(ChevronDoubleRightIcon);
 export const PanelLeftClose = adapt(ChevronDoubleLeftIcon);
+export const PanelRight = adapt(ChevronDoubleLeftIcon);
+export const PanelRightClose = adapt(ChevronDoubleRightIcon);

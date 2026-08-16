@@ -14,6 +14,8 @@ import {
   type GlobalSearchItem,
   type GlobalSearchKind,
 } from '../../lib/globalSearch';
+import EmptyState from '../../components/EmptyState';
+import { getUiDateLocale, localize, useUiLanguage } from '../../lib/uiLanguage';
 
 interface GlobalSearchOverlayProps {
   isOpen: boolean;
@@ -22,12 +24,12 @@ interface GlobalSearchOverlayProps {
   onSelect: (item: GlobalSearchItem) => void;
 }
 
-const KIND_LABELS: Record<GlobalSearchKind, string> = {
-  calendar: '캘린더',
-  inbox: '웹 수집함',
-  memo: '메모',
-  schedule: '일정 후보',
-  topic: 'Topics',
+const KIND_LABELS: Record<GlobalSearchKind, { en: string; ko: string }> = {
+  calendar: { en: 'Calendar', ko: '캘린더' },
+  inbox: { en: 'Inbox', ko: '링크 저장함' },
+  memo: { en: 'Memo', ko: '메모' },
+  schedule: { en: 'Schedule suggestion', ko: '일정 후보' },
+  topic: { en: 'Topics', ko: 'Topics' },
 };
 
 const ResultIcon = ({ kind }: { kind: GlobalSearchKind }) => {
@@ -39,23 +41,24 @@ const ResultIcon = ({ kind }: { kind: GlobalSearchKind }) => {
   return <NotebookText size={17} />;
 };
 
-const formatRelativeDate = (timestamp: number) => {
+const formatRelativeDate = (timestamp: number, language: 'en' | 'ko') => {
   if (!timestamp) return '';
+  const locale = getUiDateLocale(language);
   const elapsed = Date.now() - timestamp;
   if (elapsed < 0) {
-    return new Intl.DateTimeFormat('ko-KR', {
+    return new Intl.DateTimeFormat(locale, {
       day: 'numeric',
       month: 'short',
     }).format(timestamp);
   }
   const minutes = Math.max(0, Math.floor(elapsed / 60_000));
-  if (minutes < 1) return '방금 전';
-  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 1) return localize(language, '방금 전', 'Just now');
+  if (minutes < 60) return localize(language, `${minutes}분 전`, `${minutes}m ago`);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
+  if (hours < 24) return localize(language, `${hours}시간 전`, `${hours}h ago`);
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}일 전`;
-  return new Intl.DateTimeFormat('ko-KR', {
+  if (days < 7) return localize(language, `${days}일 전`, `${days}d ago`);
+  return new Intl.DateTimeFormat(locale, {
     day: 'numeric',
     month: 'short',
   }).format(timestamp);
@@ -67,6 +70,8 @@ const GlobalSearchOverlay = ({
   onClose,
   onSelect,
 }: GlobalSearchOverlayProps) => {
+  const language = useUiLanguage();
+  const t = (korean: string, english: string) => localize(language, korean, english);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -113,7 +118,7 @@ const GlobalSearchOverlay = ({
         >
           <motion.section
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            aria-label="전역 검색"
+            aria-label={t('전역 검색', 'Global search')}
             aria-modal="true"
             className="global-search-dialog"
             exit={{ opacity: 0, scale: 0.99, y: -6 }}
@@ -153,35 +158,39 @@ const GlobalSearchOverlay = ({
               <Search size={18} />
               <input
                 aria-controls="global-search-results"
-                aria-label="전역 검색어"
+                aria-label={t('전역 검색어', 'Global search query')}
                 onChange={event => {
                   setQuery(event.target.value);
                   setActiveIndex(0);
                   setHoveredIndex(null);
                   setKeyboardNavigating(false);
                 }}
-                placeholder="메모, Topics, 수집함, 일정 검색"
+                placeholder={t('메모, Topics, 수집함, 일정 검색', 'Search memos, Topics, Inbox, and schedules')}
                 ref={inputRef}
                 value={query}
               />
-              <button aria-label="검색 닫기" onClick={onClose} type="button">
+              <button aria-label={t('검색 닫기', 'Close search')} onClick={onClose} type="button">
                 <X size={18} />
               </button>
             </div>
 
             <div className="global-search-section-label">
-              {query.trim() ? '검색 결과' : '최근 항목'}
+              {query.trim() ? t('검색 결과', 'Search results') : t('최근 항목', 'Recent items')}
               <span>{results.length}</span>
             </div>
             <div
-              aria-label={query.trim() ? '검색 결과' : '최근 항목'}
+              aria-label={query.trim() ? t('검색 결과', 'Search results') : t('최근 항목', 'Recent items')}
               className="global-search-results"
               id="global-search-results"
               onMouseLeave={() => setHoveredIndex(null)}
               role="listbox"
             >
               {results.length === 0 ? (
-                <p className="global-search-empty">일치하는 항목이 없습니다.</p>
+                <EmptyState
+                  className="global-search-empty"
+                  title={t('일치하는 항목이 없습니다', 'No matching items')}
+                  tone="result"
+                />
               ) : (
                 results.map((item, index) => (
                   <button
@@ -204,16 +213,20 @@ const GlobalSearchOverlay = ({
                       <span>{item.subtitle}</span>
                     </span>
                     <span className="global-search-result-meta">
-                      {formatRelativeDate(item.timestamp) || KIND_LABELS[item.kind]}
+                      {formatRelativeDate(item.timestamp, language) || localize(
+                        language,
+                        KIND_LABELS[item.kind].ko,
+                        KIND_LABELS[item.kind].en,
+                      )}
                     </span>
                   </button>
                 ))
               )}
             </div>
             <footer className="global-search-footer">
-              <span>↑↓ 이동</span>
-              <span>↵ 열기</span>
-              <span>esc 닫기</span>
+              <span>{t('↑↓ 이동', '↑↓ move')}</span>
+              <span>{t('↵ 열기', '↵ open')}</span>
+              <span>{t('esc 닫기', 'esc close')}</span>
             </footer>
           </motion.section>
         </motion.div>

@@ -35,3 +35,43 @@ SUMMARY_PROMPT_KO = """
 - search_summary는 줄바꿈 없는 단락으로 작성합니다.
 - detail_summary는 줄바꿈으로 불릿을 구분합니다.
 """.strip()
+
+SUMMARY_PROMPT_EN = """
+Summarize the content below in English in three levels.
+
+Return only a JSON object. Do not use a Markdown code block, explanation, or comments.
+
+Fields:
+- one_liner: 1-2 sentences for a card UI, around 100 characters. Make the benefit or insight immediately clear.
+- search_summary: one 400-600 character paragraph for embedding/recommendation search. Include the main topic, tool names, numbers, examples, and context from the source with useful keyword density.
+- detail_summary: 6-8 bullets for the detail view, around 800 characters total. Use the format "- [topic] detail" for each bullet.
+- keywords: an array of 3-6 representative keyword strings. Each keyword is a 1-3 word noun phrase. Return [] when there are no suitable keywords.
+
+Rules:
+- Do not invent facts that are not present in the supplied content.
+- Do not write like an advertisement; write a memo that is useful to reread later.
+- Keep search_summary as one paragraph without line breaks.
+- Separate detail_summary bullets with line breaks.
+""".strip()
+
+# Used when a URL is summarized without extracted text that the backend can
+# inspect first. The model chooses the source's dominant language at generation
+# time; explicit Korean/mixed text still uses SUMMARY_PROMPT_KO above.
+SUMMARY_PROMPT_AUTO = """
+Summarize the supplied content in its dominant source language. Use Korean for Korean or mixed-language content and English for clearly English content.
+
+Return only a JSON object. Do not use a Markdown code block, explanation, or comments.
+
+Fields:
+- one_liner: 1-2 sentences for a card UI, around 100 characters.
+- search_summary: one 400-600 character paragraph for embedding/recommendation search. Include the source's main topic, names, numbers, examples, and context.
+- detail_summary: 6-8 bullets for the detail view, around 800 characters total. Use the format "- [topic] detail" for each bullet.
+- keywords: an array of 3-6 representative keyword strings. Each keyword is a 1-3 word noun phrase. Return [] when there are no suitable keywords.
+
+Rules:
+- Do not invent facts that are not present in the supplied content.
+- Keep the language consistent with the source; do not translate the source merely because this instruction is in English.
+- Do not write like an advertisement; write a memo that is useful to reread later.
+- Keep search_summary as one paragraph without line breaks.
+- Separate detail_summary bullets with line breaks.
+""".strip()

@@ -118,6 +118,7 @@ interface MemoState {
   ) => void;
   setActiveCategoryFilter: (category: string) => void;
   clearActiveCategoryFilter: () => void;
+  resetAfterAccountDeletion: () => void;
 }
 
 const DEFAULT_BRICKS: CalendarBrick[] = [
@@ -547,6 +548,16 @@ export const useMemoStore = create<MemoState>()(
 
       clearActiveCategoryFilter: () =>
         set(() => ({ activeCategoryFilter: null })),
+      resetAfterAccountDeletion: () =>
+        set(() => ({
+          activeCategoryFilter: null,
+          activeMarkdownEditor: null,
+          calendarBricks: [],
+          deletedMemoIds: [],
+          markdownActiveCommands: {},
+          markdownLinkHref: null,
+          memos: [],
+        })),
       setActiveMarkdownEditor: editor =>
         set(() => ({ activeMarkdownEditor: editor })),
       setMarkdownEditorState: ({ active, linkHref }) =>

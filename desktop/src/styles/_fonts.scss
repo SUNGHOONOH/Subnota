@@ -1,0 +1,101 @@
+/* 번들 서체.
+ *
+ * 왜 번들하는가: 예전에는 스택에 이름만 적어 두고 설치돼 있으면 쓰는 방식이라
+ * macOS와 Windows에서 글자가 다르게 나왔다. `desktop/CLAUDE.md`는 두 OS의
+ * typography가 같아야 한다고 못박고 있고, 더 나쁜 것은 로그인 화면이
+ * `Copernicus`·`Tiempos Headline`·`StyreneB` 같은 상용 서체 이름을 적어 두고
+ * 실제로는 아무도 갖고 있지 않아 브라우저 기본 명조로 떨어지고 있었다는 점이다.
+ *
+ * 셋 다 SIL Open Font License 1.1이다. 앱 번들·재배포가 허용되고, 금지되는
+ * 것은 폰트 파일 자체를 파는 것뿐이다. 라이선스 전문은 각 배포처에 있다.
+ *
+ * 경로에 `@` 별칭을 쓴다. 상대 경로(`../assets/…`)는 Sass가 파일을 합친 뒤
+ * Vite가 재기준을 잡지 못해 번들에 포함되지 않고 런타임 404가 된다.
+ *
+ * `font-display`를 쓰지 않는다 — 로컬 파일이라 네트워크 지연이 없고, swap을
+ * 걸면 오히려 첫 프레임에 폴백으로 그렸다가 바뀌는 깜빡임이 생긴다.
+ */
+
+/* ── 본문·UI ────────────────────────────────────────────────────────────
+   Pretendard는 Apple의 San Francisco와 Apple SD Gothic Neo를 대체할 목적으로
+   만들어진 system-ui 대체 글꼴이다. 한글 뼈대는 Noto Sans KR, 라틴은 Inter다 —
+   이전 스택(`Apple SD Gothic Neo, Inter, …`)이 두 개로 하던 일을 하나가 한다.
+   그래서 macOS 사용자에게는 인상 변화가 가장 작고, Windows에서는 Segoe UI
+   폴백에서 벗어난다. */
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 400;
+  src: url('@/assets/fonts/Pretendard-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 500;
+  src: url('@/assets/fonts/Pretendard-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 600;
+  src: url('@/assets/fonts/Pretendard-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 700;
+  src: url('@/assets/fonts/Pretendard-700.woff2') format('woff2');
+}
+
+/* ── 워드마크 ───────────────────────────────────────────────────────────
+   Alegreya Sans. 목표는 Optima였다 — 세리프가 없는데 획에 대비가 있고 끝이
+   살짝 벌어지는 휴머니스트 산세리프. Alegreya Sans가 바로 그 부류다.
+
+   앞서 Marcellus(로마 비문 세리프)를 썼는데 굵기가 400 하나뿐이라 워드마크를
+   굵힐 수 없었다. font-weight를 올려도 브라우저 합성 볼드라 그림이 안 바뀐다.
+   후보였던 Cinzel은 소문자가 없어("Subnota" → "SUBNOTA") 탈락, 정확한 Optima
+   개정판인 URW Classico는 AFPL이라 상용 배포가 막힌다. Alegreya Sans는 OFL에
+   100~900을 갖춰 두 문제를 동시에 푼다.
+
+   라틴만 필요하다("Subnota", "Quick Subnota"). 700/800 두 벌만 받는다 —
+   워드마크는 한 굵기만 쓰지만 크기별로 눌러 볼 여지를 남긴다. */
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-weight: 700;
+  src: url('@/assets/fonts/AlegreyaSans-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-weight: 800;
+  src: url('@/assets/fonts/AlegreyaSans-800.woff2') format('woff2');
+}
+
+/* ── 코드 ───────────────────────────────────────────────────────────────
+   라틴 서브셋만 받는다. 코드 블록에 한글이 오면 본문 서체로 폴백되는데,
+   고정폭 한글 서체를 3MB 더 얹을 만큼 흔한 일이 아니다. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: url('@/assets/fonts/JetBrainsMono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  src: url('@/assets/fonts/JetBrainsMono-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  src: url('@/assets/fonts/JetBrainsMono-700.woff2') format('woff2');
+}

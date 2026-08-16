@@ -1,0 +1,992 @@
+/* 앱 표면: 캘린더 · 수집함 카드 · 미리보기 패널 · 일정 저장함 · Quick Subnota.
+   원본은 desktop/src/styles/subnota-workspace.scss 와
+   desktop/src/features/mini/MiniComposer.scss. */
+
+/* ── 캘린더 ── */
+.cal-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: 18px 22px;
+}
+
+.cal-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.cal-title {
+  color: var(--app-color-text);
+  flex: 1 1 140px;
+  font-size: 20px;
+  font-weight: var(--app-weight-semibold);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cal-inbox-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-card);
+  color: var(--cal-muted);
+  display: inline-flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  margin-left: auto;
+  width: var(--control-size-standard);
+}
+
+.cal-inbox-button svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+/* 짧은 라벨을 담는 세그먼트라 알약이다. 트랙과 안쪽 칸이 함께 둥글어야
+   흰 인디케이터가 둥근 트랙 안에서 각져 보이지 않는다. */
+.cal-views,
+.cal-nav {
+  align-items: center;
+  background: var(--app-color-bg-pressed);
+  border-radius: var(--app-radius-pill);
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+}
+
+.cal-views > span {
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-muted-control);
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-semibold);
+  min-height: var(--control-size-compact);
+  min-width: 32px;
+  padding: 0 var(--control-padding-compact);
+}
+
+.cal-views > span.active {
+  background: var(--app-color-bg-paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: var(--app-color-text-strong);
+}
+
+.cal-nav-icon,
+.cal-today {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-text-strong);
+  display: inline-flex;
+  height: var(--control-size-compact);
+  justify-content: center;
+}
+
+.cal-nav-icon {
+  width: var(--control-size-compact);
+}
+
+.cal-nav-icon svg {
+  height: var(--control-icon-compact);
+  width: var(--control-icon-compact);
+}
+
+.cal-today {
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-semibold);
+  padding: 0 var(--control-padding-compact);
+}
+
+.cal-timegrid-head,
+.cal-timegrid-body {
+  display: grid;
+  grid-template-columns: 56px repeat(7, 1fr);
+}
+
+.cal-col-head {
+  align-items: baseline;
+  border-left: 1px solid var(--cal-line);
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.cal-col-dow {
+  color: var(--cal-muted);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+}
+
+.cal-col-date {
+  color: var(--app-color-text);
+  font-size: var(--app-font-editor);
+  font-weight: var(--app-weight-semibold);
+}
+
+.cal-col-head.today .cal-col-date {
+  align-items: center;
+  background: var(--cal-accent);
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-bg-paper);
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.cal-allday-row {
+  border-bottom: 1px solid var(--app-color-border);
+  border-top: 1px solid var(--cal-line);
+  min-height: 28px;
+}
+
+.cal-timegrid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cal-timegrid-body {
+  position: relative;
+}
+
+.cal-time-gutter {
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-hour-label {
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-medium);
+  padding-right: 8px;
+  text-align: right;
+  transform: translateY(-7px);
+}
+
+.cal-day-col {
+  border-left: 1px solid var(--cal-line);
+  position: relative;
+}
+
+.cal-hour-cell {
+  border-bottom: 1px solid var(--app-color-bg-pressed);
+}
+
+.cal-now-line {
+  background: var(--cal-accent);
+  height: 2px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  z-index: 3;
+}
+
+.cal-now-line::before {
+  background: var(--cal-accent);
+  border-radius: var(--app-radius-pill);
+  content: '';
+  height: 9px;
+  left: -1px;
+  position: absolute;
+  top: -3.5px;
+  width: 9px;
+}
+
+/* 제목 두 줄 + 시간이 45분 블록(28px)에 들어가야 해서 줄 높이를 못박는다. */
+.cal-event {
+  border: 0;
+  border-radius: var(--app-radius-tab);
+  display: flex;
+  flex-direction: column;
+  left: 2px;
+  overflow: hidden;
+  padding: 1px 6px;
+  position: absolute;
+  right: 2px;
+  text-align: left;
+  z-index: 2;
+}
+
+/* 제목은 최대 두 줄. 늘어나는 만큼 다 쓰게 두면 45분 블록에서 시간까지
+   세 줄이 되어 잘린다. */
+.cal-event strong {
+  display: -webkit-box;
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+  line-height: 13px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cal-event span {
+  font-size: var(--app-font-xs);
+  line-height: 11px;
+  opacity: 0.75;
+}
+
+/* ── 월간 격자 ── */
+.cal-month-grid {
+  border-left: 1px solid var(--cal-line);
+  border-radius: var(--app-radius-control);
+  border-top: 1px solid var(--cal-line);
+  display: grid;
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(7, 1fr);
+  overflow: hidden;
+}
+
+.cal-weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.cal-weekday-row span {
+  color: var(--cal-muted);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.cal-weekday-row span.sunday {
+  color: var(--cal-sunday);
+}
+
+.cal-month-cell {
+  background: var(--app-color-bg-paper);
+  border-bottom: 1px solid var(--cal-line);
+  border-right: 1px solid var(--cal-line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 6px 6px;
+  text-align: left;
+}
+
+.cal-month-cell.muted {
+  background: var(--app-color-bg-toolbar);
+}
+
+.cal-daynum {
+  align-self: flex-end;
+  color: var(--app-color-text);
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-semibold);
+  padding: 2px;
+}
+
+.cal-month-cell.muted .cal-daynum {
+  color: var(--app-color-muted);
+}
+
+/* 오늘은 캘린더가 브랜드색을 쓰는 자리 중 하나다. */
+.cal-month-cell.today .cal-daynum {
+  align-items: center;
+  background: var(--cal-accent);
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-bg-paper);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  width: 22px;
+}
+
+.cal-month-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cal-month-item {
+  align-items: center;
+  border-radius: 3px;
+  display: flex;
+  flex: 0 0 17px;
+  font-size: 10.5px;
+  font-weight: 550;
+  gap: 4px;
+  line-height: 15px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.cal-month-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 의도된 팔레트(드롭 프리뷰 — 상태 초록). 앱 토큰으로 흡수하지 말 것. */
+.cal-schedule-drop-preview {
+  background: rgba(74, 153, 92, 0.11);
+  border: 1px dashed rgba(61, 139, 87, 0.7);
+  border-radius: var(--app-radius-tab);
+  box-shadow: 0 4px 14px rgba(34, 104, 56, 0.12);
+  color: #2f6f42;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--app-font-xxs);
+  left: 2px;
+  line-height: 1.25;
+  padding: 4px 6px;
+  position: absolute;
+  right: 2px;
+  z-index: 4;
+}
+
+.cal-schedule-drop-preview strong {
+  font-size: var(--app-font-xs);
+}
+
+/* ── 수집함 카드 ── */
+.inbox-workspace {
+  --inbox-card-width: 224px;
+  --inbox-card-height: 298px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 18px 22px;
+}
+
+.inbox-list-header {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.inbox-search-input {
+  align-items: center;
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-color-muted);
+  display: flex;
+  flex: 1 1 260px;
+  font-size: var(--control-font-compact);
+  gap: 6px;
+  height: var(--control-size-standard);
+  max-width: 440px;
+  padding: 0 8px;
+}
+
+.inbox-filter {
+  background: var(--app-color-bg-pressed);
+  border-radius: var(--app-radius-xs);
+  display: flex;
+  margin-left: auto;
+  padding: 2px;
+}
+
+.inbox-filter > span {
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--app-color-muted-control);
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-medium);
+  padding: 3px 10px;
+}
+
+.inbox-filter > span.active {
+  background: var(--app-color-bg-paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  color: var(--app-color-text-strong);
+}
+
+.inbox-grid {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, var(--inbox-card-width));
+  justify-content: start;
+}
+
+/* 높이는 격자 정렬 때문에 고정이지만 안쪽은 자연 흐름이다. 슬롯을 고정하면
+   요약이나 키워드가 없는 항목이 카드 중간에 빈 구멍을 남긴다. */
+.inbox-card {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-row);
+  display: flex;
+  flex-direction: column;
+  height: var(--inbox-card-height);
+  overflow: hidden;
+  position: relative;
+  transition: box-shadow 150ms ease-out;
+}
+
+.inbox-card.hovered {
+  box-shadow:
+    0 0 0 1px var(--app-color-border-strong),
+    0 2px 8px rgba(44, 37, 32, 0.06);
+}
+
+.inbox-thumbnail {
+  background: var(--app-color-bg-muted);
+  height: 112px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 앱의 다른 자리표시자와 같은 납작한 회색. 장식 그라디언트는 무엇을
+   기다리는지 알려주지 않으면서 눈에만 띈다. */
+.inbox-thumbnail.empty {
+  background: var(--app-color-skeleton);
+}
+
+.inbox-thumbnail img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.inbox-thumbnail-text {
+  color: var(--app-color-muted-soft);
+  display: -webkit-box;
+  font-size: var(--app-font-xs);
+  height: 100%;
+  line-height: 1.4;
+  overflow: hidden;
+  padding: 10px 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.inbox-duration {
+  background: rgba(0, 0, 0, 0.78);
+  border-radius: var(--app-radius-tab);
+  bottom: 8px;
+  color: var(--app-color-bg-paper);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-black);
+  padding: 2px 6px;
+  position: absolute;
+  right: 8px;
+}
+
+.inbox-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 11px 12px 12px;
+}
+
+.inbox-card-title {
+  display: -webkit-box;
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.4;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inbox-card-source {
+  align-items: center;
+  color: var(--app-color-muted);
+  display: flex;
+  font-size: var(--app-font-xs);
+  gap: 4px;
+}
+
+.inbox-domain-favicon {
+  border-radius: 3px;
+  height: 13px;
+  width: 13px;
+}
+
+.inbox-card-summary {
+  display: -webkit-box;
+  font-size: var(--app-font-xs);
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 키워드는 아래에 붙고 남는 자리가 아래 여백이 된다. 같은 데이터가 화면마다
+   다른 색이면 같은 것으로 보이지 않으므로 중성 칩 하나로 통일한다. */
+.inbox-card-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+  max-height: 44px;
+  overflow: hidden;
+}
+
+.inbox-keyword {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-color-text-soft);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-medium);
+  padding: 2px 6px;
+}
+
+/* 삭제는 동작이라 hover에만, 좋아요는 상태라 눌린 것만 항상 보인다. */
+.inbox-card-actions {
+  display: flex;
+  gap: 4px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 2;
+}
+
+.inbox-card-actions > span {
+  align-items: center;
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-color-muted-icon);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  width: var(--control-size-standard);
+}
+
+.inbox-card.hovered .inbox-card-actions > span,
+.inbox-card-actions > span.liked {
+  opacity: 1;
+}
+
+.inbox-card-actions > span.liked {
+  color: #e03131;
+}
+
+/* ── 앱 사이드 패널 (미리보기 · 일정 저장함) ──
+   스플릿 패널과 구분되는 신호가 넷이다: 헤어라인 테두리, 왼쪽으로 지는 그림자,
+   탭 스트립 없음, 캐럿 없음. 그중 탭 스트립이 없다는 것이 가장 강한 신호다. */
+.preview-panel,
+.schedule-inbox-panel {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border-strong);
+  border-radius: 16px;
+  box-shadow:
+    -8px 0 24px rgba(44, 37, 32, 0.1),
+    0 2px 8px rgba(44, 37, 32, 0.06);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-panel-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.preview-panel-title {
+  color: var(--app-color-text);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-black);
+}
+
+.preview-panel-metadata {
+  color: var(--app-color-text-soft);
+  display: flex;
+  font-size: var(--app-font-xxs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--app-weight-semibold);
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.preview-panel-similarity {
+  margin-left: auto;
+}
+
+.preview-panel-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.preview-action-btn {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 16px;
+  color: var(--app-color-text-soft);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  width: var(--control-size-standard);
+}
+
+.preview-action-btn svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+.preview-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 16px;
+}
+
+/* 읽으라고 있는 표면이라 글자를 흐리게 하지 않는다 — 흐리게 하는 것은
+   비활성 표시이고, 여기서는 편집 수단만 없앤다. */
+.preview-body {
+  color: var(--app-color-text);
+  font-size: var(--app-font-md);
+  line-height: 1.62;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.preview-highlight {
+  background: #f0ebdf;
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+
+.preview-list {
+  display: grid;
+  gap: 6px;
+}
+
+/* 사이드 패널 안의 행은 헤어라인과 hover 링만 갖는다. 패널 바탕이 이미
+   흰색이라 그림자를 얹으면 상자 속 상자로 읽힌다. */
+.preview-list-row,
+.schedule-approve-row {
+  background: var(--app-color-bg-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-panel);
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  position: relative;
+  text-align: left;
+}
+
+.preview-list-meta,
+.schedule-approve-meta {
+  color: var(--app-color-text-soft);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-black);
+}
+
+.preview-list-text,
+.schedule-approve-text {
+  color: var(--app-color-text);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-medium);
+  line-height: 1.45;
+}
+
+.schedule-inbox-panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 6px 8px 6px 14px;
+}
+
+.schedule-inbox-panel-title {
+  color: var(--app-color-text);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-black);
+}
+
+.schedule-approve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.schedule-approve-row.dragging {
+  box-shadow: 0 12px 28px rgba(44, 37, 32, 0.16);
+}
+
+/* ── Quick Subnota ── */
+.mini-composer {
+  background: var(--app-color-bg);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-panel);
+  box-shadow: 0 22px 60px rgba(44, 37, 32, 0.2);
+  color: var(--app-color-text);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--app-font-ui);
+  gap: 8px;
+  padding: 12px;
+  width: 380px;
+}
+
+.mini-composer__header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.mini-composer__brand {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  margin-right: auto;
+}
+
+.mini-composer__mark {
+  color: var(--app-color-brand-mark);
+}
+
+/* 마크 옆 글자는 워드마크다. 메인 앱의 로그인 락업과 같은 얼굴을 쓴다 —
+   같은 로고가 창마다 다른 서체로 보이면 안 된다. */
+.mini-composer__title {
+  font-family: var(--app-font-wordmark);
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-black);
+  letter-spacing: 0.005em;
+}
+
+.mini-composer__header-actions {
+  align-items: center;
+  color: var(--app-color-muted-soft);
+  display: flex;
+  gap: 8px;
+}
+
+.mini-composer__input {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-control);
+  color: var(--app-color-text);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+  min-height: 86px;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.mini-composer__input.placeholder {
+  color: var(--app-color-muted-soft);
+}
+
+.mini-composer__recent {
+  border-top: 1px solid var(--app-color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+}
+
+.mini-composer__recent-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: var(--control-size-compact);
+}
+
+.mini-composer__recent-title {
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mini-composer__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* 두 저장 동작은 같은 흰 표면을 쓴다. 브랜드색은 이 창에서 마크가 이미
+   쓰고 있고, 작은 패널에 원색 버튼까지 얹으면 시선이 분산된다. */
+.mini-composer__secondary,
+.mini-composer__save {
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  border-radius: var(--app-radius-card);
+  color: var(--app-color-action-secondary-text);
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-medium);
+  height: var(--control-size-compact);
+  padding: 0 var(--control-padding-compact);
+}
+
+.mini-composer__status {
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xs);
+  margin: 0;
+  min-height: 15px;
+}
+
+.mini-composer__recent-item {
+  align-items: center;
+  color: var(--app-color-text-soft);
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 22px;
+}
+
+.mini-composer__recent-source {
+  color: var(--app-color-accent);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-semibold);
+}
+
+.mini-composer__recent-text {
+  font-size: var(--app-font-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 조각 패널 ──
+   앱 전체가 아니라 필요한 패널만 떼어 보여줄 때 감싸는 카드. 창 크롬이 없는
+   대신 헤어라인과 얕은 그림자로 "떼어 온 조각"임을 표시한다. */
+.cal-fragment {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-panel);
+  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 10px 28px rgba(44, 37, 32, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.cal-fragment-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.cal-fragment-head strong {
+  color: var(--app-color-text);
+  font-size: var(--app-font-lg);
+  font-weight: var(--app-weight-semibold);
+}
+
+/* 짧은 라벨 하나를 담는 칸이라 알약이다 — 캘린더 주/월 스위처와 같은 급. */
+.cal-fragment-badge {
+  background: var(--app-color-bg-pressed);
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-muted-control);
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-semibold);
+  padding: 4px 10px;
+}
+
+/* ── 주간 한 줄 ── */
+.cal-strip-hours,
+.cal-strip-row {
+  display: grid;
+  grid-template-columns: 54px repeat(5, 1fr);
+}
+
+.cal-strip-hours span {
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-medium);
+  text-align: center;
+}
+
+.cal-strip-row + .cal-strip-row {
+  margin-top: 6px;
+}
+
+.cal-strip-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 10px;
+}
+
+.cal-strip-day strong {
+  font-size: var(--app-font-lg);
+  font-weight: var(--app-weight-semibold);
+}
+
+.cal-strip-day span {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xs);
+}
+
+.cal-strip-track {
+  border-left: 1px solid var(--cal-line);
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: repeat(5, 1fr);
+  min-height: 46px;
+  position: relative;
+}
+
+.cal-strip-slot {
+  align-items: center;
+  border-right: 1px dashed var(--cal-line);
+  color: var(--app-color-muted-soft);
+  display: flex;
+  font-size: var(--app-font-md);
+  justify-content: center;
+}
+
+.cal-strip-slot::before {
+  content: '+';
+  opacity: 0.5;
+}
+
+.cal-strip-block {
+  align-items: flex-start;
+  border-radius: var(--app-radius-row);
+  display: flex;
+  flex-direction: column;
+  grid-row: 1;
+  justify-content: center;
+  margin: 3px;
+  overflow: hidden;
+  padding: 5px 8px;
+  z-index: 2;
+}
+
+.cal-strip-block strong {
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+  white-space: nowrap;
+}
+
+.cal-strip-block span {
+  font-size: var(--app-font-xxs);
+  opacity: 0.78;
+  white-space: nowrap;
+}

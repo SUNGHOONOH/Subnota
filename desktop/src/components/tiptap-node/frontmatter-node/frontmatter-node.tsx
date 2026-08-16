@@ -1,6 +1,6 @@
-import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
+import { NodeViewContent, NodeViewWrapper } from "@tiptap/react"
 
-export function FrontmatterNode(_props: ReactNodeViewProps) {
+export function FrontmatterNode() {
   return (
     <NodeViewWrapper className="frontmatter-block">
       <span className="frontmatter-block__label" contentEditable={false}>

@@ -1,4 +1,5 @@
 import { CalendarDays, X } from '@/components/icons';
+import { localize, useUiLanguage } from '../../../lib/uiLanguage';
 
 interface ScheduleConfirmPopoverProps {
   // 감지된 숫자 날짜 문구 (예: "2026.07.23" 또는 "2026.07.23 14:00").
@@ -16,12 +17,14 @@ const ScheduleConfirmPopover = ({
   onChangeDate,
   onClose,
 }: ScheduleConfirmPopoverProps) => {
+  const language = useUiLanguage();
+  const t = (korean: string, english: string) => localize(language, korean, english);
   return (
-    <div className="schedule-confirm-bar" role="group" aria-label="일정 등록 확인">
+    <div className="schedule-confirm-bar" role="group" aria-label={t('일정 등록 확인', 'Confirm schedule')}>
       <button
         className="schedule-confirm-date"
         onClick={onChangeDate}
-        title="날짜 변경"
+        title={t('날짜 변경', 'Change date')}
         type="button"
       >
         <span className="schedule-confirm-date-text">{label}</span>
@@ -32,10 +35,10 @@ const ScheduleConfirmPopover = ({
         onClick={onConfirm}
         type="button"
       >
-        등록
+        {t('등록', 'Add')}
       </button>
       <button
-        aria-label="닫기"
+        aria-label={t('닫기', 'Close')}
         className="schedule-confirm-x"
         onClick={onClose}
         type="button"

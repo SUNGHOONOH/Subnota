@@ -55,7 +55,7 @@ def index_dirty_memo_chunks(request: MemoChunkIndexRequest) -> MemoChunkIndexRes
             failed_memo_ids=[],
             stale_memo_count=0,
             edge_rebuild_failed=False,
-            model=constants.EMBEDDING_MODEL,
+            model=constants.EMBEDDING_MODEL_SIGNATURE,
         )
 
     try:
@@ -180,7 +180,7 @@ def _index_dirty_memo_chunks_claimed(
         failed_memo_ids=failed_memo_ids,
         stale_memo_count=stale_memo_count,
         edge_rebuild_failed=edge_rebuild_failed,
-        model=constants.EMBEDDING_MODEL,
+        model=constants.EMBEDDING_MODEL_SIGNATURE,
     )
 
 
@@ -189,4 +189,4 @@ def build_chunk_hash(content_hash: str, chunk_text: str) -> str:
 
 
 def build_embedding_cache_hash(chunk_text: str) -> str:
-    return short_hash(f"{constants.EMBEDDING_MODEL}:{chunk_text}")
+    return short_hash(f"{constants.EMBEDDING_MODEL_SIGNATURE}:{chunk_text}")

@@ -1,4 +1,9 @@
-EMBEDDING_MODEL = "dragonkue/BGE-m3-ko"
+# Hugging Face serverless inference receives the model id, not a Hub revision.
+# Keep the observed Hub commit in the cache signature so vectors from different
+# model releases never mix; this is an audit label, not a runtime weight pin.
+EMBEDDING_MODEL = "BAAI/bge-m3"
+EMBEDDING_MODEL_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
+EMBEDDING_MODEL_SIGNATURE = f"{EMBEDDING_MODEL}@{EMBEDDING_MODEL_REVISION}"
 EMBEDDING_BATCH_SIZE = 16
 
 # 청킹 단위는 "한 문장 = 한 청크". 실제 경계는 줄바꿈이 정하고

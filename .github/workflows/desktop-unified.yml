@@ -36,6 +36,7 @@ jobs:
       - run: pnpm exec tsc --noEmit
       - run: pnpm test
       - run: pnpm run lint
+      - run: pnpm audit --prod
       - if: runner.os == 'macOS'
         run: pnpm build:mac
       - if: runner.os == 'Windows'

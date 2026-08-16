@@ -109,25 +109,25 @@ synchronous NORMAL과 WAL 조합으로 쓰기 지연이 거의 사라짐. userDa
 상반기 목표는 절반 정도 달성. 운동 습관은 잡혔고 저축은 부족. 하반기엔 사이드프로젝트 출시.$m$, '2026-06-27 18:05+09')
 ) as v(content, ts);
 
--- 3) 14 calendar blocks across the week (past = completed, upcoming = pending)
+-- 3) 14 calendar blocks across August (past = completed, upcoming = pending)
 with u as (select id as uid from profiles order by created_at limit 1)
 insert into calendar_blocks (user_id, title, note, start_date, end_date, all_day, all_day_date, time_zone, color, is_completed, completed_at, "order", created_at)
 select u.uid, c.title, c.note, c.start_date, c.end_date, c.all_day, c.all_day_date, 'Asia/Seoul', c.color, c.done, case when c.done then c.start_date else null end, 0, c.start_date - interval '1 day'
 from u, (values
-('팀 주간회의',        '스프린트 리뷰와 다음 주 계획',     '2026-06-22 10:00+09'::timestamptz, '2026-06-22 11:00+09'::timestamptz, false, null::date,            '#007AFF', true),
-('헬스 PT',           '하체 집중',                    '2026-06-23 19:00+09', '2026-06-23 20:00+09', false, null,                  '#66705A', true),
-('건강검진',          '공복 유지, 신분증 지참',          '2026-06-24 00:00+09', null,                  true,  '2026-06-24'::date,    '#E0533D', true),
-('치과 예약',         '스케일링',                     '2026-06-25 14:00+09', '2026-06-25 15:00+09', false, null,                  '#cc785c', true),
-('모닝 러닝 5km',     '한강 코스',                     '2026-06-26 09:30+09', '2026-06-26 10:00+09', false, null,                  '#4C9A8E', true),
-('아침 스트레칭',      '무릎 재활 루틴',                '2026-06-27 09:00+09', '2026-06-27 09:30+09', false, null,                  '#66705A', false),
-('사이드프로젝트 코딩', '음성 입력 프로토타입',           '2026-06-27 11:00+09', '2026-06-27 12:30+09', false, null,                  '#cc785c', false),
-('친구 저녁 약속',     '광안리 회식',                   '2026-06-27 18:00+09', '2026-06-27 20:00+09', false, null,                  '#E0533D', false),
-('제주 항공권 예약 마감','특가 마지막 날',                '2026-06-28 00:00+09', null,                  true,  '2026-06-28'::date,    '#007AFF', false),
-('연금저축 리밸런싱 검토','채권 비중 조정',                '2026-06-29 10:00+09', '2026-06-29 11:00+09', false, null,                  '#66705A', false),
-('영어 회화 스터디',   '온라인 모임',                   '2026-06-30 20:00+09', '2026-06-30 21:00+09', false, null,                  '#4C9A8E', false),
-('7월 가계부 시작',    '예산 카테고리 재설정',           '2026-07-01 00:00+09', null,                  true,  '2026-07-01'::date,    '#cc785c', false),
-('부모님 생신 외식 예약','장소 확인 전화',                '2026-07-02 15:00+09', '2026-07-02 16:00+09', false, null,                  '#E0533D', false),
-('집들이',            '파스타와 감바스 준비',           '2026-07-03 19:00+09', '2026-07-03 21:00+09', false, null,                  '#007AFF', false)
+('팀 주간회의',        '스프린트 리뷰와 다음 주 계획',     '2026-08-01 10:00+09'::timestamptz, '2026-08-01 11:00+09'::timestamptz, false, null::date,            '#007AFF', true),
+('헬스 PT',           '하체 집중',                    '2026-08-02 19:00+09', '2026-08-02 20:00+09', false, null,                  '#66705A', true),
+('건강검진',          '공복 유지, 신분증 지참',          '2026-08-03 00:00+09', null,                  true,  '2026-08-03'::date,    '#E0533D', true),
+('치과 예약',         '스케일링',                     '2026-08-04 14:00+09', '2026-08-04 15:00+09', false, null,                  '#cc785c', true),
+('모닝 러닝 5km',     '한강 코스',                     '2026-08-05 09:30+09', '2026-08-05 10:00+09', false, null,                  '#4C9A8E', false),
+('아침 스트레칭',      '무릎 재활 루틴',                '2026-08-05 14:00+09', '2026-08-05 15:00+09', false, null,                  '#66705A', false),
+('사이드프로젝트 코딩', '음성 입력 프로토타입',           '2026-08-05 14:00+09', '2026-08-05 15:00+09', false, null,                  '#cc785c', false),
+('친구 저녁 약속',     '광안리 회식',                   '2026-08-06 18:00+09', '2026-08-06 20:00+09', false, null,                  '#E0533D', false),
+('제주 항공권 예약 마감','특가 마지막 날',                '2026-08-08 00:00+09', null,                  true,  '2026-08-08'::date,    '#007AFF', false),
+('연금저축 리밸런싱 검토','채권 비중 조정',                '2026-08-08 10:00+09', '2026-08-08 11:00+09', false, null,                  '#66705A', false),
+('영어 회화 스터디',   '온라인 모임',                   '2026-08-08 13:00+09', '2026-08-08 14:00+09', false, null,                  '#4C9A8E', false),
+('8월 가계부 시작',    '예산 카테고리 재설정',           '2026-08-08 00:00+09', null,                  true,  '2026-08-08'::date,    '#cc785c', false),
+('부모님 생신 외식 예약','장소 확인 전화',                '2026-08-08 15:00+09', '2026-08-08 16:00+09', false, null,                  '#E0533D', false),
+('집들이',            '파스타와 감바스 준비',           '2026-08-08 19:00+09', '2026-08-08 21:00+09', false, null,                  '#007AFF', false)
 ) as c(title, note, start_date, end_date, all_day, all_day_date, color, done);
 
 commit;

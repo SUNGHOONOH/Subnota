@@ -7,7 +7,14 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const isDryRun = process.argv.includes('--dry-run');
 const force = process.env.FORCE_WINDOWS_MAKE === '1';
-const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const forgeCli = join(
+  root,
+  'node_modules',
+  '@electron-forge',
+  'cli',
+  'dist',
+  'electron-forge.js',
+);
 
 const findExeFiles = (dir) => {
   if (!existsSync(dir)) {
@@ -37,21 +44,20 @@ if (!existsSync(join(root, 'resources', 'icon.ico'))) {
 }
 
 const command = [
-  'exec',
-  'electron-forge',
+  forgeCli,
   'make',
   '--targets',
   '@electron-forge/maker-squirrel',
 ];
 
 if (isDryRun) {
-  console.log(`${pnpm} ${command.join(' ')}`);
+  console.log(`${process.execPath} ${command.join(' ')}`);
   process.exit(0);
 }
 
 rmSync(join(root, 'out'), { force: true, recursive: true });
 
-const result = spawnSync(pnpm, command, {
+const result = spawnSync(process.execPath, command, {
   cwd: root,
   shell: process.platform === 'win32',
   stdio: 'inherit',

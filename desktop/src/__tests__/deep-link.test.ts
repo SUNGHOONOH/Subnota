@@ -42,7 +42,7 @@ describe('parseSubnotaUrl', () => {
       ),
     ).toEqual({
       kind: 'capture',
-      url: 'https://example.com',
+      url: 'https://example.com/',
       title: 'Example',
     });
   });
@@ -50,13 +50,26 @@ describe('parseSubnotaUrl', () => {
   it('parses a capture link without a title', () => {
     expect(parseSubnotaUrl('subnota://capture?url=https%3A%2F%2Fexample.com')).toEqual({
       kind: 'capture',
-      url: 'https://example.com',
+      url: 'https://example.com/',
       title: '',
     });
   });
 
   it('rejects a capture link without a url', () => {
     expect(parseSubnotaUrl('subnota://capture?title=Example')).toBeNull();
+  });
+
+  it('rejects local and privileged capture URL schemes', () => {
+    expect(
+      parseSubnotaUrl(
+        'subnota://capture?url=file%3A%2F%2F%2FUsers%2Fexample%2Fsecret.md',
+      ),
+    ).toBeNull();
+    expect(
+      parseSubnotaUrl(
+        'subnota://capture?url=javascript%3Aalert%281%29',
+      ),
+    ).toBeNull();
   });
 
   it('rejects unknown actions', () => {

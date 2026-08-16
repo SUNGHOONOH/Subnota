@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { isCompleteOtp } from './authValidation';
+import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 interface OtpCodeInputProps {
   value: string;
@@ -14,8 +15,11 @@ const OtpCodeInput = ({
   onChange,
   onComplete,
   disabled = false,
-  ariaLabelPrefix = '인증 코드',
+  ariaLabelPrefix,
 }: OtpCodeInputProps) => {
+  const language = useUiLanguage();
+  const labelPrefix =
+    ariaLabelPrefix ?? localize(language, '인증 코드', 'Verification code');
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const setNextValue = (next: string) => {
@@ -65,7 +69,11 @@ const OtpCodeInput = ({
           onChange={e => handleOtpChange(index, e.target.value)}
           onKeyDown={e => handleKeyDown(index, e)}
           disabled={disabled}
-          aria-label={`${ariaLabelPrefix} ${index + 1}번째 자리`}
+          aria-label={
+            language === 'en'
+              ? `${labelPrefix} digit ${index + 1}`
+              : `${labelPrefix} ${index + 1}번째 자리`
+          }
         />
       ))}
     </div>

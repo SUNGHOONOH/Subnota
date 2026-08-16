@@ -13,7 +13,7 @@ def fetch_cached_embedding(user_id: str, chunk_hash: str) -> Any | None:
         .select("embedding")
         .eq("user_id", user_id)
         .eq("chunk_hash", chunk_hash)
-        .eq("embedding_model", constants.EMBEDDING_MODEL)
+        .eq("embedding_model", constants.EMBEDDING_MODEL_SIGNATURE)
         .limit(1)
         .execute()
     )
@@ -38,7 +38,7 @@ def fetch_cached_embeddings(
             client.table("chunk_embedding_cache")
             .select("chunk_hash, embedding")
             .eq("user_id", user_id)
-            .eq("embedding_model", constants.EMBEDDING_MODEL)
+            .eq("embedding_model", constants.EMBEDDING_MODEL_SIGNATURE)
             .in_("chunk_hash", unique_hashes[start : start + 100])
             .execute()
         )
@@ -63,7 +63,7 @@ def upsert_cached_embedding(
             "chunk_hash": chunk_hash,
             "chunk_text": chunk_text,
             "embedding": format_vector(embedding),
-            "embedding_model": constants.EMBEDDING_MODEL,
+            "embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
         },
         on_conflict="user_id,chunk_hash",
     ).execute()
@@ -77,7 +77,7 @@ def upsert_cached_embeddings(rows: list[DatabaseRow]) -> None:
             {
                 **row,
                 "embedding": format_vector(row["embedding"]),
-                "embedding_model": constants.EMBEDDING_MODEL,
+                "embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             }
             for row in rows
         ]
@@ -99,7 +99,7 @@ def fetch_topic_memo_embeddings(
         client.table("topic_memo_embedding_cache")
         .select("memo_id, content_hash, embedding")
         .eq("user_id", user_id)
-        .eq("embedding_model", constants.EMBEDDING_MODEL)
+        .eq("embedding_model", constants.EMBEDDING_MODEL_SIGNATURE)
         .in_("memo_id", memo_ids)
         .execute()
     )
@@ -120,7 +120,7 @@ def upsert_topic_memo_embeddings(rows: list[DatabaseRow]) -> None:
             {
                 **row,
                 "embedding": format_vector(row["embedding"]),
-                "embedding_model": constants.EMBEDDING_MODEL,
+                "embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             }
             for row in rows
         ],
@@ -138,7 +138,7 @@ def search_similar_chunks(
     response = client.rpc(
         "match_memo_chunks",
         {
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_user_id": user_id,
             "p_query_embedding": format_vector(query_embedding),
             "p_match_count": limit,
@@ -158,7 +158,7 @@ def search_similar_topic_memos(
     response = client.rpc(
         "match_topic_memo_embeddings",
         {
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_user_id": user_id,
             "p_query_embedding": format_vector(query_embedding),
             "p_match_count": limit,
@@ -177,7 +177,7 @@ def search_similar_inbox_embeddings(
     response = client.rpc(
         "match_inbox_session_embeddings",
         {
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_user_id": user_id,
             "p_query_embedding": format_vector(query_embedding),
             "p_match_count": limit,
@@ -196,7 +196,7 @@ def rebuild_user_memo_chunk_edges(
         "rebuild_user_memo_chunk_edges",
         {
             "p_user_id": user_id,
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_match_count": match_count,
             "p_min_similarity": min_similarity,
         },
@@ -214,7 +214,7 @@ def rebuild_user_memo_similarity_edges(
         "rebuild_user_memo_similarity_edges",
         {
             "p_user_id": user_id,
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_match_count": match_count,
             "p_min_similarity": min_similarity,
         },
@@ -262,7 +262,7 @@ def fetch_memo_chunk_neighbors(
         {
             "p_user_id": user_id,
             "p_chunk_id": chunk_id,
-            "p_embedding_model": constants.EMBEDDING_MODEL,
+            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
             "p_match_count": limit,
         },
     ).execute()
@@ -276,7 +276,7 @@ def fetch_inbox_embeddings_for_user(user_id: str) -> list[DatabaseRow]:
         client.table("inbox_session_embeddings")
         .select("inbox_session_id, embedding, updated_at")
         .eq("user_id", user_id)
-        .eq("embedding_model", constants.EMBEDDING_MODEL)
+        .eq("embedding_model", constants.EMBEDDING_MODEL_SIGNATURE)
         .order("updated_at", desc=True)
         .execute()
     )

@@ -3,8 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpsertMemoResult } from '../services/supabase/data';
 
 const upsertMemo = vi.fn();
+const fetchMemoById = vi.fn();
+const preserveLocalMemoRecovery = vi.fn();
 vi.mock('../services/supabase/data', () => ({
+  fetchMemoById: (...args: unknown[]) => fetchMemoById(...args),
   upsertMemo: (...args: unknown[]) => upsertMemo(...args),
+}));
+vi.mock('../services/local/offlineStore', () => ({
+  preserveLocalMemoRecovery: (...args: unknown[]) =>
+    preserveLocalMemoRecovery(...args),
 }));
 
 import { pushMemoMerging } from '../services/supabase/memoSync';
@@ -42,9 +49,12 @@ const input = {
 
 beforeEach(() => {
   upsertMemo.mockReset();
+  fetchMemoById.mockReset();
+  preserveLocalMemoRecovery.mockReset();
+  preserveLocalMemoRecovery.mockResolvedValue(undefined);
 });
 
-describe('pushMemoMerging (auto-merge first, conflict copy as fallback)', () => {
+describe('pushMemoMerging (auto-merge first, hidden recovery as fallback)', () => {
   it('passes non-conflict results through', async () => {
     upsertMemo.mockResolvedValueOnce(row(LOCAL, 'hLocal', 'updated'));
 
@@ -59,6 +69,7 @@ describe('pushMemoMerging (auto-merge first, conflict copy as fallback)', () => 
     upsertMemo
       .mockResolvedValueOnce(row(SERVER, 'hServer', 'conflict'))
       .mockResolvedValueOnce(row('merged', 'hMerged', 'updated'));
+    fetchMemoById.mockResolvedValueOnce(row(SERVER, 'hServer', 'updated').memo);
 
     const result = await pushMemoMerging(session, input);
 
@@ -70,33 +81,61 @@ describe('pushMemoMerging (auto-merge first, conflict copy as fallback)', () => 
     expect(retryArgs[1].content).toContain('셋째날은 밀면'); // local edit kept
   });
 
-  it('falls back to a server-side conflict copy when merging is impossible', async () => {
+  it('keeps the latest local text visible and stores the server text as hidden recovery', async () => {
     const divergedServer = '서버에서 전부 다시 작성했습니다. 접점이 전혀 없는 내용입니다.';
+    const localRewrite = '완전히 새로 쓴 로컬 메모입니다. 원본과 겹치는 부분이 없습니다.';
     upsertMemo
       .mockResolvedValueOnce(row(divergedServer, 'hServer', 'conflict'))
-      .mockResolvedValueOnce(row(divergedServer, 'hServer', 'conflict'));
+      .mockResolvedValueOnce(row(localRewrite, 'hLocal', 'updated'));
+    fetchMemoById.mockResolvedValueOnce(
+      row(divergedServer, 'hServer', 'updated').memo,
+    );
 
     const result = await pushMemoMerging(session, {
       ...input,
       baseContent: BASE,
-      content: '완전히 새로 쓴 로컬 메모입니다. 원본과 겹치는 부분이 없습니다.',
+      content: localRewrite,
     });
 
-    expect(result.status).toBe('conflict-copy');
-    expect(result.memo?.content).toBe(divergedServer); // server stays canonical
-    const fallbackArgs = upsertMemo.mock.calls[1];
-    expect(fallbackArgs[2]).toEqual({ preserveConflictCopy: true });
+    expect(result.status).toBe('synced');
+    expect(result.memo?.content).toBe(localRewrite);
+    expect(preserveLocalMemoRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: divergedServer,
+        memoId: 'm1',
+        source: 'server',
+      }),
+      'user-1',
+    );
+    expect(upsertMemo.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ baseHash: 'hServer' }),
+    );
+    expect(upsertMemo.mock.calls.every(call => call.length === 2)).toBe(true);
   });
 
-  it('falls back when no base content is available', async () => {
+  it('keeps a newer server version visible and stores local text as hidden recovery', async () => {
+    const newerServer = {
+      ...row(SERVER, 'hServer', 'updated').memo,
+      content_updated_at: '2026-07-07T00:00:00.000Z',
+      updated_at: '2026-07-07T00:00:00.000Z',
+    };
     upsertMemo
-      .mockResolvedValueOnce(row(SERVER, 'hServer', 'conflict'))
       .mockResolvedValueOnce(row(SERVER, 'hServer', 'conflict'));
+    fetchMemoById.mockResolvedValueOnce(newerServer);
 
     const result = await pushMemoMerging(session, { ...input, baseContent: null });
 
-    expect(result.status).toBe('conflict-copy');
-    expect(upsertMemo.mock.calls[1][2]).toEqual({ preserveConflictCopy: true });
+    expect(result.status).toBe('synced');
+    expect(result.memo?.content).toBe(SERVER);
+    expect(upsertMemo).toHaveBeenCalledTimes(1);
+    expect(preserveLocalMemoRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: LOCAL,
+        memoId: 'm1',
+        source: 'local',
+      }),
+      'user-1',
+    );
   });
 
   it('propagates tombstone deletes', async () => {

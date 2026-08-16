@@ -1,0 +1,76 @@
+/* 주석 층 — 형광펜, 손글씨, 화살표.
+
+   앱 UI가 아니라 그 위에 사람이 손으로 표시한 것처럼 읽혀야 한다. 그래서
+   여기만 앱 팔레트 밖의 색(형광펜 잉크)과 다른 서체를 쓴다. 제품 화면
+   안으로는 절대 들어가지 않는다 — 무대 위에 얹히는 층이다.
+   앱의 `의도된 팔레트` 카브아웃과 같은 성격이다. web/DESIGN.md 참조. */
+
+/* ── 텍스트 하이라이트 ──
+   글자를 감싸는 칩이다. 예전 랜딩이 쓰던 방식이고, 한국어 본문에서는 밑줄
+   띠보다 이쪽이 또렷하게 읽힌다. 챕터마다 배경판 색과 짝을 맞춘다. */
+.marker {
+  border-radius: 4px;
+  display: inline-block;
+  font-weight: 600;
+  padding: 2px 6px;
+}
+
+.marker-blue {
+  background: #e3f2fd;
+  color: #1e88e5;
+}
+
+.marker-green {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.marker-amber {
+  background: #fff3db;
+  color: #b27a14;
+}
+
+.marker-clay {
+  background: #fbece6;
+  color: #b84b32;
+}
+
+/* ── 손글씨 메모 + 화살표 ── */
+.hand-note {
+  pointer-events: none;
+  position: absolute;
+  z-index: 30;
+}
+
+.hand-note-text {
+  color: #b07a1c;
+  display: block;
+  font-family: 'Nanum Pen Script', var(--font-sans);
+  font-size: 25px;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.hand-note-arrow {
+  display: block;
+  height: auto;
+  overflow: visible;
+}
+
+/* 손으로 그은 선은 화면에서 애니메이션으로 그려진다. 움직임을 줄여 달라고
+   한 사람에게는 처음부터 그려진 채로 보인다. */
+@media (prefers-reduced-motion: reduce) {
+  .hand-note-arrow path {
+    animation: none !important;
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
+
+/* 좁은 화면에서는 뺀다. 무대가 작아지면 주석이 화면을 가린다. */
+@media (max-width: 900px) {
+  .hand-note {
+    display: none;
+  }
+}

@@ -1,0 +1,889 @@
+/* 앱 셸: 네비 레일 · 메모 목록 · 스플릿 패널 · 탭 · 에디터 · Ghost · 일정 등록.
+   클래스 이름은 desktop/src/styles/subnota-workspace.scss 와 같게 둔다 —
+   같은 이름이어야 앱이 바뀌었을 때 어디를 고칠지 바로 보인다. */
+
+.subnota-app {
+  background: var(--app-color-bg-paper);
+  color: var(--app-color-text);
+  display: flex;
+  font-family: var(--app-font-ui);
+  font-size: var(--app-font-md);
+  height: 100%;
+  /* 페이지 본문의 1.6 이 여기로 상속되면 memo-row·탭·칩의 고정 높이가 전부
+     앱보다 커진다. 앱은 이 자리에서 normal 이다. */
+  line-height: normal;
+  overflow: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+}
+
+.subnota-app *,
+.subnota-app *::before,
+.subnota-app *::after {
+  box-sizing: border-box;
+}
+
+/* ── 네비게이션 레일 ── */
+.nav-rail {
+  align-items: center;
+  /* 펼친 레일과 메모 목록은 하나의 평평한 사이드바로 읽힌다. */
+  background: var(--app-color-chrome-bg);
+  display: flex;
+  flex: 0 0 var(--app-size-nav-rail);
+  flex-direction: column;
+  gap: 4px;
+  padding: calc(var(--app-size-commandbar) + 8px) 7px 8px;
+  width: var(--app-size-nav-rail);
+}
+
+.nav-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-card);
+  color: var(--app-color-muted-control);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  padding: 0;
+  transition: background 140ms ease, color 140ms ease;
+  width: var(--control-size-standard);
+}
+
+.nav-item svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+/* 활성 네비는 큰 색 알약이 되지 않는다 — 잉크만 진해진다. */
+.nav-item.active {
+  color: var(--app-color-accent-dark);
+}
+
+.nav-divider {
+  background: var(--app-color-border-strong);
+  height: 1px;
+  margin: 4px 0;
+  width: 20px;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+/* 목록/폴더 전환. 트랙은 안으로 파이고 선택된 칸만 그 안에서 솟는다. */
+.nav-mode-segment {
+  background: var(--app-color-state-hover);
+  border-radius: var(--app-radius-card);
+  box-shadow: var(--app-color-state-inset-shadow);
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+}
+
+.nav-mode-segment-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-muted-control);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  width: var(--control-size-standard);
+}
+
+.nav-mode-segment-item.active {
+  background: var(--app-color-state-raised);
+  box-shadow: var(--app-color-state-raised-shadow);
+  color: var(--app-color-text);
+}
+
+/* ── 메모 목록 레일 ── */
+.session-rail-inner {
+  background: var(--app-color-chrome-bg);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--app-size-session-rail);
+  min-height: 0;
+  /* 네이티브 신호등 줄만 비워 두고 목록은 바로 시작한다. */
+  padding: var(--app-size-commandbar) 8px 10px;
+  width: var(--app-size-session-rail);
+}
+
+.session-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 8px 9px;
+}
+
+.session-header h2 {
+  color: var(--app-color-text);
+  font-size: var(--app-font-lg);
+  font-weight: var(--app-weight-black);
+  line-height: 1.15;
+  margin: 0;
+}
+
+.session-header span {
+  background: rgba(120, 120, 116, 0.12);
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--app-weight-black);
+  min-width: 28px;
+  padding: 6px 10px;
+  text-align: center;
+}
+
+.new-memo-row {
+  align-items: center;
+  background: var(--app-color-bg-surface);
+  border: 0;
+  border-radius: var(--app-radius-card);
+  box-shadow:
+    0 0 0 1px rgba(92, 77, 60, 0.11),
+    0 1px 2px rgba(44, 37, 32, 0.04);
+  color: var(--app-color-text);
+  display: flex;
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-black);
+  gap: 8px;
+  margin: 0 6px 8px;
+  min-height: var(--control-size-compact);
+  padding: 0 var(--control-padding-compact);
+}
+
+.new-memo-row svg {
+  height: var(--control-icon-compact);
+  width: var(--control-icon-compact);
+}
+
+.session-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px 2px 28px;
+}
+
+.session-list h3 {
+  color: var(--app-color-accent);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-black);
+  margin: 16px 10px 6px;
+  text-transform: uppercase;
+}
+
+.memo-row {
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-text);
+  display: block;
+  min-height: 54px;
+  padding: 9px 30px 9px 13px;
+  position: relative;
+  text-align: left;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+  width: 100%;
+}
+
+.memo-row::before {
+  background: transparent;
+  border-radius: var(--app-radius-pill);
+  content: '';
+  inset: 10px auto 10px 5px;
+  position: absolute;
+  width: 3px;
+}
+
+/* 선택 항목은 종이보다 한 단계 밝은 면으로 떠오른다. 사이드바에서 브랜드색은
+   아래 3px 레일 하나뿐이다. */
+.memo-row.active {
+  background: var(--app-color-state-raised);
+  box-shadow: var(--app-color-state-raised-shadow);
+}
+
+.memo-row.active::before {
+  background: var(--app-color-action-primary);
+}
+
+.memo-row strong,
+.memo-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-row strong {
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-heavy);
+}
+
+.memo-row span {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xs);
+  margin-top: 4px;
+}
+
+/* 폴더 모드 — State A가 묶어 준 토픽이 사이드바에서 폴더가 된다. */
+.topic-folder-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px 2px 28px;
+}
+
+.topic-folder + .topic-folder {
+  margin-top: 1px;
+}
+
+.topic-folder-head {
+  align-items: center;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-text);
+  display: flex;
+  gap: 7px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.topic-folder-chevron {
+  align-items: center;
+  color: var(--app-color-muted);
+  display: inline-flex;
+  transition: transform 150ms ease;
+}
+
+.topic-folder-label {
+  flex: 1;
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topic-folder-count {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xxs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--app-weight-semibold);
+}
+
+.topic-folder-memos {
+  border-left: 1px solid var(--app-color-border-soft);
+  margin: 1px 0 4px 19px;
+  padding-left: 2px;
+}
+
+.topic-folder-memos .memo-row {
+  min-height: 0;
+  padding: 7px 10px;
+}
+
+/* ── 작업공간 · 스플릿 패널 ── */
+.workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.split-workspace-shell {
+  background: var(--app-color-bg-paper);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 패널 위에 놓이는 투명한 제목줄. 전역 컨트롤만 여기 산다. */
+.split-workspace-commandbar {
+  align-items: center;
+  background: transparent;
+  display: flex;
+  gap: 6px;
+  left: 0;
+  min-height: var(--app-size-commandbar);
+  padding: 0 7px 0 78px;
+  position: absolute;
+  top: 0;
+  width: calc(var(--app-size-nav-rail) + var(--app-size-session-rail));
+  z-index: 30;
+}
+
+.split-command-divider {
+  background: var(--app-color-border);
+  height: 16px;
+  margin: 0 3px;
+  width: 1px;
+}
+
+.split-command-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-accent-dark);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  width: var(--control-size-standard);
+}
+
+.split-command-button svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+.split-workspace-container {
+  background: var(--app-color-bg-paper);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.split-pane {
+  background: var(--app-color-bg-paper);
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  transition: background-color 180ms ease;
+}
+
+/* 포커스는 색이 아니라 밝기로 말한다 — 포커스가 아닌 쪽만 한 단계 내려앉는다. */
+.split-pane:not(.focused) {
+  background: var(--app-color-bg-toolbar);
+}
+
+.split-pane + .split-pane {
+  border-left: 1px solid var(--app-color-border);
+}
+
+/* 사용자가 끌어서 넓힌 패널. 캘린더처럼 7열을 담아야 하는 뷰는 이 상태로
+   보여준다 — 앱에서도 패널 폭은 사용자가 정한다. */
+.split-pane.wide {
+  flex: 1.35 1 0;
+}
+
+.split-pane-header {
+  align-items: center;
+  display: flex;
+  min-height: var(--app-size-split-header);
+  padding: 10px 6px 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* 사이드바가 펼쳐져 있어도 첫 패널의 탭은 전역 컨트롤 폭만큼 밀린다. */
+.split-pane:first-child .split-pane-header {
+  padding-left: 0;
+}
+
+.split-editor-tabs {
+  align-items: center;
+  display: flex;
+  gap: 1px;
+  min-width: 0;
+}
+
+.split-editor-tab {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-muted-control);
+  display: flex;
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-semibold);
+  gap: 6px;
+  height: var(--app-size-tab-height);
+  justify-content: center;
+  max-width: 100px;
+  min-width: 52px;
+  padding: 0 9px;
+  transition: background-color 140ms ease, color 140ms ease;
+  white-space: nowrap;
+}
+
+/* 사이드바 선택과 같은 규칙 — 활성 탭은 테두리로 상자를 그리지 않고 면이 뜬다. */
+.split-editor-tab.active {
+  background: var(--app-color-state-raised);
+  box-shadow: var(--app-color-state-raised-shadow);
+  color: var(--app-color-text);
+}
+
+.split-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.split-editor-tab-add,
+.split-action-btn {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-accent-dark);
+  display: flex;
+  flex-shrink: 0;
+  height: var(--control-size-standard);
+  justify-content: center;
+  width: var(--control-size-standard);
+}
+
+.split-editor-tab-add svg,
+.split-action-btn svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+.split-pane-actions {
+  align-items: center;
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+
+/* 앱 사이드 패널은 스플릿 패널 안이 아니라 작업공간 오른쪽 끝 고정 슬롯에
+   놓인다. 패널이 둘로 나뉘어 있어도 자리는 그대로다. */
+.app-side-panel-slot {
+  bottom: 6px;
+  display: flex;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 320px;
+  z-index: 20;
+}
+
+.app-side-panel-slot > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 노트 헤더 · 고정 툴바 ── */
+.split-memo-pane-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.split-note-header {
+  border-bottom: 1px solid var(--app-color-border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 28px 0;
+  position: relative;
+}
+
+.split-note-save-status {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-semibold);
+}
+
+.split-note-title-input {
+  background: transparent;
+  border: 0;
+  color: var(--app-color-text);
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: var(--app-weight-black);
+  line-height: 1.3;
+  padding: 2px 0;
+}
+
+.note-fixed-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  padding: 6px 0 8px;
+}
+
+.note-fixed-toolbar-trailing {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.tiptap-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-muted-control);
+  display: flex;
+  height: var(--control-size-standard);
+  justify-content: center;
+  min-width: var(--control-size-standard);
+  padding: 0 4px;
+}
+
+.tiptap-button svg {
+  height: var(--control-icon-standard);
+  width: var(--control-icon-standard);
+}
+
+/* ── 에디터 본문 ── */
+.simple-editor-content {
+  color: var(--app-color-text);
+  flex: 1;
+  font-family: var(--app-font-ui);
+  font-size: var(--app-font-editor);
+  letter-spacing: -0.015em;
+  line-height: 1.6;
+  min-height: 0;
+  overflow: hidden;
+  padding: 22px 28px 28px;
+}
+
+.simple-editor-content p {
+  margin: 0 0 12px;
+}
+
+.simple-editor-content h2 {
+  font-size: var(--app-font-heading-sm);
+  font-weight: var(--app-weight-regular);
+  margin: 16px 0 8px;
+}
+
+/* 문장 안에서 감지된 날짜. 앱의 DateHighlight 확장과 같은 표시다. */
+.date-token {
+  background: rgba(102, 112, 90, 0.16);
+  border-radius: var(--app-radius-xs);
+  box-decoration-break: clone;
+  color: #4b5741;
+  font-weight: var(--app-weight-black);
+  padding: 0 3px;
+}
+
+.editor-caret {
+  background: var(--app-color-brand-500);
+  display: inline-block;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  width: 2px;
+}
+
+.editor-selection {
+  background: var(--app-color-selection);
+}
+
+/* ── 관련 기억 한 줄 ──
+   본문 사이에 끼어들지만 저장되는 문서에는 들어가지 않는다. 카드 테두리나
+   배경을 두지 않고 왼쪽 세로선으로만 "본문이 아님"을 말한다.
+   요소 전체 opacity 대신 글자색만 흐리게 한다 — 배경까지 흐려지면 탁해진다.
+   메타 접두(`7일 전 ·`)는 필수다. 없으면 커서 옆 회색 글자가 삽입 가능한
+   완성 제안처럼 읽히는데, 이 기능은 참조지 제안이 아니다. */
+.ambient-ghost-widget {
+  display: block;
+  margin: 10px 0 14px;
+  min-height: 24px;
+}
+
+.ambient-ghost {
+  align-items: baseline;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--app-color-border-strong) 72%, transparent);
+  display: flex;
+  gap: 7px;
+  max-width: 520px;
+  padding: 2px 0 2px 9px;
+  text-align: left;
+  transition: border-color 150ms ease-out;
+}
+
+.ambient-ghost-meta {
+  color: color-mix(in srgb, var(--app-color-accent) 70%, transparent);
+  flex: 0 0 auto;
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-black);
+}
+
+.ambient-ghost-text {
+  color: color-mix(in srgb, var(--app-color-text-soft) 72%, transparent);
+  flex: 1 1 auto;
+  font-size: var(--app-font-xs);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ambient-ghost-hint {
+  color: color-mix(in srgb, var(--app-color-text-soft) 72%, transparent);
+  flex: 0 0 auto;
+  font-size: var(--app-font-xxs);
+  opacity: 0;
+}
+
+.ambient-ghost.hovered {
+  border-left-color: var(--app-color-accent);
+}
+
+.ambient-ghost.hovered .ambient-ghost-hint {
+  opacity: 0.7;
+}
+
+/* ── 문장을 드래그하면 뜨는 서식 팝오버 ──
+   원본은 components/tiptap-templates/simple/selection-bubble-toolbar.tsx.
+   선택 문장을 바로 일정으로 보내는 버튼이 여기 붙어 있다. */
+.selection-bubble-toolbar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: 0;
+  border-radius: var(--app-radius-panel);
+  box-shadow:
+    var(--app-shadow-menu),
+    0 18px 44px rgba(44, 37, 32, 0.18);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+}
+
+.selection-bubble-toolbar .tiptap-button {
+  height: var(--control-size-compact);
+  min-width: var(--control-size-compact);
+  padding: 0 4px;
+}
+
+.selection-bubble-toolbar .tiptap-button svg {
+  height: var(--control-icon-compact);
+  width: var(--control-icon-compact);
+}
+
+.selection-bubble-divider {
+  background: rgba(44, 37, 32, 0.12);
+  height: 18px;
+  margin: 0 4px;
+  width: 1px;
+}
+
+.selection-bubble-schedule {
+  gap: 4px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.selection-bubble-schedule .tiptap-button-text {
+  font-size: var(--app-font-xs);
+  font-weight: var(--app-weight-medium);
+}
+
+/* ── 일정 등록 확인 바 ── */
+.schedule-confirm-bar {
+  align-items: center;
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border-soft);
+  border-radius: var(--app-radius-control);
+  box-shadow: 0 12px 32px rgba(20, 20, 19, 0.14);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.schedule-confirm-date {
+  align-items: center;
+  background: var(--app-color-bg-muted);
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-text);
+  display: flex;
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-semibold);
+  gap: 6px;
+  height: var(--control-size-compact);
+  padding: 0 var(--control-padding-compact);
+}
+
+/* 화면당 하나뿐인 주 행동. 채우지 않고 테두리와 글자로만 말한다. */
+.schedule-confirm-submit {
+  background: transparent;
+  border: 1px solid var(--app-color-action-primary-border);
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-action-primary-ink);
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-semibold);
+  height: var(--control-size-compact);
+  padding: 0 var(--control-padding-compact);
+}
+
+.schedule-confirm-x {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-muted);
+  display: flex;
+  height: var(--control-size-compact);
+  justify-content: center;
+  width: var(--control-size-compact);
+}
+
+/* ── 날짜 선택 팝오버 ── */
+.date-schedule-popover {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border-soft);
+  border-radius: var(--app-radius-panel);
+  box-shadow: 0 18px 48px rgba(20, 20, 19, 0.18);
+  color: var(--app-color-text);
+  padding: 10px;
+  width: 228px;
+}
+
+.date-schedule-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 6px;
+}
+
+.date-schedule-title {
+  align-items: baseline;
+  display: flex;
+  gap: 4px;
+}
+
+.date-schedule-title strong {
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-black);
+}
+
+.date-schedule-title span {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xs);
+}
+
+.date-schedule-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.date-schedule-nav > span {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-muted-icon);
+  display: flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.date-schedule-weekdays,
+.date-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.date-schedule-weekdays span {
+  color: var(--app-color-muted);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-semibold);
+  padding: 2px 0;
+  text-align: center;
+}
+
+.date-schedule-day {
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-text);
+  font-size: var(--app-font-sm);
+  height: 26px;
+  padding: 0;
+}
+
+.date-schedule-day.empty {
+  visibility: hidden;
+}
+
+.date-schedule-day.today {
+  color: var(--app-color-action-primary);
+  font-weight: var(--app-weight-black);
+}
+
+.date-schedule-day.selected {
+  background: var(--app-color-action-primary);
+  color: var(--app-color-action-primary-text);
+  font-weight: var(--app-weight-semibold);
+}
+
+.date-schedule-time-row {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.date-schedule-time-selects {
+  align-items: center;
+  background: var(--app-color-bg-muted);
+  border-radius: var(--app-radius-row);
+  display: flex;
+  font-size: var(--control-font-compact);
+  font-variant-numeric: tabular-nums;
+  gap: 2px;
+  height: var(--control-size-compact);
+  padding: 0 8px;
+}
+
+.date-schedule-meridiem {
+  background: var(--app-color-bg-muted);
+  border-radius: var(--app-radius-pill);
+  display: flex;
+  padding: 2px;
+}
+
+.date-schedule-meridiem > span {
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  color: var(--app-color-muted-control);
+  font-size: var(--app-font-xxs);
+  font-weight: var(--app-weight-semibold);
+  padding: 3px 8px;
+}
+
+.date-schedule-meridiem > span.active {
+  background: var(--app-color-bg-paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: var(--app-color-text-strong);
+}
+
+.date-schedule-confirm-row {
+  padding-top: 8px;
+}
+
+.date-schedule-confirm-btn {
+  background: transparent;
+  border: 1px solid var(--app-color-action-primary-border);
+  border-radius: var(--app-radius-row);
+  color: var(--app-color-action-primary-ink);
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-semibold);
+  height: var(--control-size-compact);
+  width: 100%;
+}

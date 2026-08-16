@@ -13,7 +13,7 @@ fi
 
 # --- Package ---
 echo "Packaging app..."
-pnpm exec electron-forge package
+SUBNOTA_LOCAL_BUILD=1 node node_modules/@electron-forge/cli/dist/electron-forge.js package
 
 APP_PATH=$(find out -maxdepth 2 -name "Subnota.app" -type d | head -1)
 if [ -z "$APP_PATH" ]; then
@@ -25,7 +25,7 @@ sh scripts/resign-local-mac-app.sh "$APP_PATH"
 
 # --- Build installers ---
 echo "Making distributables..."
-pnpm exec electron-forge make --skip-package
+node node_modules/@electron-forge/cli/dist/electron-forge.js make --skip-package
 
 # --- Find artifacts ---
 ZIP_PATH=$(find out/make -name "*.zip" -maxdepth 5 | head -1)

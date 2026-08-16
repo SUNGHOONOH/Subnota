@@ -6,15 +6,21 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { format } from 'date-fns';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CalendarDays } from '@/components/icons';
+import { getUiDateLocale, localize, useUiLanguage } from '../../../lib/uiLanguage';
 import DateSchedulePopover from './DateSchedulePopover';
 
 interface DateScheduleFieldProps {
   date: Date;
   allDay: boolean;
   onChange: (date: Date, allDay: boolean) => void;
-  label?: string;
+  /**
+   * null이면 라벨 줄을 그리지 않는다. 일정 모달은 아이콘 행으로 값을 설명해
+   * "날짜 / 시간"이라는 글자가 세로 한 줄을 그냥 먹는다. 대신 트리거에
+   * 접근 가능한 이름을 붙인다.
+   */
+  label?: string | null;
 }
 
 // Compact value field + calendar-icon trigger. The picker only opens on click,
@@ -23,8 +29,13 @@ const DateScheduleField = ({
   date,
   allDay,
   onChange,
-  label = '날짜 / 시간',
+  label,
 }: DateScheduleFieldProps) => {
+  const language = useUiLanguage();
+  const t = (korean: string, english: string) => localize(language, korean, english);
+  const dateLocale = getUiDateLocale(language);
+  const resolvedLabel = label === undefined ? t('날짜 / 시간', 'Date & time') : label;
+  const shouldReduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>();
@@ -64,7 +75,7 @@ const DateScheduleField = ({
       const field = ref.current.getBoundingClientRect();
       const height = popRef.current.offsetHeight;
       const viewportPadding = 14;
-      const width = Math.min(340, window.innerWidth - viewportPadding * 2);
+      const width = Math.min(228, window.innerWidth - viewportPadding * 2);
       const maxLeft = Math.max(
         viewportPadding,
         window.innerWidth - width - viewportPadding,
@@ -106,27 +117,60 @@ const DateScheduleField = ({
   }, [open]);
 
   const valueLabel = allDay
-    ? `${format(date, 'yyyy. MM. dd.')} · 종일`
-    : format(date, 'yyyy. MM. dd. h:mm a');
+    ? `${new Intl.DateTimeFormat(dateLocale, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }).format(date)} · ${t('종일', 'All day')}`
+    : new Intl.DateTimeFormat(dateLocale, {
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(date);
 
-  const popover = open ? (
-    <div
-      className={`date-schedule-field-popover ${placement}`}
-      ref={popRef}
-      style={popoverStyle}
-    >
-      <DateSchedulePopover
-        initialDate={date}
-        onApplyDate={onChange}
-        onClose={() => setOpen(false)}
-      />
-    </div>
-  ) : null;
+  /* placement는 이미 계산해 두고 위치를 정하는 데만 썼다. 같은 값을
+     transform-origin에 물리면 달력이 **필드에서 자라 나온다** — 위로 열릴 땐
+     아래에서, 아래로 열릴 땐 위에서. 페이드만으로는 어디서 나왔는지 알 수
+     없다. AnimatePresence는 조건문 바깥에 둔다(docs/design.md). */
+  const popover = (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className={`date-schedule-field-popover ${placement}`}
+          exit={{ opacity: 0, scale: 0.97 }}
+          initial={{
+            opacity: 0,
+            scale: 0.94,
+            y: placement === 'top' ? 4 : -4,
+          }}
+          ref={popRef}
+          style={popoverStyle}
+          transition={
+            shouldReduceMotion
+              ? { duration: 0 }
+              : { duration: 0.16, ease: 'easeOut' }
+          }
+        >
+          <DateSchedulePopover
+            initialDate={date}
+            onApplyDate={onChange}
+            onClose={() => setOpen(false)}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <div className="date-schedule-field" ref={ref}>
-      <span className="date-schedule-field-label">{label}</span>
+      {resolvedLabel !== null && (
+        <span className="date-schedule-field-label">{resolvedLabel}</span>
+      )}
       <button
+        aria-label={resolvedLabel === null ? t('날짜 / 시간 선택', 'Choose date and time') : undefined}
         className="date-schedule-field-trigger"
         onClick={() => setOpen(value => !value)}
         type="button"
@@ -134,7 +178,7 @@ const DateScheduleField = ({
         <span>{valueLabel}</span>
         <CalendarDays size={18} />
       </button>
-      {popover && createPortal(popover, document.body)}
+      {createPortal(popover, document.body)}
     </div>
   );
 };

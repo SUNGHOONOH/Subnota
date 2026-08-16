@@ -6,7 +6,6 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state"
-import { cellAround, CellSelection } from "@tiptap/pm/tables"
 import {
   findParentNodeClosestToPos,
   type Editor,
@@ -267,10 +266,10 @@ export function findNodePosition(props: {
   }
 
   // If we have a valid position, use findNodeAtPosition
-  if (hasValidPos) {
-    const nodeAtPos = findNodeAtPosition(editor, nodePos!)
+  if (isValidPosition(nodePos)) {
+    const nodeAtPos = findNodeAtPosition(editor, nodePos)
     if (nodeAtPos) {
-      return { pos: nodePos!, node: nodeAtPos }
+      return { pos: nodePos, node: nodeAtPos }
     }
   }
 
@@ -467,6 +466,25 @@ export function sanitizeUrl(
   return "#"
 }
 
+/** Find a link mark at a ProseMirror click position, including link edges. */
+export function getLinkHrefAtPosition(
+  doc: PMNode,
+  position: number,
+): string | null {
+  if (!Number.isFinite(position)) return null
+
+  const safePosition = Math.max(0, Math.min(position, doc.content.size))
+  const resolved = doc.resolve(safePosition)
+  const marks = [
+    ...resolved.marks(),
+    ...(resolved.nodeAfter?.marks ?? []),
+    ...(resolved.nodeBefore?.marks ?? []),
+  ]
+  const linkMark = marks.find(mark => mark.type.name === "link")
+  const href = linkMark?.attrs.href
+  return typeof href === "string" && href.length > 0 ? href : null
+}
+
 /**
  * Update a single attribute on multiple nodes.
  *
@@ -561,7 +579,7 @@ export function selectCurrentBlockContent(editor: Editor) {
 /**
  * Retrieves all nodes of specified types from the current selection.
  * @param selection The current editor selection
- * @param allowedNodeTypes An array of node type names to look for (e.g., ["image", "table"])
+ * @param allowedNodeTypes An array of node type names to look for (e.g., ["image", "heading"])
  * @returns An array of objects containing the node and its position
  */
 export function getSelectedNodesOfType(
@@ -571,15 +589,6 @@ export function getSelectedNodesOfType(
   const results: NodeWithPos[] = []
   const allowed = new Set(allowedNodeTypes)
 
-  if (selection instanceof CellSelection) {
-    selection.forEachCell((node: PMNode, pos: number) => {
-      if (allowed.has(node.type.name)) {
-        results.push({ node, pos })
-      }
-    })
-    return results
-  }
-
   if (selection instanceof NodeSelection) {
     const { node, from: pos } = selection
     if (node && allowed.has(node.type.name)) {
@@ -588,19 +597,8 @@ export function getSelectedNodesOfType(
     return results
   }
 
-  const { $anchor } = selection
-  const cell = cellAround($anchor)
-
-  if (cell) {
-    const cellNode = selection.$anchor.doc.nodeAt(cell.pos)
-    if (cellNode && allowed.has(cellNode.type.name)) {
-      results.push({ node: cellNode, pos: cell.pos })
-      return results
-    }
-  }
-
   // Fallback: find parent nodes of allowed types
-  const parentNode = findParentNodeClosestToPos($anchor, (node) =>
+  const parentNode = findParentNodeClosestToPos(selection.$anchor, (node) =>
     allowed.has(node.type.name)
   )
 

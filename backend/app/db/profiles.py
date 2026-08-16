@@ -4,11 +4,28 @@ from app.db.client import get_supabase
 from app.db.types import DatabaseRow
 
 
+DEFAULT_TIME_ZONE = "Asia/Seoul"
+
+
 def fetch_profile_ids() -> list[str]:
     client = get_supabase()
     response = client.table("profiles").select("id").execute()
     rows = cast(list[DatabaseRow], response.data or [])
     return [str(row["id"]) for row in rows if row.get("id")]
+
+
+def fetch_profile_time_zone(user_id: str) -> str:
+    response = (
+        get_supabase()
+        .table("profiles")
+        .select("time_zone")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = cast(list[DatabaseRow], response.data or [])
+    value = rows[0].get("time_zone") if rows else None
+    return str(value) if value else DEFAULT_TIME_ZONE
 
 
 def fetch_profile_ids_with_dirty_chunk_memos(

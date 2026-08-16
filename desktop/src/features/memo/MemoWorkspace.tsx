@@ -1,20 +1,24 @@
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import { motion } from 'framer-motion';
 import { Menu } from '@mantine/core';
 import {
-  CheckCircle2,
   ChevronRight,
   ExternalLink,
   Folder,
   FolderOpen,
-  NotebookText,
   Pin,
   PinSolid,
-  Plus,
   Trash2,
 } from '@/components/icons';
-import TooltipIconButton from '../../components/TooltipIconButton';
 
 import { formatMemoDate } from '../../lib/date';
 import { getSections } from '../../lib/memoSections';
@@ -26,22 +30,28 @@ import {
   TopicMembership,
 } from '../../types';
 import { InboxSession } from '../../services/backend/inboxService';
+import EmptyState from '../../components/EmptyState';
+import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 interface MemoWorkspaceProps {
   activeMemoId: string | null;
   memos: MemoRow[];
   isSessionCollapsed?: boolean;
+  sessionRailWidth: number;
+  onSessionRailWidthChange: (width: number) => void;
+  isSessionRailResizing: boolean;
+  onSessionRailResizeStateChange: (isResizing: boolean) => void;
   onToggleSession: () => void;
   onDeleteMemoById: (id: string) => void;
-  onNewMemo: () => void;
+  onSidebarModeChange: (mode: MemoSidebarMode) => void;
   onSelectMemo: (memo: MemoRow) => void;
   onTogglePinMemo?: (memoId: string) => void;
-  openMemoPaneNumbers?: Record<string, number>;
   pinnedMemoIds?: string[];
   topicClusters: TopicCluster[];
   topicInboxItems?: InboxSession[];
   topicInboxMemberships?: TopicInboxMembership[];
   topicMemberships: TopicMembership[];
+  sidebarMode: MemoSidebarMode;
   workspaceContent?: ReactNode;
 }
 
@@ -50,19 +60,14 @@ interface TopicMemoRow {
   score: number;
 }
 
-type SidebarMode = 'time' | 'network' | 'folders';
+export type MemoSidebarMode = 'time' | 'folders';
 
-// 표시 방식(노트 목록 / 토픽 폴더)만 담는다. 미니 메모는 종류이지 방식이
-// 아니라 노트 목록의 'Mini 노트' 섹션으로 들어간다.
-const SIDEBAR_TABS: Array<{
-  icon: typeof NotebookText;
-  label: string;
-  value: SidebarMode;
-}> = [
-  { icon: NotebookText, label: '노트', value: 'time' },
-  { icon: Folder, label: '폴더', value: 'folders' },
-];
-const SESSION_RAIL_WIDTH = 284;
+export const SESSION_RAIL_MIN_WIDTH = 200;
+export const SESSION_RAIL_WIDTH = 200;
+export const SESSION_RAIL_MAX_WIDTH = 300;
+
+export const clampSessionRailWidth = (width: number) =>
+  Math.min(SESSION_RAIL_MAX_WIDTH, Math.max(SESSION_RAIL_MIN_WIDTH, width));
 
 // 접어둔 상태가 앱을 껐다 켜면 풀리면 접는 의미가 없다. 섹션 제목이 곧 키다.
 const COLLAPSED_SECTIONS_KEY = 'subnota.sidebar.collapsedSections';
@@ -81,47 +86,28 @@ const readCollapsedSections = () => {
   }
 };
 
-const getMemoTitle = (memo: MemoRow) => {
+const getMemoTitle = (memo: MemoRow, language: 'en' | 'ko') => {
   const title = memo.content
     .split('\n')
     .map(line => line.trim())
     .find(Boolean);
 
   if (!title) {
-    return '새 메모';
+    return localize(language, '새 메모', 'New note');
   }
 
   return title.length > 22 ? `${title.slice(0, 22).trimEnd()}...` : title;
 };
 
-const getMemoPreview = (memo: MemoRow) => {
+const getMemoPreview = (memo: MemoRow, language: 'en' | 'ko') => {
   const lines = memo.content
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean);
-  const preview = lines[1] ?? lines[0] ?? '내용 없음';
+  const preview =
+    lines[1] ?? lines[0] ?? localize(language, '내용 없음', 'No content');
 
   return preview.length > 38 ? `${preview.slice(0, 38).trimEnd()}...` : preview;
-};
-
-const MemoSyncBadge = ({ memo }: { memo: MemoRow }) => {
-  if (!memo.local_sync_status) return null;
-  const isSynced = memo.local_sync_status === 'synced';
-  const isFailed = memo.local_sync_status === 'failed';
-  const label = isSynced
-    ? '클라우드 동기화됨'
-    : isFailed
-      ? '클라우드 동기화 실패'
-      : '로컬 저장됨';
-  return (
-    <span
-      aria-label={label}
-      className={`memo-sync-badge ${isFailed ? 'failed' : 'ok'}`}
-      title={label}
-    >
-      {isSynced ? '☁︎' : isFailed ? '!' : '✓'}
-    </span>
-  );
 };
 
 const getTopicMemoRows = ({
@@ -150,25 +136,31 @@ const MemoWorkspace = ({
   activeMemoId,
   memos,
   isSessionCollapsed = false,
+  sessionRailWidth,
+  onSessionRailWidthChange,
+  isSessionRailResizing,
+  onSessionRailResizeStateChange,
   onToggleSession,
   onDeleteMemoById,
-  onNewMemo,
+  onSidebarModeChange,
   onSelectMemo,
   onTogglePinMemo,
-  openMemoPaneNumbers,
   pinnedMemoIds = [],
   topicClusters,
   topicInboxItems = [],
   topicInboxMemberships = [],
   topicMemberships,
+  sidebarMode,
   workspaceContent,
 }: MemoWorkspaceProps) => {
+  const language = useUiLanguage();
+  const t = (korean: string, english: string) =>
+    localize(language, korean, english);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [memoMenu, setMemoMenu] = useState<{ x: number; y: number; id: string } | null>(
     null,
   );
   const [selectedTopicMemoId, setSelectedTopicMemoId] = useState<string | null>(null);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('time');
   const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -178,7 +170,7 @@ const MemoWorkspace = ({
     [memos],
   );
   // 미니는 별도 모드가 아니라 노트 목록의 한 섹션이다.
-  const sections = getSections(normalMemos, pinnedMemoIds, miniMemos);
+  const sections = getSections(normalMemos, pinnedMemoIds, miniMemos, language);
   const [collapsedSections, setCollapsedSections] = useState(readCollapsedSections);
   const toggleSection = (title: string) => {
     const next = new Set(collapsedSections);
@@ -225,10 +217,10 @@ const MemoWorkspace = ({
     if (isSessionCollapsed) {
       onToggleSession();
     }
-    setSidebarMode('folders');
+    onSidebarModeChange('folders');
     setActiveTopicId(topicId);
     setSelectedTopicMemoId(memoId ?? null);
-    setExpandedTopicIds(previous => new Set(previous).add(topicId));
+    setExpandedTopicIds(new Set([topicId]));
   };
 
   useEffect(() => {
@@ -276,69 +268,92 @@ const MemoWorkspace = ({
       return next;
     });
 
+  const handleSessionRailResizeStart = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (isSessionCollapsed) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const startX = event.clientX;
+    const startWidth = sessionRailWidth;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    let isCleanedUp = false;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    onSessionRailResizeStateChange(true);
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      onSessionRailWidthChange(
+        clampSessionRailWidth(startWidth + moveEvent.clientX - startX),
+      );
+    };
+
+    const cleanup = () => {
+      if (isCleanedUp) {
+        return;
+      }
+
+      isCleanedUp = true;
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      window.removeEventListener('blur', cleanup);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      onSessionRailResizeStateChange(false);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
+    window.addEventListener('blur', cleanup);
+  };
+
+  const handleSessionRailResizeKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (
+      event.key !== 'ArrowLeft' &&
+      event.key !== 'ArrowRight' &&
+      event.key !== 'Home' &&
+      event.key !== 'End'
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextWidth =
+      event.key === 'Home'
+        ? SESSION_RAIL_MIN_WIDTH
+        : event.key === 'End'
+          ? SESSION_RAIL_MAX_WIDTH
+          : sessionRailWidth + (event.key === 'ArrowRight' ? 8 : -8);
+    onSessionRailWidthChange(clampSessionRailWidth(nextWidth));
+  };
+
 
   return (
     <div className="memo-layout">
       <motion.aside
         className="session-rail"
         initial={false}
-        animate={{ width: isSessionCollapsed ? 0 : SESSION_RAIL_WIDTH }}
-        transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+        animate={{ width: isSessionCollapsed ? 0 : sessionRailWidth }}
+        transition={{
+          duration: isSessionRailResizing ? 0 : 0.28,
+          ease: [0.4, 0, 0.2, 1],
+        }}
       >
-       <div className="session-rail-inner">
-        {/* 아이콘 세그먼트 대신 텍스트 탭. 바로 아래 h2가 같은 이름을
-            반복하던 중복을 없애고, 탭 이름 자체가 제목 역할을 한다. */}
-        <div className="session-tabs">
-          {/* Mantine SegmentedControl의 FloatingIndicator는 target이 바뀔 때마다
-              ResizeObserver를 새로 만들고, 그 최초 발화가 페인트 전에
-              transition-duration을 0ms로 덮어써서 항상 순간이동한다.
-              (transitionDuration prop을 올려도 무시된다.)
-              인디케이터만 layoutId로 대체 — 겉모습은 그대로다. */}
-          <div className="session-tabs-control" role="tablist">
-            {SIDEBAR_TABS.map(tab => {
-              const isActive = sidebarMode === tab.value;
-
-              return (
-                <button
-                  aria-selected={isActive}
-                  className={`session-tab ${isActive ? 'active' : ''}`}
-                  key={tab.value}
-                  onClick={() => {
-                    // 노트 외 탭으로 갈 때는 토픽 필터를 푼다(기존 동작 유지).
-                    if (tab.value !== 'time') {
-                      setActiveTopicId(null);
-                    }
-                    setSidebarMode(tab.value);
-                  }}
-                  role="tab"
-                  type="button"
-                >
-                  {isActive && (
-                    <motion.span
-                      className="session-tab-indicator"
-                      layoutId="session-tab-indicator"
-                      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    />
-                  )}
-                  <span className="session-tab-label">
-                    <tab.icon size={12} />
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <TooltipIconButton
-            aria-label="새 메모"
-            className="session-new-memo"
-            onClick={onNewMemo}
-            placement="bottom"
-            tooltip="새 메모"
-          >
-            <Plus size={15} strokeWidth={2.4} />
-          </TooltipIconButton>
-        </div>
-
+       <div
+         className="session-rail-inner"
+         style={{ '--session-rail-width': `${sessionRailWidth}px` } as CSSProperties}
+       >
         {sidebarMode === 'time' ? (
           <>
             <div className="session-list">
@@ -370,34 +385,38 @@ const MemoWorkspace = ({
                       }}
                       type="button"
                     >
-                      <strong>{getMemoTitle(memo)}</strong>
+                      <strong>{getMemoTitle(memo, language)}</strong>
                       <span>
-                        {formatMemoDate(memo.updated_at)} · {getMemoPreview(memo)}
+                        {formatMemoDate(memo.updated_at, language)} ·{' '}
+                        {getMemoPreview(memo, language)}
                       </span>
-                      <MemoSyncBadge memo={memo} />
-                      {openMemoPaneNumbers?.[memo.id] && (
-                        <CheckCircle2
-                          aria-label="패널에서 열림"
-                          className="memo-pane-badge"
-                          size={15}
-                        />
-                      )}
                     </button>
                   ))}
                 </section>
                 );
               })}
               {sections.length === 0 && (
-                <p className="empty-text">아직은 아무것도 없네요.</p>
+                <EmptyState
+                  size="inline"
+                  title={t('첫 메모를 시작해 보세요', 'Start your first note')}
+                  tone="start"
+                />
               )}
             </div>
           </>
         ) : sidebarMode === 'folders' ? (
           <>
-            {/* 부제 제거. 비어 있을 때의 안내는 아래 empty-text가 이미 한다. */}
+            {/* 부제 제거. 비어 있을 때의 안내는 아래 EmptyState가 이미 한다. */}
             <div className="topic-folder-list">
               {topicFolders.length === 0 ? (
-                <p className="empty-text">아직은 아무것도 없네요.</p>
+                <EmptyState
+                  size="inline"
+                  title={t(
+                    '메모가 쌓이면 주제별로 묶입니다',
+                    'Notes are grouped by topic as they accumulate.',
+                  )}
+                  tone="start"
+                />
               ) : (
                 topicFolders.map(({ cluster, rows, linkRows }) => {
                   const isExpanded = expandedTopicIds.has(cluster.id);
@@ -459,12 +478,11 @@ const MemoWorkspace = ({
                               }}
                               type="button"
                             >
-                              <strong>{getMemoTitle(memo)}</strong>
+                              <strong>{getMemoTitle(memo, language)}</strong>
                               <span>
-                                {formatMemoDate(memo.updated_at)} ·{' '}
-                                {getMemoPreview(memo)}
+                                {formatMemoDate(memo.updated_at, language)} ·{' '}
+                                {getMemoPreview(memo, language)}
                               </span>
-                              <MemoSyncBadge memo={memo} />
                             </button>
                           ))}
                           {linkRows.map(({ item }) => (
@@ -482,7 +500,7 @@ const MemoWorkspace = ({
                             >
                               <strong>
                                 <ExternalLink size={12} />{' '}
-                                {item.title ?? item.domain ?? '저장한 링크'}
+                                {item.title ?? item.domain ?? t('저장한 링크', 'Saved link')}
                               </strong>
                               <span>
                                 {item.summaryOneLiner ??
@@ -502,6 +520,19 @@ const MemoWorkspace = ({
           </>
         ) : null}
        </div>
+        <div
+          aria-hidden={isSessionCollapsed}
+          aria-label={t('메모 목록 너비 조절', 'Resize note list')}
+          aria-orientation="vertical"
+          aria-valuemax={SESSION_RAIL_MAX_WIDTH}
+          aria-valuemin={SESSION_RAIL_MIN_WIDTH}
+          aria-valuenow={Math.round(sessionRailWidth)}
+          className="session-rail-resizer"
+          onKeyDown={handleSessionRailResizeKeyDown}
+          onPointerDown={handleSessionRailResizeStart}
+          role="separator"
+          tabIndex={isSessionCollapsed ? -1 : 0}
+        />
       </motion.aside>
 
       {workspaceContent}
@@ -542,7 +573,9 @@ const MemoWorkspace = ({
                   onTogglePinMemo(target);
                 }}
               >
-                {pinnedMemoIds.includes(memoMenu.id) ? '고정 해제' : '고정'}
+                {pinnedMemoIds.includes(memoMenu.id)
+                  ? t('고정 해제', 'Unpin')
+                  : t('고정', 'Pin')}
               </Menu.Item>
             )}
             <Menu.Item
@@ -551,12 +584,12 @@ const MemoWorkspace = ({
               onClick={() => {
                 const target = memoMenu.id;
                 setMemoMenu(null);
-                if (window.confirm('이 메모를 삭제하시겠습니까?')) {
+                if (window.confirm(t('이 메모를 삭제하시겠습니까?', 'Delete this note?'))) {
                   onDeleteMemoById(target);
                 }
               }}
             >
-              삭제
+              {t('삭제', 'Delete')}
             </Menu.Item>
           </Menu.Dropdown>
         </Menu>

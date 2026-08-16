@@ -15,8 +15,16 @@ function makeRelease(version: string, assets: Array<{ name: string; browser_down
   };
 }
 
-const DMG_ASSET = { name: 'Subnota.dmg', browser_download_url: 'https://example.com/Subnota.dmg' };
-const EXE_ASSET = { name: 'Subnota-1.1.0 Setup.exe', browser_download_url: 'https://example.com/Setup.exe' };
+const RELEASE_ASSET_BASE =
+  'https://github.com/SUNGHOONOH/memo_plan/releases/download/v1.1.0';
+const DMG_ASSET = {
+  name: 'Subnota.dmg',
+  browser_download_url: `${RELEASE_ASSET_BASE}/Subnota.dmg`,
+};
+const EXE_ASSET = {
+  name: 'Subnota-1.1.0 Setup.exe',
+  browser_download_url: `${RELEASE_ASSET_BASE}/Setup.exe`,
+};
 
 describe('checkForUpdate — platform-aware asset selection', () => {
   let originalPlatform: PropertyDescriptor | undefined;
@@ -92,6 +100,22 @@ describe('checkForUpdate — platform-aware asset selection', () => {
     expect(result).toBeNull();
   });
 
+  it('rejects a release asset hosted outside the configured GitHub repository', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockFetch.mockResolvedValue(
+      makeRelease('1.1.0', [
+        {
+          name: 'Subnota.dmg',
+          browser_download_url: 'https://attacker.example/Subnota.dmg',
+        },
+      ]),
+    );
+
+    const { checkForUpdate } = await import('../update-checker');
+
+    expect(await checkForUpdate()).toBeNull();
+  });
+
   it('returns null when current version is up to date', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
     mockGetVersion.mockReturnValue('1.1.0');
@@ -113,8 +137,8 @@ describe('checkForUpdate — platform-aware asset selection', () => {
     expect(result).toBeNull();
   });
 
-  it('does not check upstream releases when no Subnota release repo is configured', async () => {
-    delete process.env.SUBNOTA_RELEASE_REPO;
+  it('does not check upstream releases when the configured release repo is invalid', async () => {
+    process.env.SUBNOTA_RELEASE_REPO = 'not-a-repository';
     delete process.env.GITHUB_REPOSITORY;
 
     const { checkForUpdate } = await import('../update-checker');

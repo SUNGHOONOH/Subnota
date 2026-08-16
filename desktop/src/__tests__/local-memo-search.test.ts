@@ -12,6 +12,7 @@ const queryVector = Array.from({ length: 1024 }, (_, index) =>
 
 const searchRow = (
   patch: Partial<{
+    chunkId: string;
     chunkText: string;
     similarity: number;
   }> = {},
@@ -72,24 +73,50 @@ describe('local memo search', () => {
     expect(response.queryChunk?.text).toBe('현재 작성 중인 검색 문장입니다.');
   });
 
-  it('0.97을 넘는 근사 중복과 완전히 같은 텍스트를 제외한다', async () => {
+  it('다른 메모와 Inbox의 같은·근사 문장도 결과로 남긴다', async () => {
     const api = createApi();
     api.localDbSearchMemoVectors.mockResolvedValueOnce([
-      searchRow({ chunkText: '표현만 거의 같은 문장', similarity: 0.970001 }),
-      searchRow({ chunkText: '현재 검색 문장', similarity: 0.9 }),
+      searchRow({
+        chunkId: 'chunk-near',
+        chunkText: '표현만 거의 같은 문장',
+        similarity: 0.970001,
+      }),
+      searchRow({
+        chunkId: 'chunk-exact',
+        chunkText: '현재 검색 문장',
+        similarity: 0.9,
+      }),
+    ]);
+    api.localDbSearchInboxVectors.mockResolvedValueOnce([
+      {
+        chunkId: 'inbox-inbox-1',
+        chunkText: '현재 검색 문장',
+        createdAt: '2026-07-26T00:00:00.000Z',
+        inboxSessionId: 'inbox-1',
+        similarity: 0.98,
+        sourceLabel: 'example.com',
+        sourceType: 'url',
+        sourceUrl: 'https://example.com',
+        thumbnailUrl: null,
+        title: '관련 링크',
+      },
     ]);
 
     const response = await searchLocalMemoChunks({
       api,
-      limit: 2,
+      limit: 3,
       memoId: 'memo-1',
       minimumSimilarity: 0.75,
       ownerId: null,
       queryText: '현재 검색 문장',
     });
 
-    expect(response.results).toEqual([]);
-    expect(response.message).toBeTruthy();
+    expect(response.results.map(result => result.chunkId)).toEqual([
+      'inbox-inbox-1',
+      'chunk-near',
+      'chunk-exact',
+    ]);
+    expect(response.message).toBeNull();
   });
 
   it('메모 청크와 Inbox 벡터를 한 순위로 합친다', async () => {
@@ -141,6 +168,29 @@ describe('local memo search', () => {
 
     expect(response.results).toEqual([]);
     expect(api.localEmbed).not.toHaveBeenCalled();
+    expect(api.localDbSearchMemoVectors).not.toHaveBeenCalled();
+    expect(api.localDbSearchInboxVectors).not.toHaveBeenCalled();
+  });
+
+  it('임베딩 중 취소되면 이전 커서 위치의 DB 검색을 이어가지 않는다', async () => {
+    const api = createApi();
+    const controller = new AbortController();
+    api.localEmbed.mockImplementationOnce(async () => {
+      controller.abort();
+      return [queryVector];
+    });
+
+    await expect(
+      searchLocalMemoChunks({
+        api,
+        memoId: 'memo-1',
+        minimumSimilarity: 0.75,
+        ownerId: null,
+        queryText: '취소할 이전 커서 위치의 문장입니다.',
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
     expect(api.localDbSearchMemoVectors).not.toHaveBeenCalled();
     expect(api.localDbSearchInboxVectors).not.toHaveBeenCalled();
   });

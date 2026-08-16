@@ -1,4 +1,5 @@
 import { autoUpdater } from 'electron';
+import { getMacUpdateFeedUrl } from './release-channel';
 
 export interface AutoUpdateDownloadedInfo {
   releaseName: string;
@@ -7,29 +8,19 @@ export interface AutoUpdateDownloadedInfo {
 
 interface ConfigureAutoUpdaterOptions {
   isPackaged: boolean;
-  notifyRenderer: (channel: 'auto-update-downloaded', info: AutoUpdateDownloadedInfo) => void;
+  notifyRenderer: (channel: string, info?: unknown) => void;
+  onError?: () => void;
+  onInstallRequested?: () => void;
 }
 
 let configured = false;
 let updateCheckStarted = false;
 
-function getMacUpdateFeedUrl(): string | null {
-  const explicitFeedUrl = (process.env.SUBNOTA_MAC_UPDATE_FEED_URL || '').trim();
-  if (explicitFeedUrl) return explicitFeedUrl;
-
-  const releaseRepo = (
-    process.env.SUBNOTA_RELEASE_REPO ||
-    process.env.GITHUB_REPOSITORY ||
-    ''
-  ).trim();
-  return releaseRepo.includes('/')
-    ? `https://github.com/${releaseRepo}/releases/latest/download/RELEASES.json`
-    : null;
-}
-
 export function configureAutoUpdater({
   isPackaged,
   notifyRenderer,
+  onError,
+  onInstallRequested,
 }: ConfigureAutoUpdaterOptions): boolean {
   if (process.platform !== 'darwin' || !isPackaged || configured) {
     return configured;
@@ -50,8 +41,22 @@ export function configureAutoUpdater({
     });
   });
 
+  autoUpdater.on('update-not-available', () => {
+    updateCheckStarted = false;
+    notifyRenderer('auto-update-not-available');
+  });
+
+  autoUpdater.on('before-quit-for-update', () => {
+    onInstallRequested?.();
+  });
+
   autoUpdater.on('error', (error) => {
+    updateCheckStarted = false;
+    onError?.();
     console.error('Auto update failed:', error);
+    notifyRenderer('auto-update-error', {
+      message: '업데이트를 다운로드하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해주세요.',
+    });
   });
 
   configured = true;

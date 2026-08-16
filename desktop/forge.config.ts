@@ -8,23 +8,40 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  getReleaseDownloadBaseUrl,
+  getReleaseRepository,
+} from './src/release-channel';
 
-const releaseRepo =
-  process.env.SUBNOTA_RELEASE_REPO || process.env.GITHUB_REPOSITORY || '';
-const [releaseOwner, releaseName] = releaseRepo.split('/');
-const releaseDownloadBaseUrl =
-  process.env.SUBNOTA_RELEASE_DOWNLOAD_BASE_URL ||
-  (releaseOwner && releaseName
-    ? `https://github.com/${releaseOwner}/${releaseName}/releases/latest/download`
-    : undefined);
-const macNotarizeConfig = process.env.APPLE_ID
+const releaseRepo = getReleaseRepository();
+const [releaseOwner, releaseName] = releaseRepo?.split('/') ?? [];
+const releaseDownloadBaseUrl = getReleaseDownloadBaseUrl() ?? undefined;
+const macNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
   ? {
-      appleId: process.env.APPLE_ID,
-      appleIdPassword: process.env.APPLE_ID_PASSWORD!,
-      teamId: process.env.APPLE_TEAM_ID!,
+      keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE,
+      ...(process.env.APPLE_NOTARY_KEYCHAIN
+        ? { keychain: process.env.APPLE_NOTARY_KEYCHAIN }
+        : {}),
     }
-  : undefined;
+  : process.env.APPLE_API_KEY &&
+      process.env.APPLE_API_KEY_ID &&
+      process.env.APPLE_API_ISSUER
+    ? {
+        appleApiIssuer: process.env.APPLE_API_ISSUER,
+        appleApiKey: process.env.APPLE_API_KEY,
+        appleApiKeyId: process.env.APPLE_API_KEY_ID,
+      }
+    : process.env.APPLE_ID &&
+        process.env.APPLE_ID_PASSWORD &&
+        process.env.APPLE_TEAM_ID
+      ? {
+          appleId: process.env.APPLE_ID,
+          appleIdPassword: process.env.APPLE_ID_PASSWORD,
+          teamId: process.env.APPLE_TEAM_ID,
+        }
+      : undefined;
 const isMacBuild = process.platform === 'darwin';
+const isLocalMacBuild = process.env.SUBNOTA_LOCAL_BUILD === '1';
 
 // Forge의 Vite 플러그인은 기본적으로 `.vite` 말고 전부 제외한다 — Vite가 모든
 // 의존성을 번들한다고 보기 때문이다. 하지만 onnxruntime-node는 네이티브
@@ -99,31 +116,34 @@ const config: ForgeConfig = {
     },
     ignore: shouldIgnore,
     icon: './resources/icon',
-    extraResource: [
-      isMacBuild ? './resources/tray.png' : './resources/icon.ico',
-    ],
+    extraResource: isMacBuild
+      // 메뉴바 아이콘은 Retina용 @2x 를 같은 폴더에 두면 Electron이 알아서
+      // 고른다. 하나만 넣으면 고해상도 화면에서 뭉갠다.
+      ? ['./resources/tray.png', './resources/tray@2x.png']
+      : ['./resources/icon.ico'],
     ...(isMacBuild
       ? {
           appBundleId: 'com.sunghoonoh.subnota.macos',
           appCategoryType: 'public.app-category.productivity',
-          osxSign: {
-            optionsForFile: (filePath: string) => {
-              if (filePath.endsWith('.app') && !filePath.includes('.app/')) {
-                return { entitlements: 'build/entitlements.mac.plist' };
-              }
-              return null;
-            },
-          },
-          ...(macNotarizeConfig ? { osxNotarize: macNotarizeConfig } : {}),
+          ...(isLocalMacBuild
+            ? { osxSign: false as const }
+            : {
+                osxSign: {
+                  ...(process.env.APPLE_SIGNING_IDENTITY
+                    ? { identity: process.env.APPLE_SIGNING_IDENTITY }
+                    : {}),
+                  optionsForFile: (filePath: string) => {
+                    if (filePath.endsWith('.app') && !filePath.includes('.app/')) {
+                      return { entitlements: 'build/entitlements.mac.plist' };
+                    }
+                    return null;
+                  },
+                },
+                ...(macNotarizeConfig ? { osxNotarize: macNotarizeConfig } : {}),
+              }),
           extendInfo: {
-            CFBundleDocumentTypes: [
-              {
-                CFBundleTypeName: 'Markdown Document',
-                CFBundleTypeRole: 'Editor',
-                LSHandlerRank: 'Default',
-                CFBundleTypeExtensions: ['md', 'markdown'],
-              },
-            ],
+            // TODO(markdown-files): Reintroduce Markdown import/edit only with
+            // an OS file picker and per-window scoped path authorization.
             CFBundleURLTypes: [
               {
                 CFBundleURLName: 'Subnota',
@@ -132,6 +152,9 @@ const config: ForgeConfig = {
             ],
             NSAppleEventsUsageDescription:
               'Subnota가 현재 브라우저 페이지의 주소와 제목을 수집함에 저장하기 위해 사용합니다.',
+            NSAppTransportSecurity: {
+              NSAllowsArbitraryLoads: false,
+            },
           },
         }
       : {
@@ -151,7 +174,30 @@ const config: ForgeConfig = {
         : {},
       ['darwin'],
     ),
-    new MakerDMG({ format: 'ULFO' }, ['darwin']),
+    // 설치 창. 배경 이미지의 화살표가 앱 아이콘(x:180)에서 Applications
+    // 별칭(x:480)을 가리키므로 좌표를 배경과 맞춰 둔다
+    // (배경은 scripts/generate-brand-assets.mjs 가 굽는다).
+    new MakerDMG(
+      {
+        background: './resources/dmg-background.png',
+        format: 'ULFO',
+        icon: './resources/icon.icns',
+        iconSize: 110,
+        additionalDMGOptions: {
+          window: { size: { height: 400, width: 660 } },
+        },
+        contents: [
+          { path: '/Applications', type: 'link', x: 480, y: 262 },
+          {
+            path: `${process.cwd()}/out/Subnota-darwin-${process.arch}/Subnota.app`,
+            type: 'file',
+            x: 180,
+            y: 262,
+          },
+        ],
+      },
+      ['darwin'],
+    ),
     new MakerSquirrel(
       {
         name: 'subnota',

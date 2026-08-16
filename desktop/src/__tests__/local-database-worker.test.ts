@@ -38,8 +38,8 @@ vi.mock('electron', () => ({
   },
 }));
 
-// Importing the module registers the ipcMain handlers and the before-quit hook.
-await import('../local-database');
+// Importing the module registers the ipcMain handlers and the final worker cleanup.
+const { flushLocalDatabaseOperations } = await import('../local-database');
 
 const trustedEvent = {
   senderFrame: { url: '' },
@@ -54,6 +54,7 @@ describe('local-database worker reliability', () => {
     MockWorker.last = null;
   });
   afterEach(() => {
+    MockWorker.last?.emit('exit', 0);
     vi.useRealTimers();
   });
 
@@ -72,5 +73,32 @@ describe('local-database worker reliability', () => {
     const expectation = expect(promise).rejects.toThrow(/timed out/i);
     await vi.advanceTimersByTimeAsync(60_000);
     await expectation;
+  });
+
+  it('checkpoints accepted operations without installing a competing before-quit loop', async () => {
+    const pendingList = list();
+    const created = MockWorker.last;
+    if (!created) throw new Error('worker was not created');
+    const listRequest = created.postMessage.mock.calls[0][0] as { id: number };
+    const flushed = flushLocalDatabaseOperations();
+
+    await expect(flushLocalDatabaseOperations()).rejects.toThrow(
+      'flush is already in progress',
+    );
+    await expect(list()).rejects.toThrow('finalizing writes');
+
+    created.emit('message', { id: listRequest.id, result: [] });
+    await pendingList;
+    await vi.waitFor(() => expect(created.postMessage).toHaveBeenCalledTimes(2));
+    const checkpointRequest = created.postMessage.mock.calls[1][0] as {
+      id: number;
+      operation: string;
+    };
+    expect(checkpointRequest.operation).toBe('checkpoint');
+    created.emit('message', { id: checkpointRequest.id });
+
+    await expect(flushed).resolves.toBeUndefined();
+    expect(appHandlers['before-quit']).toBeUndefined();
+    expect(appHandlers['will-quit']).toBeTypeOf('function');
   });
 });

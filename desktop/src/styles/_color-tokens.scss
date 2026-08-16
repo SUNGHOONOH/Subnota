@@ -8,27 +8,81 @@
   --app-color-bg-toolbar: #fbfbfa;
   --app-color-bg-paper: #ffffff;
   --app-color-bg-muted: #f7f7f4;
-  --app-color-bg-active: #f8e4da;
-  --app-color-bg-active-soft: #fdf4f0;
+  /* 예전에는 코랄 틴트(#f8e4da / #fdf4f0)였다. 인라인 코드 배경과 활성
+     아이콘 버튼이 여기 걸려 있어 살구색으로 남아 있었다. 상태 토큰으로 잇는다. */
+  --app-color-bg-active: var(--app-color-state-selected);
+  --app-color-bg-active-soft: var(--app-color-state-hover);
   --app-color-bg-source: #ffffff;
   --app-color-bg-code: #1f1e1b;
   --app-color-bg-hover: #f7f7f4;
   --app-color-bg-pressed: #f1f0ed;
   --app-color-bg-overlay: rgba(44, 37, 32, 0.24);
-  /* 사이드바(레일+세션+크롬 줄) 전용 웜톤 — 흰색 작업공간과 면으로 구분된다. */
-  --app-color-chrome-bg: #f6f2eb;
-  --app-color-chrome-border: rgba(29, 29, 31, 0.07);
 
-  --app-color-border: #e9e7e1;
+  /* 상태 표면 — hover/pressed/selected는 명도로만 말한다. 브랜드색은 "지금
+     여기"를 가리키는 표시(선택 레일·focus 링·주 행동)에만 남긴다.
+     불투명색이 아니라 알파인 이유: 위의 bg-hover(#f7f7f4)는 사이드바
+     (#f7f7f5) 위에서 대비가 1.01이라 사라진다. 그래서 hover가 브랜드 틴트로
+     새어 나갔다. 알파는 캔버스든 사이드바든 같은 세기로 얹힌다. */
+  --app-color-state-hover: rgba(20, 20, 19, 0.04);
+  --app-color-state-selected: rgba(20, 20, 19, 0.06);
+  --app-color-state-pressed: rgba(20, 20, 19, 0.08);
+  /* 사이드바에서 "지금 보고 있는 항목"이 떠오르는 면.
+     색상각은 종이(#f3f1e9)와 같은 96°다. 순백을 쓰면 채도가 0으로 뚝 떨어져
+     차가운 구멍처럼 보인다.
+     밝기 차는 일부러 작게(대비 1.06) 잡는다 — 떠 있다는 뜻은 아래 그림자와
+     3px 브랜드 레일이 이미 말하고 있어서, 색까지 세게 밀면 사이드바가
+     얼룩덜룩해진다. 색은 거들기만 한다. */
+  --app-color-state-raised: #f9f8f2;
+  /* 떠 있음을 색만으로 말하지 않는다 — macOS 사이드바가 선택을 depth로
+     표현하는 방식이다. hover는 아래(중립 4%), 선택은 위(밝은 면 + 그림자)로
+     방향이 반대라 서로 간섭하지 않는다. */
+  /* 테두리를 두지 않는다. 선이 있으면 "그려 넣은 상자"가 되고, 그림자만
+     있으면 "위로 뜬 면"이 된다 — 설정 사이드바가 쓰는 방식이다.
+     두 겹인 이유: 아래로 지는 그림자 하나로는 위쪽 모서리가 바닥에 붙어
+     보인다. 위로 살짝 번지는 겹을 더해야 종이가 들린 것처럼 읽힌다. */
+  --app-color-state-raised-shadow:
+    /* ① 위쪽 밝은 모서리. 빛이 위에서 온다는 신호이고, 이게 있어야 면이
+          "솟았다"로 읽힌다 — 없으면 그냥 그림자 깔린 평면이다. */
+    /* ① 좌상단 흰 그림자. 빛이 왼쪽 위에서 온다 — 이 겹이 없으면 그냥
+          "그림자 깔린 평면"이고, 있어야 면이 부풀어 오른 것으로 읽힌다.
+          바탕이 순백이 아니라 종이색이라 흰 번짐이 실제로 보인다. */
+    -3px -3px 6px rgba(255, 255, 255, 0.95),
+    /* ② 우하단 어두운 그림자. ①과 정확히 반대 방향이어야 광원이 하나로
+          읽힌다. 레퍼런스의 blur/offset 비(약 1.8)와 45° 대각을 유지하되,
+          383px 기준 값을 우리 요소(25~54px) 크기로 줄인 값이다. */
+    3px 3px 6px rgba(40, 34, 26, 0.12);
+  /* 위와 정확히 반대 — 안으로 파인 면. 광원은 그대로 좌상단이라, 파인 곳은
+     좌상단이 어둡고 우하단이 밝다. 솟은 것 옆에 파인 것이 있어야 "눌러서
+     들어간 자리"라는 뜻이 생긴다(레퍼런스의 트랙 + 버튼 조합). */
+  --app-color-state-inset-shadow:
+    inset 2px 2px 4px rgba(40, 34, 26, 0.10),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+  /* 작업공간은 창 끝까지 이어진다. 깊이는 앱 사이드 패널에만 사용한다. */
+  --app-color-bg-shell: #ffffff;
+  /* 종이 사이드바. 캔버스는 순백이고 색을 갖는 면은 여기뿐이라, 이 값이
+     앱의 온도를 혼자 정한다. 채도는 속삭이는 수준(C 0.011)으로 묶는다 —
+     웜과 블루는 색상환에서 거의 정반대(173°)라 둘 다 진하면 싸운다. */
+  --app-color-chrome-bg: #f3f1e9;
+  --app-color-chrome-border: rgba(29, 29, 31, 0.08);
+
+  /* 선은 네 값뿐이다. 예전에는 열 개였는데 재보니 여덟 개가 서로 명도차
+     ΔL 0.01 아래로 붙어 있었다 — 1px 선에서 사람이 구분할 수 있는 한계가
+     0.015~0.02라 이름만 다르고 눈에는 같은 선이었다.
+     아래 별칭들은 기존 호출부를 위해 남겨 둔다. 새 코드는 위 네 개만 쓴다. */
   --app-color-border-soft: #eeece7;
+  --app-color-border: #e9e7e1;
   --app-color-border-strong: #dedbd2;
-  --app-color-border-muted: #e3e1dc;
-  --app-color-border-warm: #e5ddd0;
-  --app-color-border-card: #e4ded5;
-  --app-color-border-design: #ece9e3;
-  --app-color-border-design-soft: #f0eee9;
+  /* 알파인 이유가 따로 있다 — 종이 사이드바 위와 흰 카드 위에서 같은 세기로
+     보여야 하는 선이라 불투명색으로 바꾸면 한쪽에서 사라진다. */
   --app-color-border-subtle: rgba(29, 29, 31, 0.05);
-  --app-color-border-wash: rgba(44, 37, 32, 0.06);
+
+  /* ↓ 위 네 개의 별칭(deprecated). 새로 쓰지 말 것. */
+  --app-color-border-design-soft: var(--app-color-border-soft);
+  --app-color-border-design: var(--app-color-border-soft);
+  --app-color-border-muted: var(--app-color-border-strong);
+  --app-color-border-warm: var(--app-color-border-strong);
+  --app-color-border-card: var(--app-color-border-strong);
+  --app-color-border-wash: var(--app-color-border-subtle);
 
   --app-color-text: #2c2520;
   --app-color-text-strong: #1d1d1f;
@@ -47,21 +101,44 @@
   --app-color-accent-soft: #f0ebdf;
   --app-color-accent-border: #d8cebc;
 
-  --app-color-brand-50: #fdf4f0;
-  --app-color-brand-100: #f8e4da;
-  --app-color-brand-200: #f3b9a6;
-  --app-color-brand-300: #e98a6d;
-  --app-color-brand-400: #dc6343;
-  --app-color-brand-500: #cc4929;
-  --app-color-brand-600: #bf3f22;
-  --app-color-brand-700: #9f321b;
-  --app-color-brand-800: #7f2817;
-  --app-color-brand-900: #5b1c10;
-  --app-color-brand-950: #351008;
-  --app-color-brand-rgb: 204, 73, 41;
+  /* 잉크 블루. 로고(물망초)와 같은 색상각(262°)이라 마크와 UI가 한 계열로
+     읽힌다. 밝은 파랑이 아니라 어두운 잉크인 이유는 종이 바탕 위에서 밝은
+     파랑이 "올려놓은 스티커"처럼 뜨기 때문이다 — 명도를 내리면 종이에 스민
+     잉크가 된다. 흰 글씨 대비 7.38. */
+  --app-color-brand-50: #eff6ff;
+  --app-color-brand-100: #deecff;
+  --app-color-brand-200: #bfd8ff;
+  --app-color-brand-300: #94b6f5;
+  --app-color-brand-400: #6388cd;
+  --app-color-brand-500: #325496;
+  --app-color-brand-600: #254582;
+  --app-color-brand-700: #1b376b;
+  --app-color-brand-800: #142b55;
+  --app-color-brand-900: #0f2040;
+  --app-color-brand-950: #09152c;
+  --app-color-brand-rgb: 50, 84, 150;
   --app-color-selection: rgba(var(--app-color-brand-rgb), 0.2);
-  --app-color-focus-ring: rgba(var(--app-color-brand-rgb), 0.15);
-  --app-color-brand-glow: rgba(var(--app-color-brand-rgb), 0.2);
+  /* focus 표시는 인접한 색과 3:1 이상이어야 한다(WCAG 2.2 SC 1.4.11). 이전
+     값 rgba(brand, 0.15)는 흰 배경에서 1.23:1로 한참 미달이었고, 미달인 만큼
+     넓게(테두리 색 변경 + 3px 헤일로 = 실질 4px) 발라서 보완하고 있었다.
+     실색 2px 링 하나로 바꾸면 대비는 오르고 차지하는 폭은 절반이 된다.
+     쓰는 쪽은 항상 `outline: 2px solid` + `outline-offset: 2px` 한 형태다. */
+  --app-color-focus-ring: var(--app-color-brand-500);
+
+  /* 활동량 데이터 스케일. 브랜드색이 아니라 캘린더 기본색(초록 #20B76A)에서
+     내려온다 — 데이터에 브랜드색을 쓰면 "값이 크다"와 "여기를 누르라"가 같은
+     색이 된다. 색상각은 154°로 고정하고 채도만 계단으로 올린다. */
+  --app-color-data-1: #e7f2ea;
+  --app-color-data-2: #c4e3cd;
+  --app-color-data-3: #98d2aa;
+  --app-color-data-4: #61bb82;
+  --app-color-data-5: #1dad64;
+  /* 비교 막대 — 이전 기간은 중립, 이번 기간만 색을 갖는다. */
+  --app-color-data-past: #d8d5cf;
+
+  /* 로딩 자리표시자 — 저채도 회색 한 쌍(바탕 / 지나가는 shimmer). */
+  --app-color-skeleton: #f1efe9;
+  --app-color-skeleton-shimmer: rgba(255, 255, 255, 0.72);
 
   --app-color-danger: #b42318;
   --app-color-danger-hover: #912018;
@@ -69,9 +146,24 @@
   --app-color-danger-soft: #fef3f2;
   --app-color-danger-border: #fecdca;
 
+  /* 로고(물망초) 색. UI 강조색과 같은 색상각이지만 한 단계 밝다 — 마크는
+     글자 대비 규정 밖이라 조금 더 살아도 된다. 여기 한 줄만 바꾸면 부팅
+     모션·로그인·설정·빈 화면의 마크가 함께 바뀐다.
+     같은 값이 desktop/resources/icon.svg(앱 아이콘)와
+     web/app/globals.css(랜딩)에도 있다 — 셋은 빌드 계통이 달라 공유가 안 된다. */
+  --app-color-brand-mark: #4c71b7;
+  /* 다섯 잎 중 오른쪽 한 장만 다른 색이다(말라카이트). 비리디언이 아니라
+     말라카이트인 이유는 명도 차 때문이다 — 비리디언은 마크 기본색과 명도가
+     0.003밖에 안 벌어져 회색조·색각이상에서 그 잎이 사라진다. */
+  --app-color-brand-petal: #0b6e4f;
+
   --app-color-action-primary: var(--app-color-brand-500);
   --app-color-action-primary-hover: var(--app-color-brand-600);
   --app-color-action-primary-text: #ffffff;
+  /* 주 행동은 채우지 않고 테두리와 글자로만 말한다. 채운 블록 하나가
+     생기는 것과 테두리 한 겹은 화면에서 차지하는 색 면적이 다르다. */
+  --app-color-action-primary-border: var(--app-color-brand-300);
+  --app-color-action-primary-ink: var(--app-color-brand-700);
   --app-color-action-secondary-bg: var(--app-color-bg-paper);
   --app-color-action-secondary-border: var(--app-color-border);
   --app-color-action-secondary-text: var(--app-color-text-soft);
@@ -87,27 +179,33 @@ html.dark {
   --app-color-bg-toolbar: #1b1a18;
   --app-color-bg-paper: #1f1e1b;
   --app-color-bg-muted: #232220;
-  --app-color-bg-active: #322f29;
-  --app-color-bg-active-soft: #2a2824;
+  --app-color-bg-active: var(--app-color-state-selected);
+  --app-color-bg-active-soft: var(--app-color-state-hover);
   --app-color-bg-source: #1d1c19;
   --app-color-bg-code: #14130f;
   --app-color-bg-hover: rgba(250, 249, 245, 0.06);
   --app-color-bg-pressed: #35322c;
   --app-color-bg-overlay: rgba(0, 0, 0, 0.5);
-  /* 다크: 콘텐츠(#1f1e1b)보다 한 단계 어두워 사이드바가 면으로 구분된다. */
-  --app-color-chrome-bg: #171614;
+
+  --app-color-state-hover: rgba(250, 249, 245, 0.06);
+  --app-color-state-selected: rgba(250, 249, 245, 0.08);
+  --app-color-state-pressed: rgba(250, 249, 245, 0.11);
+  --app-color-state-raised: #282623;
+  --app-color-state-raised-shadow:
+    -3px -3px 6px rgba(250, 249, 245, 0.04),
+    3px 3px 6px rgba(0, 0, 0, 0.34);
+  --app-color-state-inset-shadow:
+    inset 2px 2px 4px rgba(0, 0, 0, 0.3),
+    inset -2px -2px 4px rgba(250, 249, 245, 0.04);
+  --app-color-bg-shell: #1f1e1b;
+  /* 라이트의 종이 사이드바와 뜻을 맞춘다 — 캔버스보다 한 단계 밝은 별개의 면. */
+  --app-color-chrome-bg: #24221e;
   --app-color-chrome-border: rgba(250, 249, 245, 0.1);
 
-  --app-color-border: rgba(250, 249, 245, 0.12);
   --app-color-border-soft: rgba(250, 249, 245, 0.08);
+  --app-color-border: rgba(250, 249, 245, 0.12);
   --app-color-border-strong: rgba(250, 249, 245, 0.16);
-  --app-color-border-muted: rgba(250, 249, 245, 0.1);
-  --app-color-border-warm: rgba(250, 249, 245, 0.14);
-  --app-color-border-card: rgba(250, 249, 245, 0.1);
-  --app-color-border-design: rgba(250, 249, 245, 0.1);
-  --app-color-border-design-soft: rgba(250, 249, 245, 0.07);
   --app-color-border-subtle: rgba(250, 249, 245, 0.06);
-  --app-color-border-wash: rgba(250, 249, 245, 0.06);
 
   --app-color-text: #ece7dd;
   --app-color-text-strong: #faf9f5;
@@ -126,9 +224,30 @@ html.dark {
   --app-color-accent-soft: #2c2820;
   --app-color-accent-border: rgba(184, 155, 120, 0.4);
 
-  --app-color-brand-50: #2a1a14;
-  --app-color-brand-100: #3a241b;
+  --app-color-brand-50: #141e30;
+  --app-color-brand-100: #1c2b47;
+  --app-color-brand-300: #6f92d3;
+  --app-color-brand-400: #83a5e2;
+  --app-color-brand-mark: #7f9fd8;
+  --app-color-brand-petal: #3d9c74;
+  /* 밝은 액센트 위에는 검은 글씨다. 흰 글씨는 대비 2.49로 미달한다. */
+  --app-color-action-primary: var(--app-color-brand-400);
+  --app-color-action-primary-hover: var(--app-color-brand-300);
+  --app-color-action-primary-text: #141413;
+  --app-color-action-primary-border: #4a6ba8;
+  --app-color-action-primary-ink: #a8c2ee;
   --app-color-selection: rgba(var(--app-color-brand-rgb), 0.18);
+
+  --app-color-data-1: #1b2a21;
+  --app-color-data-2: #244631;
+  --app-color-data-3: #2f6644;
+  --app-color-data-4: #3d8b5b;
+  --app-color-data-5: #4fb87a;
+  --app-color-data-past: #3a3833;
+
+  --app-color-skeleton: rgba(250, 249, 245, 0.07);
+  /* 바탕보다 밝아야 지나가는 것이 보인다. 같은 값이면 정적 스켈레톤이 된다. */
+  --app-color-skeleton-shimmer: rgba(250, 249, 245, 0.16);
 
   --app-color-danger: #f97066;
   --app-color-danger-hover: #f04438;

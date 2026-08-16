@@ -44,7 +44,7 @@ describe('getSections', () => {
 
     expect(sections.map(section => section.title)).toEqual([
       '최근 메모',
-      'Mini 노트',
+      'Quick 노트',
       '오늘',
     ]);
     expect(sections[1].data.map(item => item.id)).toEqual(['m1', 'm2']);
@@ -58,7 +58,7 @@ describe('getSections', () => {
 
     expect(sections[0].title).toBe('고정됨');
     expect(sections[0].data.map(item => item.id)).toEqual(['m1']);
-    const miniSection = sections.find(section => section.title === 'Mini 노트');
+    const miniSection = sections.find(section => section.title === 'Quick 노트');
     expect(miniSection?.data.map(item => item.id)).toEqual(['m2']);
   });
 });

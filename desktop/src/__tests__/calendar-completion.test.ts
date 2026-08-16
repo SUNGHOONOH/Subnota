@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const upsert = vi.fn(() => ({
   select: () => ({
-    single: () => Promise.resolve({ data: { id: 'b1', is_completed: true }, error: null }),
+    single: () =>
+      Promise.resolve({ data: { id: 'b1', is_completed: true }, error: null }),
   }),
 }));
 vi.mock('../services/supabase/client', () => ({
-  supabase: { from: () => ({ upsert: (...args: unknown[]) => upsert(...args) }) },
+  supabase: {
+    from: () => ({ upsert: (...args: unknown[]) => upsert(...args) }),
+  },
 }));
 
 import { upsertCalendarBlock } from '../services/supabase/data';
@@ -49,6 +52,20 @@ describe('upsertCalendarBlock (completion is preserved, not reset)', () => {
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ is_completed: false, completed_at: null }),
+      expect.anything(),
+    );
+  });
+
+  it('preserves the selected category id with the block', async () => {
+    await upsertCalendarBlock(session, {
+      ...base,
+      categoryId: '00000000-0000-4000-8000-000000000001',
+    });
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category_id: '00000000-0000-4000-8000-000000000001',
+      }),
       expect.anything(),
     );
   });

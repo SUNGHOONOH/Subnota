@@ -6,8 +6,11 @@ import type { Editor } from "@tiptap/core"
 
 import {
   filterSlashCommands,
+  getSlashCommands,
+  parseSlashQuery,
   type SlashCommand,
 } from "./slash-commands"
+import { localize, useUiLanguage } from "@/lib/uiLanguage"
 
 interface SlashMenuState {
   anchorPos: number
@@ -20,6 +23,8 @@ const MENU_PADDING_PX = 12
 // "/" 입력 위치에 뜨는 블록 삽입 메뉴. @tiptap/suggestion 없이 에디터
 // update/selectionUpdate 이벤트로 직접 감지한다(새 의존성 금지 정책).
 export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
+  const language = useUiLanguage()
+  const t = (korean: string, english: string) => localize(language, korean, english)
   const [state, setState] = useState<SlashMenuState | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const stateRef = useRef(state)
@@ -30,26 +35,25 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
   useEffect(() => {
     if (!editor) return undefined
 
-    const sync = (allowOpen: boolean) => {
-      if (editor.isDestroyed || editor.view.composing) return
+    const readCurrentState = (): SlashMenuState | null => {
+      if (editor.isDestroyed || editor.view.composing) return null
       const { $from, empty } = editor.state.selection
       if (!empty || !$from.parent.isTextblock || $from.parent.type.name === "codeBlock") {
-        setState(null)
-        return
+        return null
       }
       const textBefore = $from.parent.textBetween(0, $from.parentOffset, "\0", "\0")
-      const match = /(?:^|\s)\/([^\s/]*)$/.exec(textBefore)
-      if (!match) {
+      return parseSlashQuery(textBefore, $from.pos)
+    }
+
+    const sync = (allowOpen: boolean) => {
+      const next = readCurrentState()
+      if (!next) {
         setState(null)
         return
       }
-      const query = match[1]
-      const anchorPos = $from.pos - query.length - 1
-      setState(previous => {
-        if (!previous && !allowOpen) return previous
-        setActiveIndex(0)
-        return { anchorPos, query }
-      })
+      if (!stateRef.current && !allowOpen) return
+      setActiveIndex(0)
+      setState(next)
     }
 
     const onUpdate = () => sync(true)
@@ -69,8 +73,21 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
   useEffect(() => {
     if (!editor) return undefined
 
+    const readCurrentState = (): SlashMenuState | null => {
+      if (editor.isDestroyed || editor.view.composing) return null
+      const { $from, empty } = editor.state.selection
+      if (!empty || !$from.parent.isTextblock || $from.parent.type.name === "codeBlock") {
+        return null
+      }
+      const textBefore = $from.parent.textBetween(0, $from.parentOffset, "\0", "\0")
+      return parseSlashQuery(textBefore, $from.pos)
+    }
+
     const runCommand = (command: SlashCommand) => {
-      const current = stateRef.current
+      // React state can lag behind the last IME/key update. The editor
+      // selection is the source of truth so a previous query (for example
+      // "/제목") cannot be reused for the next command.
+      const current = readCurrentState()
       if (!current) return
       const to = editor.state.selection.from
       editor.chain().focus().deleteRange({ from: current.anchorPos, to }).run()
@@ -79,7 +96,7 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      const current = stateRef.current
+      const current = readCurrentState()
       if (!current || event.isComposing) return
       if (event.key === "Escape") {
         event.preventDefault()
@@ -87,7 +104,7 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
         setState(null)
         return
       }
-      const commands = filterSlashCommands(current.query)
+      const commands = filterSlashCommands(current.query, getSlashCommands(language))
       if (commands.length === 0) return
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault()
@@ -108,13 +125,13 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
     const dom = editor.view.dom
     dom.addEventListener("keydown", onKeyDown, true)
     return () => dom.removeEventListener("keydown", onKeyDown, true)
-  }, [editor])
+  }, [editor, language])
 
   if (!editor || editor.isDestroyed || !state) {
     return null
   }
 
-  const commands = filterSlashCommands(state.query)
+  const commands = filterSlashCommands(state.query, getSlashCommands(language))
   if (commands.length === 0) {
     return null
   }
@@ -135,15 +152,30 @@ export function SlashCommandMenu({ editor }: { editor: Editor | null }) {
   const left = Math.min(Math.max(coords.left, 8), window.innerWidth - 190)
 
   const applyCommand = (command: SlashCommand) => {
+    const { $from, empty } = editor.state.selection
+    if (
+      !empty ||
+      !$from.parent.isTextblock ||
+      $from.parent.type.name === "codeBlock"
+    ) {
+      return
+    }
+    const textBefore = $from.parent.textBetween(0, $from.parentOffset, "\0", "\0")
+    const current = parseSlashQuery(textBefore, $from.pos)
+    if (!current) return
+    const freshCommand = filterSlashCommands(current.query, getSlashCommands(language)).find(
+      candidate => candidate.id === command.id,
+    )
+    if (!freshCommand) return
     const to = editor.state.selection.from
-    editor.chain().focus().deleteRange({ from: state.anchorPos, to }).run()
-    command.run(editor)
+    editor.chain().focus().deleteRange({ from: current.anchorPos, to }).run()
+    freshCommand.run(editor)
     setState(null)
   }
 
   return createPortal(
     <div
-      aria-label="블록 삽입 명령"
+      aria-label={t("블록 삽입 명령", "Insert block command")}
       className="slash-command-menu"
       role="listbox"
       style={{ left, top: Math.max(top, 8) }}

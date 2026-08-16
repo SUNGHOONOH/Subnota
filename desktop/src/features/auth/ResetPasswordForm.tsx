@@ -3,16 +3,20 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, Eye, EyeOff, XCircle } from '@/components/icons';
 import OtpCodeInput from './OtpCodeInput';
 import PasswordConfirmInput from './PasswordConfirmInput';
-import { PASSWORD_REQUIREMENTS } from './authValidation';
+import { passwordRequirementText, PASSWORD_REQUIREMENTS } from './authValidation';
+import { UiLanguage } from '../../lib/appSettings';
+import { localize } from '../../lib/uiLanguage';
 
 interface ResetPasswordFormProps {
   email: string;
+  language: UiLanguage;
   onVerifyCode: (code: string) => Promise<boolean>;
   onSubmit: (password: string) => Promise<void>;
   onCancel: () => void;
 }
 
-const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPasswordFormProps) => {
+const ResetPasswordForm = ({ email, language, onVerifyCode, onSubmit, onCancel }: ResetPasswordFormProps) => {
+  const t = (korean: string, english: string) => localize(language, korean, english);
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
@@ -25,8 +29,8 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
   const verifyingRef = useRef(false);
 
   const requirements = useMemo(
-    () => PASSWORD_REQUIREMENTS.map(req => ({ text: req.text, met: req.test(password) })),
-    [password],
+    () => PASSWORD_REQUIREMENTS.map(req => ({ text: passwordRequirementText(req.key, language), met: req.test(password) })),
+    [language, password],
   );
   const allMet = requirements.every(req => req.met);
   const passwordsMatch = password.length > 0 && password === passwordConfirmation;
@@ -41,11 +45,11 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
       if (ok) {
         setCodeVerified(true);
       } else {
-        setError('코드가 올바르지 않습니다. 다시 시도해 주세요.');
+        setError(t('코드가 올바르지 않습니다. 다시 시도해 주세요.', 'That code is invalid. Try again.'));
         setOtp('');
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '코드 확인에 실패했습니다.');
+      setError(caught instanceof Error ? caught.message : t('코드 확인에 실패했습니다.', 'Could not verify the code.'));
       setOtp('');
     } finally {
       verifyingRef.current = false;
@@ -61,7 +65,7 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
     try {
       await onSubmit(password);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '비밀번호 변경에 실패했습니다.');
+      setError(caught instanceof Error ? caught.message : t('비밀번호 변경에 실패했습니다.', 'Could not change the password.'));
     } finally {
       setSubmitting(false);
     }
@@ -69,9 +73,13 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
 
   return (
     <form className="reset-form" onSubmit={handleSubmit}>
-      <h2 className="reset-title">비밀번호 재설정</h2>
+      <h2 className="reset-title">{t('비밀번호 재설정', 'Reset password')}</h2>
       <p className="reset-subtitle">
-        <span className="reset-email">{email}</span> 로 보낸 6자리 코드를 입력하세요.
+        {language === 'en' ? (
+          <>Enter the 6-digit code sent to <span className="reset-email">{email}</span>.</>
+        ) : (
+          <><span className="reset-email">{email}</span> 로 보낸 6자리 코드를 입력하세요.</>
+        )}
       </p>
 
       <OtpCodeInput
@@ -81,12 +89,12 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
         disabled={isCodeVerified || isVerifying}
       />
 
-      {isVerifying && <p className="reset-hint">확인 중...</p>}
+      {isVerifying && <p className="reset-hint">{t('확인 중...', 'Verifying…')}</p>}
       {error && <p className="form-error-msg">{error}</p>}
       {isCodeVerified && (
         <motion.div className="reset-verified" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
           <CheckCircle2 size={16} />
-          코드가 확인되었습니다
+          {t('코드가 확인되었습니다', 'Code verified')}
         </motion.div>
       )}
 
@@ -100,12 +108,12 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
             style={{ overflow: 'hidden' }}
           >
             <div className="reset-new">
-              <label className="reset-label">새 비밀번호</label>
+              <label className="reset-label">{t('새 비밀번호', 'New password')}</label>
               <div className="password-input-wrap">
                 <input
                   className="reset-input"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="새 비밀번호"
+                  placeholder={t('새 비밀번호', 'New password')}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   autoComplete="new-password"
@@ -114,7 +122,7 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
                   type="button"
                   className="password-toggle-btn"
                   onClick={() => setShowPassword(v => !v)}
-                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
+                  aria-label={showPassword ? t('비밀번호 숨기기', 'Hide password') : t('비밀번호 표시', 'Show password')}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -123,6 +131,7 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
 
               <PasswordConfirmInput
                 passwordToMatch={password}
+                placeholder={t('비밀번호를 한 번 더 입력', 'Re-enter your password')}
                 value={passwordConfirmation}
                 onChange={setPasswordConfirmation}
                 showPassword={showPassword}
@@ -153,14 +162,14 @@ const ResetPasswordForm = ({ email, onVerifyCode, onSubmit, onCancel }: ResetPas
           onClick={onCancel}
           disabled={isVerifying || isSubmitting}
         >
-          취소
+          {t('취소', 'Cancel')}
         </button>
         <button
           type="submit"
           className="reset-submit"
           disabled={!isCodeVerified || !allMet || !passwordsMatch || isSubmitting}
         >
-          {isSubmitting ? '변경 중...' : '비밀번호 변경'}
+          {isSubmitting ? t('변경 중...', 'Updating…') : t('비밀번호 변경', 'Change password')}
         </button>
       </div>
     </form>

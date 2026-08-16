@@ -62,6 +62,7 @@ vi.mock('electron', () => ({
 
 vi.mock('electron-squirrel-startup', () => ({ default: false }));
 vi.mock('../platform/policy', () => ({
+  COLD_START_ARG: '--subnota-cold-start',
   DESKTOP_PLATFORM_FEATURES: {
     browserExtensionClipper: false,
     captureShortcut: true,
@@ -105,7 +106,7 @@ describe('second-instance deep links', () => {
 
     expect(mockSend).toHaveBeenCalledWith('inbox-capture', {
       title: 'Example',
-      url: 'https://example.com',
+      url: 'https://example.com/',
     });
     expect(mockRestore).toHaveBeenCalled();
     expect(mockShow).toHaveBeenCalled();

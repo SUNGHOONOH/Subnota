@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,6 +9,7 @@ import {
   capIntraTopicEdges,
   createEdgeReducer,
   createNodeReducer,
+  getSimilarityMapGeometry,
   GRAPH_COLORS,
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
@@ -116,6 +119,66 @@ describe('selection reducers', () => {
     });
   });
 
+  it('keeps every point legible while hovering an edge-less similarity map', () => {
+    const graph = buildKnowledgeGraph(
+      [
+        { id: 'network:query', label: '현재 메모', x: 0, y: 0 },
+        { id: 'network:result', kind: 'memo', label: '결과', x: 1, y: 0 },
+      ],
+      [],
+    );
+    const reduce = createNodeReducer(graph, () => null, () => 'network:result');
+
+    expect(reduce('network:query', { color: GRAPH_COLORS.active, size: 15 })).toMatchObject({
+      color: GRAPH_COLORS.active,
+      zIndex: 1,
+    });
+    expect(reduce('network:result', { color: GRAPH_COLORS.defaultNode, size: 12 })).toMatchObject({
+      color: GRAPH_COLORS.defaultNode,
+      forceLabel: true,
+      zIndex: 1,
+    });
+  });
+
+  it('node and edge reducers focus one topic and mute the rest', () => {
+    const graph = buildKnowledgeGraph(
+      [
+        { id: 'topic:t1', kind: 'topic', label: 'T1', topicId: 't1', x: 0, y: 0 },
+        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 1, y: 0 },
+        { id: 'topic:t2', kind: 'topic', label: 'T2', topicId: 't2', x: 2, y: 0 },
+        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't2', x: 3, y: 0 },
+      ],
+      [
+        { id: 't1-m1', source: 'topic:t1', target: 'memo:m1' },
+        { id: 't2-m2', source: 'topic:t2', target: 'memo:m2' },
+        { id: 'm1-m2', source: 'memo:m1', target: 'memo:m2' },
+      ],
+    );
+    const reduceNode = createNodeReducer(graph, () => null, () => null, () => 't1');
+    const reduceEdge = createEdgeReducer(graph, () => null, () => null, () => 't1');
+    const focusedEdge = 't1-m1';
+    const mutedEdge = 'm1-m2';
+
+    expect(
+      reduceNode('memo:m1', { color: '#cc785c', kind: 'memo', size: 8, topicId: 't1' }),
+    ).toMatchObject({
+      color: '#cc785c',
+    });
+    expect(
+      reduceNode('memo:m2', { color: '#cc785c', kind: 'memo', size: 8, topicId: 't2' }),
+    ).toMatchObject({
+        color: GRAPH_COLORS.mutedNode,
+        forceLabel: false,
+      });
+    expect(reduceEdge(focusedEdge, { color: '#cc785c', size: 1 })).toMatchObject({
+      color: '#cc785c',
+    });
+    expect(reduceEdge(mutedEdge, { color: '#cc785c', size: 1 })).toMatchObject({
+      color: GRAPH_COLORS.defaultEdge,
+      size: 0.35,
+    });
+  });
+
   it('edge reducer highlights only edges touching the active node', () => {
     const graph = buildKnowledgeGraph(nodes, edges);
     const [edgeAB, edgeBC] = graph.edges();
@@ -133,6 +196,47 @@ describe('selection reducers', () => {
     expect(reduce(edgeAB, { color: GRAPH_COLORS.defaultEdge })).toMatchObject({
       color: GRAPH_COLORS.defaultEdge,
     });
+  });
+});
+
+describe('surrounding memo similarity geometry', () => {
+  it('gives an exact match a clearly larger and closer placement than a mid-score memo', () => {
+    const exact = getSimilarityMapGeometry(1, 0.52, 1, 0.35);
+    const mid = getSimilarityMapGeometry(0.52, 0.52, 1, 0.35);
+
+    expect(exact.distance).toBeLessThan(mid.distance - 0.5);
+    expect(exact.size).toBeGreaterThan(mid.size + 8);
+  });
+
+  it('does not turn a weak result into a central, large node only because it ranks first', () => {
+    const weakBest = getSimilarityMapGeometry(0.4, 0.35, 0.4, 0.35);
+
+    expect(weakBest.distance).toBeGreaterThan(0.9);
+    expect(weakBest.size).toBeLessThan(15);
+  });
+});
+
+describe('graph canvas resizing', () => {
+  it('re-renders Sigma when a CSS layout change resizes its container', () => {
+    const viewSource = readFileSync(
+      resolve(__dirname, '../features/memo/components/KnowledgeGraphView.tsx'),
+      'utf8',
+    );
+
+    expect(viewSource).toContain('renderer.scheduleRefresh();');
+    expect(viewSource).toContain('const resizeObserver = new ResizeObserver');
+  });
+});
+
+describe('graph node hover details', () => {
+  it('lets callers provide a compact tooltip without rebuilding Sigma', () => {
+    const viewSource = readFileSync(
+      resolve(__dirname, '../features/memo/components/KnowledgeGraphView.tsx'),
+      'utf8',
+    );
+
+    expect(viewSource).toContain('getNodeTooltip?: (nodeId: string) => string | null;');
+    expect(viewSource).toContain('knowledge-graph-node-tooltip');
   });
 });
 

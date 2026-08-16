@@ -9,6 +9,7 @@ import {
 } from '../lib/constants';
 
 type Listener = () => void;
+type EditorEvent = 'update' | 'selectionUpdate' | 'blur';
 
 // ancestors[d]는 깊이 d 노드의 자식 텍스트와 커서 조상이 놓인 위치다.
 // 기본값은 평평한 문서(doc > paragraph)이고, 리스트처럼 중첩된 구조를
@@ -29,21 +30,22 @@ const createFakeEditor = (
   };
   const listeners = new Map<string, Set<Listener>>();
   return {
-    emit(event: 'update' | 'selectionUpdate') {
+    emit(event: EditorEvent) {
       listeners.get(event)?.forEach(listener => listener());
     },
     listenerCount(event: string) {
       return listeners.get(event)?.size ?? 0;
     },
-    on(event: 'update', handler: Listener) {
+    on(event: EditorEvent, handler: Listener) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event)?.add(handler);
       return this;
     },
-    off(event: 'update', handler: Listener) {
+    off(event: EditorEvent, handler: Listener) {
       listeners.get(event)?.delete(handler);
       return this;
     },
+    isFocused: true,
     state: {
       selection: {
         $from: {
@@ -57,6 +59,7 @@ const createFakeEditor = (
           parent,
           parentOffset,
         },
+        empty: true,
       },
     },
   };
@@ -152,16 +155,58 @@ describe('attachAmbientIdle', () => {
     expect(() => vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS)).not.toThrow();
   });
 
-  it('커서 이동(selectionUpdate)만으로는 발화하지 않는다', () => {
-    const editor = createFakeEditor('커서 이동만으로는 트리거되지 않는 문장.');
+  it('커서 이동 후 idle 지연이 지나면 새 위치의 문장을 검색한다', () => {
+    const editor = createFakeEditor('커서 이동 후 검색할 문장입니다.');
     const onIdle = vi.fn();
     attachAmbientIdle(editor, () => onIdle);
 
     editor.emit('selectionUpdate');
+    vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS - 1);
+    expect(onIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+
+    expect(onIdle).toHaveBeenCalledWith('커서 이동 후 검색할 문장입니다.');
+    expect(editor.listenerCount('selectionUpdate')).toBe(1);
+  });
+
+  it('대기 중 커서를 이동하면 기존 타이머를 취소하고 이동 시점부터 다시 기다린다', () => {
+    const editor = createFakeEditor('커서 이동 시점부터 다시 기다려야 하는 문장입니다');
+    const onIdle = vi.fn();
+    attachAmbientIdle(editor, () => onIdle);
+
+    editor.emit('update');
+    vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS - 100);
+    editor.emit('selectionUpdate');
+    vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS - 1);
+    expect(onIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('드래그 선택은 대기 중 검색을 취소하고 다시 예약하지 않는다', () => {
+    const editor = createFakeEditor('드래그 선택 중에는 검색하지 않을 문장입니다');
+    const onIdle = vi.fn();
+    attachAmbientIdle(editor, () => onIdle);
+
+    editor.emit('update');
+    editor.state.selection.empty = false;
+    editor.emit('selectionUpdate');
     vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS);
 
     expect(onIdle).not.toHaveBeenCalled();
-    expect(editor.listenerCount('selectionUpdate')).toBe(0);
+  });
+
+  it('에디터를 벗어나면 대기 중 idle 타이머를 취소한다', () => {
+    const editor = createFakeEditor('에디터 이탈로 대기 질의를 취소해야 하는 문장입니다');
+    const onIdle = vi.fn();
+    attachAmbientIdle(editor, () => onIdle);
+
+    editor.emit('update');
+    editor.emit('blur');
+    vi.advanceTimersByTime(AMBIENT_IDLE_DELAY_MS);
+
+    expect(onIdle).not.toHaveBeenCalled();
   });
 
   it('한글 IME 조합이 마지막 글자에 걸린 채 멈춰도 idle 후 발화한다', () => {
@@ -214,7 +259,7 @@ describe('attachAmbientIdle', () => {
     expect(chunkText).not.toContain(first);
   });
 
-  it('heading은 Planning 질의로 1.5초 뒤 발화한다', () => {
+  it('heading은 Planning 질의로 5초 뒤 발화한다', () => {
     const heading = '데스크톱 임베딩 전환 계획';
     const editor = createFakeEditor(heading, heading.length, 'heading');
     const onIdle = vi.fn();
@@ -228,7 +273,7 @@ describe('attachAmbientIdle', () => {
     expect(onIdle).toHaveBeenCalledWith(heading);
   });
 
-  it('유효한 문장 경계는 현행 문맥을 2초 뒤 발화한다', () => {
+  it('유효한 문장 경계는 현행 문맥을 5초 뒤 발화한다', () => {
     const paragraph = '문장을 끝내고 멈춘 상태입니다.';
     const editor = createFakeEditor(paragraph, paragraph.length);
     const onIdle = vi.fn();
@@ -242,7 +287,7 @@ describe('attachAmbientIdle', () => {
     expect(onIdle).toHaveBeenCalledWith(paragraph);
   });
 
-  it('커서 앞이 문장 경계면 블록 뒤쪽 텍스트가 있어도 2초 뒤 발화한다', () => {
+  it('커서 앞이 문장 경계면 블록 뒤쪽 텍스트가 있어도 5초 뒤 발화한다', () => {
     const paragraph = '첫 문장을 끝냈습니다. 다음 문장을 이어 쓰는 중입니다';
     const cursorOffset = paragraph.indexOf(' 다음');
     const editor = createFakeEditor(paragraph, cursorOffset);
@@ -257,7 +302,7 @@ describe('attachAmbientIdle', () => {
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
-  it('빈 블록에서는 직전 블록을 2초 뒤 한 번만 질의한다', () => {
+  it('빈 블록에서는 직전 블록을 5초 뒤 한 번만 질의한다', () => {
     const previous = 'Enter로 문단을 끝낸 직전 블록입니다.';
     const editor = createFakeEditor('', 0, 'paragraph', [previous, ''], 1);
     const onIdle = vi.fn();

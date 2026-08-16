@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import { EMBEDDING_MODEL_ID } from './local-embedding';
 
@@ -11,12 +12,13 @@ const RECORD_TYPES = new Set([
   'activity_completion',
   'daily_completion',
   'tree',
+  'memo_recovery',
   // 서버 배치 결과의 읽기 전용 캐시 (local-first 즉시 표시용).
   'schedule_inbox',
+  'schedule_inbox_action',
   'topic_map',
 ]);
 const PENDING_TIMEOUT_MS = 10_000;
-const QUIT_DRAIN_DEADLINE_MS = 2_000;
 const EMBEDDING_DIMENSIONS = 1024;
 const ownersByWebContents = new Map<number, string>();
 const ownerCleanupListenersByWebContents = new Set<number>();
@@ -27,7 +29,23 @@ const pending = new Map<number, {
 }>();
 let requestId = 0;
 let worker: Worker | null = null;
+type DatabaseExclusiveOperation = 'finalization' | 'maintenance';
+type RendererWriteGuardLease = {
+  release: (cancelled: boolean) => void;
+};
+type LocalDatabaseMaintenanceHooks = {
+  acquireRendererWriteGuard: () => Promise<RendererWriteGuardLease | null>;
+};
+let databaseExclusiveOperation: DatabaseExclusiveOperation | null = null;
+let databaseMaintenanceFenceActive = false;
+let localDatabaseMaintenanceHooks: LocalDatabaseMaintenanceHooks | null = null;
 const STORAGE_CONFIG_FILE = 'local-storage.json';
+
+export const configureLocalDatabaseMaintenanceHooks = (
+  hooks: LocalDatabaseMaintenanceHooks | null,
+) => {
+  localDatabaseMaintenanceHooks = hooks;
+};
 
 const getStorageConfigPath = () =>
   path.join(app.getPath('userData'), STORAGE_CONFIG_FILE);
@@ -143,6 +161,15 @@ const WORKER_SOURCE = String.raw`
     db.prepare(
       'DELETE FROM local_inbox_vectors WHERE owner_id = ? AND inbox_session_id = ?'
     ).run(ownerId, inboxSessionId);
+  };
+
+  const clearOwner = ownerId => {
+    vectorRowsByOwner.delete(ownerId);
+    inboxVectorRowsByOwner.delete(ownerId);
+    db.prepare('DELETE FROM local_records WHERE owner_id = ?').run(ownerId);
+    db.prepare('DELETE FROM local_memo_chunk_vectors WHERE owner_id = ?').run(ownerId);
+    db.prepare('DELETE FROM local_memo_vector_state WHERE owner_id = ?').run(ownerId);
+    db.prepare('DELETE FROM local_inbox_vectors WHERE owner_id = ?').run(ownerId);
   };
 
   const hashText = text => {
@@ -269,18 +296,57 @@ const WORKER_SOURCE = String.raw`
     }
   };
 
-  const upsert = (ownerId, recordType, recordId, record) => {
-    const updatedAt = typeof record.updated_at === 'string'
-      ? record.updated_at
-      : typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString();
-    const syncStatus = typeof record.local_sync_status === 'string'
-      ? record.local_sync_status : null;
-    const isArchived = record.is_archived === true || syncStatus === 'pending_delete';
+  const memoRecordWithPreservedSyncBase = (ownerId, recordId, record) => {
+    if (
+      record.local_sync_status !== 'pending' &&
+      record.local_sync_status !== 'failed'
+    ) {
+      return record;
+    }
+    const row = db.prepare(
+      "SELECT payload_json FROM local_records " +
+      "WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?"
+    ).get(ownerId, recordId);
+    if (!row) return record;
+    try {
+      const existing = JSON.parse(String(row.payload_json));
+      const hasAcknowledgedBase =
+        typeof existing.synced_content === 'string' ||
+        typeof existing.synced_content_hash === 'string';
+      return hasAcknowledgedBase
+        ? {
+            ...record,
+            synced_content: existing.synced_content ?? null,
+            synced_content_hash: existing.synced_content_hash ?? null,
+          }
+        : record;
+    } catch {
+      return record;
+    }
+  };
+
+  const upsert = (
+    ownerId,
+    recordType,
+    recordId,
+    record,
+    preserveExistingMemoSyncBase = true
+  ) => {
+    const storedRecord =
+      recordType === 'memo' && preserveExistingMemoSyncBase
+        ? memoRecordWithPreservedSyncBase(ownerId, recordId, record)
+        : record;
+    const updatedAt = typeof storedRecord.updated_at === 'string'
+      ? storedRecord.updated_at
+      : typeof storedRecord.createdAt === 'string' ? storedRecord.createdAt : new Date().toISOString();
+    const syncStatus = typeof storedRecord.local_sync_status === 'string'
+      ? storedRecord.local_sync_status : null;
+    const isArchived = storedRecord.is_archived === true || syncStatus === 'pending_delete';
     if (recordType === 'memo') {
       invalidateMemoVectors(
         ownerId,
         recordId,
-        contentHashForRecord(record),
+        contentHashForRecord(storedRecord),
         isArchived
       );
     } else if (recordType === 'inbox') {
@@ -291,15 +357,84 @@ const WORKER_SOURCE = String.raw`
       if (
         isArchived ||
         (vector &&
-          inboxContentHashForRecord(record) !==
+          inboxContentHashForRecord(storedRecord) !==
             String(vector.source_content_hash))
       ) {
         deleteInboxVector(ownerId, recordId);
       }
     }
-    db.prepare('INSERT INTO local_records (owner_id, record_type, record_id, payload_json, sync_status, updated_at, is_archived) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id, record_type, record_id) DO UPDATE SET payload_json = excluded.payload_json, sync_status = excluded.sync_status, updated_at = excluded.updated_at, is_archived = excluded.is_archived').run(ownerId, recordType, recordId, JSON.stringify(record), syncStatus, updatedAt, isArchived ? 1 : 0);
+    db.prepare('INSERT INTO local_records (owner_id, record_type, record_id, payload_json, sync_status, updated_at, is_archived) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id, record_type, record_id) DO UPDATE SET payload_json = excluded.payload_json, sync_status = excluded.sync_status, updated_at = excluded.updated_at, is_archived = excluded.is_archived').run(ownerId, recordType, recordId, JSON.stringify(storedRecord), syncStatus, updatedAt, isArchived ? 1 : 0);
   };
   const list = (ownerId, recordType) => db.prepare('SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = ? ORDER BY updated_at DESC').all(ownerId, recordType).map(row => JSON.parse(String(row.payload_json)));
+
+  const patchMemoSyncBase = (ownerId, memoId, syncedContent, syncedContentHash) => {
+    const row = db.prepare(
+      "SELECT payload_json FROM local_records " +
+      "WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?"
+    ).get(ownerId, memoId);
+    if (!row) return null;
+    const record = JSON.parse(String(row.payload_json));
+    const patched = {
+      ...record,
+      synced_content: syncedContent,
+      synced_content_hash: syncedContentHash,
+    };
+    db.prepare(
+      "UPDATE local_records SET payload_json = ? " +
+      "WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?"
+    ).run(JSON.stringify(patched), ownerId, memoId);
+    return patched;
+  };
+
+  const applyMemoSyncResult = (
+    ownerId,
+    memoId,
+    expectedLocalContent,
+    record
+  ) => {
+    const row = db.prepare(
+      "SELECT payload_json FROM local_records " +
+      "WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?"
+    ).get(ownerId, memoId);
+    if (!row) return false;
+    let current;
+    try {
+      current = JSON.parse(String(row.payload_json));
+    } catch {
+      return false;
+    }
+    if (current.content !== expectedLocalContent) return false;
+    // The caller supplies the canonical server content and its acknowledged
+    // base as one record. Bypass normal pending-base preservation so both move
+    // atomically, but only if no newer local edit won the compare step.
+    upsert(ownerId, 'memo', memoId, record, false);
+    return true;
+  };
+
+  const restoreMemoSnapshotAfterPull = (ownerId, memoId, snapshot) => {
+    let record = snapshot;
+    const row = db.prepare(
+      "SELECT payload_json, sync_status FROM local_records " +
+      "WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?"
+    ).get(ownerId, memoId);
+    if (
+      row &&
+      row.sync_status !== null &&
+      String(row.sync_status) !== 'synced'
+    ) {
+      try {
+        const newerLocalRecord = JSON.parse(String(row.payload_json));
+        record = {
+          ...newerLocalRecord,
+          synced_content: snapshot.synced_content ?? null,
+          synced_content_hash: snapshot.synced_content_hash ?? null,
+        };
+      } catch {
+        // Replace an unreadable row with the renderer's known-good snapshot.
+      }
+    }
+    upsert(ownerId, 'memo', memoId, record, false);
+  };
 
   const replaceMemoVectors = args => transaction(() => {
     const row = db.prepare(
@@ -717,16 +852,84 @@ const WORKER_SOURCE = String.raw`
         transaction(() => {
           upsert(args.ownerId, args.recordType, args.recordId, args.record);
         });
+      } else if (operation === 'patch-memo-sync-base') {
+        result = transaction(() =>
+          patchMemoSyncBase(
+            args.ownerId,
+            args.memoId,
+            args.syncedContent,
+            args.syncedContentHash
+          )
+        );
+      } else if (operation === 'apply-memo-sync-result') {
+        result = transaction(() =>
+          applyMemoSyncResult(
+            args.ownerId,
+            args.memoId,
+            args.expectedLocalContent,
+            args.record
+          )
+        );
+      } else if (operation === 'restore-memo-snapshot-after-pull') {
+        transaction(() => {
+          // This operation repairs the narrow race where a memo becomes a live
+          // editor owner after a remote replacement was already dispatched.
+          // The renderer snapshot includes the exact pre-pull sync base, so the
+          // normal pending-write base preservation must not substitute the
+          // remote value that was just installed.
+          restoreMemoSnapshotAfterPull(
+            args.ownerId,
+            args.memoId,
+            args.record
+          );
+        });
       } else if (operation === 'delete') {
         transaction(() => {
           db.prepare('DELETE FROM local_records WHERE owner_id = ? AND record_type = ? AND record_id = ?').run(args.ownerId, args.recordType, args.recordId);
           if (args.recordType === 'memo') deleteMemoVectors(args.ownerId, args.recordId);
           if (args.recordType === 'inbox') deleteInboxVector(args.ownerId, args.recordId);
         });
+      } else if (operation === 'clear-owner') {
+        transaction(() => clearOwner(args.ownerId));
+      } else if (operation === 'delete-inbox-pending-if-not-deleted') {
+        result = transaction(() => {
+          const row = db.prepare(
+            "SELECT sync_status FROM local_records " +
+            "WHERE owner_id = ? AND record_type = 'inbox' AND record_id = ?"
+          ).get(args.ownerId, args.recordId);
+          if (row && String(row.sync_status) === 'pending_delete') {
+            return false;
+          }
+          db.prepare(
+            "DELETE FROM local_records " +
+            "WHERE owner_id = ? AND record_type = 'inbox' AND record_id = ?"
+          ).run(args.ownerId, args.recordId);
+          deleteInboxVector(args.ownerId, args.recordId);
+          return true;
+        });
       } else if (operation === 'replace') {
         result = transaction(() => {
-          db.prepare("DELETE FROM local_records WHERE owner_id = ? AND record_type = ? AND (sync_status IS NULL OR sync_status = 'synced')").run(args.ownerId, args.recordType);
-          for (const value of args.values) upsert(args.ownerId, args.recordType, value.id, { ...value, local_sync_status: 'synced' });
+          const explicitlyPreserved = new Set(args.preserveRecordIds);
+          const protectedFromRemoteUpsert = new Set(explicitlyPreserved);
+          const locallyModifiedRows = db.prepare(
+            "SELECT record_id FROM local_records WHERE owner_id = ? AND record_type = ? " +
+            "AND sync_status IS NOT NULL AND sync_status != 'synced'"
+          ).all(args.ownerId, args.recordType);
+          for (const row of locallyModifiedRows) {
+            protectedFromRemoteUpsert.add(String(row.record_id));
+          }
+          if (explicitlyPreserved.size === 0) {
+            db.prepare("DELETE FROM local_records WHERE owner_id = ? AND record_type = ? AND (sync_status IS NULL OR sync_status = 'synced')").run(args.ownerId, args.recordType);
+          } else {
+            const placeholders = Array.from(explicitlyPreserved, () => '?').join(',');
+            db.prepare(
+              "DELETE FROM local_records WHERE owner_id = ? AND record_type = ? AND (sync_status IS NULL OR sync_status = 'synced') AND record_id NOT IN (" + placeholders + ')'
+            ).run(args.ownerId, args.recordType, ...explicitlyPreserved);
+          }
+          for (const value of args.values) {
+            if (protectedFromRemoteUpsert.has(value.id)) continue;
+            upsert(args.ownerId, args.recordType, value.id, { ...value, local_sync_status: 'synced' });
+          }
           if (args.recordType === 'memo') cleanupMemoVectors(args.ownerId);
           if (args.recordType === 'inbox') cleanupInboxVectors(args.ownerId);
           return list(args.ownerId, args.recordType);
@@ -817,30 +1020,7 @@ const getWorker = () => {
   return nextWorker;
 };
 
-// On quit, give in-flight writes a bounded window to drain before terminating
-// the worker, so "saved locally" is trustworthy. A deadline forces exit if a
-// write hangs.
-let quitting = false;
-app.on('before-quit', event => {
-  if (quitting || pending.size === 0 || !worker) {
-    void worker?.terminate();
-    return;
-  }
-  quitting = true;
-  event.preventDefault();
-  const finish = () => {
-    clearInterval(poll);
-    clearTimeout(deadline);
-    void worker?.terminate();
-    app.quit();
-  };
-  const poll = setInterval(() => {
-    if (pending.size === 0) finish();
-  }, 50);
-  const deadline = setTimeout(finish, QUIT_DRAIN_DEADLINE_MS);
-});
-
-const run = (operation: string, args: Record<string, unknown>) =>
+const postWorkerOperation = (operation: string, args: Record<string, unknown>) =>
   new Promise<unknown>((resolve, reject) => {
     const id = ++requestId;
     const timer = setTimeout(() => {
@@ -849,6 +1029,70 @@ const run = (operation: string, args: Record<string, unknown>) =>
     pending.set(id, { reject, resolve, timer });
     getWorker().postMessage({ args, id, operation });
   });
+
+const acquireDatabaseExclusiveOperation = (
+  operation: DatabaseExclusiveOperation,
+) => {
+  if (databaseExclusiveOperation) {
+    throw new Error(
+      databaseExclusiveOperation === 'maintenance'
+        ? 'Local database maintenance is still in progress.'
+        : 'A local database flush is already in progress.',
+    );
+  }
+  databaseExclusiveOperation = operation;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (operation === 'maintenance') {
+      databaseMaintenanceFenceActive = false;
+    }
+    databaseExclusiveOperation = null;
+  };
+};
+
+const run = (operation: string, args: Record<string, unknown>) => {
+  if (
+    databaseExclusiveOperation === 'maintenance' &&
+    databaseMaintenanceFenceActive
+  ) {
+    return Promise.reject(
+      new Error('Local database is temporarily unavailable during restore.'),
+    );
+  }
+  if (databaseExclusiveOperation === 'finalization') {
+    return Promise.reject(
+      new Error('Local database is temporarily unavailable while finalizing writes.'),
+    );
+  }
+  return postWorkerOperation(operation, args);
+};
+
+const waitForPendingOperations = async () => {
+  while (pending.size > 0) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+};
+
+export const flushLocalDatabaseOperations = async () => {
+  const releaseExclusiveOperation = acquireDatabaseExclusiveOperation(
+    'finalization',
+  );
+  try {
+    await waitForPendingOperations();
+    // A timed-out request may still be executing in the worker after it left
+    // the pending map. The FIFO checkpoint proves every earlier operation
+    // finished, while the fence rejects operations that would arrive after it.
+    if (worker) await postWorkerOperation('checkpoint', {});
+  } finally {
+    releaseExclusiveOperation();
+  }
+};
+
+app.on('will-quit', () => {
+  void worker?.terminate();
+});
 
 const stopWorker = async () => {
   if (!worker) return;
@@ -864,6 +1108,187 @@ const getStorageInfo = async () => {
     .then(stat => stat.size)
     .catch(() => 0);
   return { databasePath, size };
+};
+
+const SUBNOTA_RECORD_COLUMNS = new Set([
+  'owner_id',
+  'record_type',
+  'record_id',
+  'payload_json',
+  'sync_status',
+  'updated_at',
+  'is_archived',
+]);
+
+const assertValidSubnotaDatabase = (databasePath: string) => {
+  let database: DatabaseSync | null = null;
+  try {
+    database = new DatabaseSync(databasePath, { readOnly: true });
+    const integrity = database
+      .prepare('PRAGMA integrity_check(1)')
+      .get() as { integrity_check?: unknown } | undefined;
+    if (integrity?.integrity_check !== 'ok') {
+      throw new Error('SQLite 무결성 검사에 실패한 백업 파일입니다.');
+    }
+
+    const table = database
+      .prepare(
+        "SELECT type FROM sqlite_schema WHERE name = 'local_records' LIMIT 1",
+      )
+      .get() as { type?: unknown } | undefined;
+    const columns = database
+      .prepare('PRAGMA table_info(local_records)')
+      .all() as Array<{ name?: unknown; pk?: unknown }>;
+    const columnNames = new Set(columns.map(column => String(column.name)));
+    const primaryKey = columns
+      .filter(column => Number(column.pk) > 0)
+      .sort((left, right) => Number(left.pk) - Number(right.pk))
+      .map(column => String(column.name));
+    if (
+      table?.type !== 'table' ||
+      columns.length === 0 ||
+      [...SUBNOTA_RECORD_COLUMNS].some(column => !columnNames.has(column)) ||
+      primaryKey.join(',') !== 'owner_id,record_type,record_id'
+    ) {
+      throw new Error('Subnota 데이터베이스 스키마가 없는 백업 파일입니다.');
+    }
+    const invalidPayload = database
+      .prepare(
+        "SELECT 1 FROM local_records WHERE CASE " +
+          "WHEN json_valid(payload_json) = 1 THEN json_type(payload_json) <> 'object' " +
+          'ELSE 1 END LIMIT 1',
+      )
+      .get();
+    if (invalidPayload) {
+      throw new Error('Subnota 데이터 레코드가 손상된 백업 파일입니다.');
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('SQLite 무결성') ||
+        error.message.startsWith('Subnota 데이터'))
+    ) {
+      throw error;
+    }
+    throw new Error('Subnota SQLite 백업 파일을 읽을 수 없습니다.', {
+      cause: error,
+    });
+  } finally {
+    database?.close();
+  }
+};
+
+const assertWritableSubnotaDatabase = (databasePath: string) => {
+  let database: DatabaseSync | null = null;
+  try {
+    database = new DatabaseSync(databasePath);
+    database.exec('BEGIN IMMEDIATE; ROLLBACK;');
+  } catch (error) {
+    throw new Error('복원한 Subnota 데이터베이스에 쓸 수 없습니다.', {
+      cause: error,
+    });
+  } finally {
+    database?.close();
+  }
+};
+
+const replaceDatabaseFromBackup = async (backupPath: string) => {
+  const databasePath = getDatabasePath();
+  await fs.promises.mkdir(path.dirname(databasePath), { recursive: true });
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(path.dirname(databasePath), '.subnota-restore-'),
+  );
+  const candidatePath = path.join(temporaryDirectory, 'candidate.sqlite3');
+  const rollbackPath = path.join(temporaryDirectory, 'previous.sqlite3');
+  const sidecars = ['-wal', '-shm'].map(suffix => ({
+    active: `${databasePath}${suffix}`,
+    rollback: `${rollbackPath}${suffix}`,
+  }));
+  let preserveTemporaryDirectory = false;
+  let candidateInstalled = false;
+  let previousDatabaseMoved = false;
+  const previousSidecarsMoved = new Set<string>();
+
+  try {
+    // Validate the exact snapshot that will be installed. Validating the selected
+    // path and copying it later would leave a mutation window between the two.
+    await fs.promises.copyFile(backupPath, candidatePath);
+    await fs.promises.chmod(candidatePath, 0o600);
+    assertValidSubnotaDatabase(candidatePath);
+
+    // Operations accepted before the maintenance fence finish on the old DB.
+    // New requests fail instead of spawning a worker against an inode that is
+    // about to be replaced.
+    await waitForPendingOperations();
+    if (worker) await postWorkerOperation('checkpoint', {});
+    await stopWorker();
+
+    try {
+      if (fs.existsSync(databasePath)) {
+        await fs.promises.rename(databasePath, rollbackPath);
+        previousDatabaseMoved = true;
+        for (const sidecar of sidecars) {
+          if (!fs.existsSync(sidecar.active)) continue;
+          await fs.promises.rename(sidecar.active, sidecar.rollback);
+          previousSidecarsMoved.add(sidecar.active);
+        }
+      } else {
+        await Promise.all(
+          sidecars.map(sidecar =>
+            fs.promises.rm(sidecar.active, { force: true }),
+          ),
+        );
+      }
+
+      // Both paths live beside the active database, so rename never crosses a
+      // filesystem boundary. The previous database remains available for rollback
+      // until the installed copy passes the same preflight a second time.
+      await fs.promises.rename(candidatePath, databasePath);
+      candidateInstalled = true;
+      assertValidSubnotaDatabase(databasePath);
+      assertWritableSubnotaDatabase(databasePath);
+    } catch (replacementError) {
+      try {
+        if (candidateInstalled) {
+          await Promise.all([
+            fs.promises.rm(databasePath, { force: true }),
+            ...sidecars.map(sidecar =>
+              fs.promises.rm(sidecar.active, { force: true }),
+            ),
+          ]);
+        }
+        if (previousDatabaseMoved) {
+          await fs.promises.rename(rollbackPath, databasePath);
+          previousDatabaseMoved = false;
+        }
+        for (const sidecar of sidecars) {
+          if (!previousSidecarsMoved.has(sidecar.active)) continue;
+          await fs.promises.rename(sidecar.rollback, sidecar.active);
+          previousSidecarsMoved.delete(sidecar.active);
+        }
+      } catch (rollbackError) {
+        // Never delete the only remaining copy when automatic rollback fails.
+        preserveTemporaryDirectory = true;
+        throw new Error(
+          `백업 복원과 자동 롤백에 실패했습니다. 안전 사본 폴더: ${temporaryDirectory}`,
+          { cause: rollbackError },
+        );
+      }
+      throw new Error('백업 복원에 실패하여 기존 데이터를 유지했습니다.', {
+        cause: replacementError,
+      });
+    }
+
+    if (previousDatabaseMoved) {
+      await fs.promises.rm(rollbackPath, { force: true }).catch(() => undefined);
+    }
+  } finally {
+    if (!preserveTemporaryDirectory) {
+      await fs.promises
+        .rm(temporaryDirectory, { force: true, recursive: true })
+        .catch(() => undefined);
+    }
+  }
 };
 
 const assertTrustedSender = (event: Electron.IpcMainInvokeEvent) => {
@@ -893,8 +1318,29 @@ const normalizedRecord = (record: unknown) => {
   }
   return record as Record<string, unknown>;
 };
+const normalizedPreserveRecordIds = (value: unknown) => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 500) {
+    throw new Error('Invalid preserved record ids.');
+  }
+  const ids = value.map(recordId => {
+    if (
+      typeof recordId !== 'string' ||
+      recordId.length === 0 ||
+      recordId.length > 512
+    ) {
+      throw new Error('Invalid preserved record id.');
+    }
+    return recordId;
+  });
+  return [...new Set(ids)];
+};
 const normalizedMemoId = (memoId: unknown) => {
-  if (typeof memoId !== 'string' || !memoId) {
+  if (
+    typeof memoId !== 'string' ||
+    memoId.length === 0 ||
+    memoId.length > 512
+  ) {
     throw new Error('Invalid memo id.');
   }
   return memoId;
@@ -1017,18 +1463,139 @@ ipcMain.handle('local-db:upsert', (event, ownerId: unknown, recordType: unknown,
   if (typeof recordId !== 'string' || !recordId) throw new Error('Invalid record id.');
   return run('upsert', { ownerId: ownerForRequest(event, ownerId), recordId, record: normalizedRecord(value), recordType: normalizedType(recordType) });
 });
+ipcMain.handle(
+  'local-db:patch-memo-sync-base',
+  (
+    event,
+    ownerId: unknown,
+    memoId: unknown,
+    syncedContent: unknown,
+    syncedContentHash: unknown,
+  ) => {
+    assertTrustedSender(event);
+    if (typeof syncedContent !== 'string') {
+      throw new Error('Invalid synced memo content.');
+    }
+    if (
+      syncedContentHash !== null &&
+      typeof syncedContentHash !== 'string'
+    ) {
+      throw new Error('Invalid synced memo content hash.');
+    }
+    return run('patch-memo-sync-base', {
+      memoId: normalizedMemoId(memoId),
+      ownerId: ownerForRequest(event, ownerId),
+      syncedContent,
+      syncedContentHash,
+    });
+  },
+);
+ipcMain.handle(
+  'local-db:apply-memo-sync-result',
+  (
+    event,
+    ownerId: unknown,
+    memoId: unknown,
+    expectedLocalContent: unknown,
+    value: unknown,
+  ) => {
+    assertTrustedSender(event);
+    const normalizedId = normalizedMemoId(memoId);
+    if (typeof expectedLocalContent !== 'string') {
+      throw new Error('Invalid expected local memo content.');
+    }
+    const record = normalizedRecord(value);
+    if (
+      record.id !== normalizedId ||
+      typeof record.content !== 'string' ||
+      (record.content_hash !== null &&
+        typeof record.content_hash !== 'string') ||
+      typeof record.created_at !== 'string' ||
+      (record.is_archived !== null &&
+        typeof record.is_archived !== 'boolean') ||
+      typeof record.synced_content !== 'string' ||
+      (record.synced_content_hash !== null &&
+        typeof record.synced_content_hash !== 'string') ||
+      typeof record.updated_at !== 'string' ||
+      (record.local_sync_status !== 'synced' &&
+        record.local_sync_status !== 'pending' &&
+        record.local_sync_status !== 'failed')
+    ) {
+      throw new Error('Invalid memo sync result record.');
+    }
+    return run('apply-memo-sync-result', {
+      expectedLocalContent,
+      memoId: normalizedId,
+      ownerId: ownerForRequest(event, ownerId),
+      record,
+    });
+  },
+);
+ipcMain.handle(
+  'local-db:restore-memo-snapshot-after-pull',
+  (
+    event,
+    ownerId: unknown,
+    memoId: unknown,
+    value: unknown,
+  ) => {
+    assertTrustedSender(event);
+    const normalizedId = normalizedMemoId(memoId);
+    const record = normalizedRecord(value);
+    if (record.id !== normalizedId) {
+      throw new Error('Local memo snapshot id does not match.');
+    }
+    return run('restore-memo-snapshot-after-pull', {
+      memoId: normalizedId,
+      ownerId: ownerForRequest(event, ownerId),
+      record,
+    });
+  },
+);
 ipcMain.handle('local-db:delete', (event, ownerId: unknown, recordType: unknown, recordId: unknown) => {
   assertTrustedSender(event);
   if (typeof recordId !== 'string' || !recordId) throw new Error('Invalid record id.');
   return run('delete', { ownerId: ownerForRequest(event, ownerId), recordId, recordType: normalizedType(recordType) });
 });
-ipcMain.handle('local-db:replace-synced', (event, ownerId: unknown, recordType: unknown, values: unknown) => {
+ipcMain.handle('local-db:clear-owner', (event, ownerId: unknown) => {
   assertTrustedSender(event);
-  if (!Array.isArray(values)) throw new Error('Invalid local record collection.');
-  const records = values.map(normalizedRecord);
-  if (records.some(record => typeof record.id !== 'string' || !record.id)) throw new Error('Invalid record id.');
-  return run('replace', { ownerId: ownerForRequest(event, ownerId), recordType: normalizedType(recordType), values: records });
+  return run('clear-owner', { ownerId: ownerForRequest(event, ownerId) });
 });
+ipcMain.handle(
+  'local-db:delete-inbox-pending-if-not-deleted',
+  (event, ownerId: unknown, recordId: unknown) => {
+    assertTrustedSender(event);
+    return run('delete-inbox-pending-if-not-deleted', {
+      ownerId: ownerForRequest(event, ownerId),
+      recordId: normalizedMemoId(recordId),
+    });
+  },
+);
+ipcMain.handle(
+  'local-db:replace-synced',
+  (
+    event,
+    ownerId: unknown,
+    recordType: unknown,
+    values: unknown,
+    preserveRecordIds: unknown,
+  ) => {
+    assertTrustedSender(event);
+    if (!Array.isArray(values)) {
+      throw new Error('Invalid local record collection.');
+    }
+    const records = values.map(normalizedRecord);
+    if (records.some(record => typeof record.id !== 'string' || !record.id)) {
+      throw new Error('Invalid record id.');
+    }
+    return run('replace', {
+      ownerId: ownerForRequest(event, ownerId),
+      preserveRecordIds: normalizedPreserveRecordIds(preserveRecordIds),
+      recordType: normalizedType(recordType),
+      values: records,
+    });
+  },
+);
 ipcMain.handle('local-db:migrate', (event, ownerId: unknown, datasets: unknown) => {
   assertTrustedSender(event);
   const source = normalizedRecord(datasets);
@@ -1175,6 +1742,58 @@ ipcMain.handle('local-db:open-storage', async event => {
   await shell.showItemInFolder(getDatabasePath());
 });
 
+const beginDatabaseMaintenance = async () => {
+  const releaseExclusiveOperation = acquireDatabaseExclusiveOperation(
+    'maintenance',
+  );
+  let rendererWriteGuard: RendererWriteGuardLease | null = null;
+  try {
+    if (localDatabaseMaintenanceHooks) {
+      rendererWriteGuard =
+        await localDatabaseMaintenanceHooks.acquireRendererWriteGuard();
+      if (!rendererWriteGuard) {
+        throw new Error(
+          '저장하지 못한 변경 사항이 있어 데이터베이스 작업을 중단했습니다.',
+        );
+      }
+    }
+    // Renderer acknowledgements prove their queues are drained. Install the
+    // database fence in the same turn, before waiting for accepted worker work,
+    // so no operation can recreate the old-path worker during the swap.
+    databaseMaintenanceFenceActive = true;
+    return (cancelled: boolean) => {
+      releaseExclusiveOperation();
+      rendererWriteGuard?.release(cancelled);
+    };
+  } catch (error) {
+    releaseExclusiveOperation();
+    rendererWriteGuard?.release(true);
+    throw error;
+  }
+};
+
+const reloadDatabaseRenderers = (fallbackSender: Electron.WebContents) => {
+  const reloaded = new Set<number>();
+  for (const window of BrowserWindow.getAllWindows?.() ?? []) {
+    if (window.isDestroyed()) continue;
+    reloaded.add(window.webContents.id);
+    try {
+      window.webContents.reload();
+    } catch {
+      // Continue reloading other windows. A failed renderer remains protected
+      // by its write guard instead of being allowed to write its stale state.
+    }
+  }
+  if (!reloaded.has(fallbackSender.id) && !fallbackSender.isDestroyed?.()) {
+    try {
+      fallbackSender.reload();
+    } catch {
+      // The database was already switched atomically. Keep the stale renderer
+      // guarded and let another live window continue reloading.
+    }
+  }
+};
+
 ipcMain.handle('local-db:choose-storage', async event => {
   assertTrustedSender(event);
   const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
@@ -1192,16 +1811,24 @@ ipcMain.handle('local-db:choose-storage', async event => {
     throw new Error('선택한 폴더에 이미 Subnota 데이터베이스가 있습니다.');
   }
 
-  if (worker) await run('checkpoint', {});
-  await stopWorker();
-  await fs.promises.mkdir(directory, { recursive: true });
-  if (fs.existsSync(currentPath)) {
-    await fs.promises.copyFile(currentPath, nextPath);
+  const finishMaintenance = await beginDatabaseMaintenance();
+  let storageChanged = false;
+  try {
+    await waitForPendingOperations();
+    if (worker) await postWorkerOperation('checkpoint', {});
+    await stopWorker();
+    await fs.promises.mkdir(directory, { recursive: true });
+    if (fs.existsSync(currentPath)) {
+      await fs.promises.copyFile(currentPath, nextPath);
+    }
+    saveStorageDirectory(directory);
+    const info = await getStorageInfo();
+    storageChanged = true;
+    reloadDatabaseRenderers(event.sender);
+    return info;
+  } finally {
+    finishMaintenance(!storageChanged);
   }
-  saveStorageDirectory(directory);
-  const info = await getStorageInfo();
-  setImmediate(() => event.sender.reload());
-  return info;
 });
 
 ipcMain.handle('local-db:backup', async event => {
@@ -1213,9 +1840,20 @@ ipcMain.handle('local-db:backup', async event => {
     title: 'Subnota 전체 백업',
   });
   if (result.canceled || !result.filePath) return null;
-  if (worker) await run('checkpoint', {});
-  await fs.promises.copyFile(getDatabasePath(), result.filePath);
-  return result.filePath;
+  const finishMaintenance = await beginDatabaseMaintenance();
+  try {
+    await waitForPendingOperations();
+    if (worker) await postWorkerOperation('checkpoint', {});
+    // The maintenance fence prevents a renderer from appending new WAL frames
+    // between the checkpoint and this file copy. Without it, a successful
+    // backup can omit a queued edit or copy the database during auto-checkpoint.
+    await fs.promises.copyFile(getDatabasePath(), result.filePath);
+    return result.filePath;
+  } finally {
+    // Backup keeps the active database and renderer alive, so always release
+    // the write guard explicitly instead of waiting for a reload.
+    finishMaintenance(true);
+  }
 });
 
 ipcMain.handle('local-db:restore', async (event, backupPath: unknown) => {
@@ -1223,17 +1861,25 @@ ipcMain.handle('local-db:restore', async (event, backupPath: unknown) => {
   if (typeof backupPath !== 'string' || !path.isAbsolute(backupPath)) {
     throw new Error('올바르지 않은 백업 파일입니다.');
   }
-  const header = Buffer.alloc(16);
-  const backupFile = await fs.promises.open(backupPath, 'r');
-  await backupFile.read(header, 0, 16, 0);
-  await backupFile.close();
-  if (header.toString('utf8') !== 'SQLite format 3\u0000') {
-    throw new Error('Subnota SQLite 백업 파일이 아닙니다.');
+  const databasePath = getDatabasePath();
+  const canonicalPath = (filePath: string) =>
+    fs.promises.realpath(filePath).catch(() => path.resolve(filePath));
+  const [canonicalBackupPath, canonicalDatabasePath] = await Promise.all([
+    canonicalPath(backupPath),
+    canonicalPath(databasePath),
+  ]);
+  if (canonicalBackupPath === canonicalDatabasePath) {
+    throw new Error('현재 사용 중인 데이터베이스는 복원할 수 없습니다.');
   }
-  if (worker) await run('checkpoint', {});
-  await stopWorker();
-  await fs.promises.copyFile(backupPath, getDatabasePath());
-  setImmediate(() => event.sender.reload());
+  const finishMaintenance = await beginDatabaseMaintenance();
+  let databaseReplaced = false;
+  try {
+    await replaceDatabaseFromBackup(backupPath);
+    databaseReplaced = true;
+    reloadDatabaseRenderers(event.sender);
+  } finally {
+    finishMaintenance(!databaseReplaced);
+  }
 });
 
 ipcMain.handle(

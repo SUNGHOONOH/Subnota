@@ -2,17 +2,19 @@
 // 복원: 이 값을 true로 바꾸고 MemoSplitWorkspace 상단바에 ThemeToggle을 되돌린다.
 export const DARK_MODE_ENABLED = false;
 
-export const AMBIENT_HEADING_DELAY_MS = 1500;
-export const AMBIENT_BOUNDARY_DELAY_MS = 2000;
+export const AMBIENT_HEADING_DELAY_MS = 5000;
+export const AMBIENT_BOUNDARY_DELAY_MS = 5000;
 export const AMBIENT_IDLE_DELAY_MS = 5000;
 export const AMBIENT_EMPTY_NOTICE_MS = 2200;
-export const AMBIENT_COOLDOWN_MS = 60000;
 export const AMBIENT_MAX_RESULT_COUNT = 1;
 export const AMBIENT_MIN_CHARS = 12;
 // KLUE-STS 519쌍을 배포 스택(Transformers.js + ONNX q8, 단건)으로 측정했다.
 // 무관(0~1점)의 중앙값도 0.612라 0.58은 필터 역할을 못 했다. 0.75는
 // 정밀도 66.9%/재현율 95.5%, 실제 메모 노출률 29.2%로 주제 연관성을 보존한다.
 export const AMBIENT_MIN_SIMILARITY = 0.75;
+// 더보기 목록은 사용자가 명시적으로 열므로, 고스트보다 조금 넓게 보여 준다.
+// 거의 무관(1~2점) 문장쌍의 중앙값 0.694보다 높은 0.70에서 시작한다.
+export const AMBIENT_LIST_MIN_SIMILARITY = 0.7;
 export const NETWORK_MIN_SIMILARITY = 0.35;
 
 export type TopicTimeFilterKey = '1m' | '6m' | '1y' | 'all';

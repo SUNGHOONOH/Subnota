@@ -46,7 +46,9 @@ vi.mock('electron', () => ({
 const OWNER_A = '11111111-1111-4111-8111-111111111111';
 const OWNER_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_SEARCH = '33333333-3333-4333-8333-333333333333';
-const CURRENT_SIGNATURE = 'Xenova/bge-m3@onnx-q8';
+const OWNER_REPLACE = '44444444-4444-4444-8444-444444444444';
+const CURRENT_SIGNATURE =
+  'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8';
 let databasePath = '';
 let temporaryDirectory = '';
 
@@ -57,6 +59,7 @@ const eventFor = (id: number, url = '') => ({
 const eventA = eventFor(1);
 const eventB = eventFor(2);
 const eventSearch = eventFor(4);
+const eventReplace = eventFor(5);
 
 const invoke = (channel: string, event: unknown, ...args: unknown[]) => {
   const handler = electronState.ipcHandlers[channel];
@@ -103,6 +106,22 @@ const upsertMemo = (
   ownerId: string,
   value: ReturnType<typeof memo>,
 ) => invoke('local-db:upsert', event, ownerId, 'memo', value.id, value);
+
+const patchMemoSyncBase = (
+  event: unknown,
+  ownerId: string,
+  memoId: string,
+  content: string,
+  contentHash: string,
+) =>
+  invoke(
+    'local-db:patch-memo-sync-base',
+    event,
+    ownerId,
+    memoId,
+    content,
+    contentHash,
+  );
 
 const replaceVectors = (
   event: unknown,
@@ -248,6 +267,7 @@ beforeAll(async () => {
   await invoke('local-db:set-owner', eventA, OWNER_A);
   await invoke('local-db:set-owner', eventB, OWNER_B);
   await invoke('local-db:set-owner', eventSearch, OWNER_SEARCH);
+  await invoke('local-db:set-owner', eventReplace, OWNER_REPLACE);
 });
 
 afterAll(async () => {
@@ -272,6 +292,67 @@ describe('local memo vector SQLite store', () => {
       ),
     }));
     expect(counts).toEqual({ states: 0, vectors: 0 });
+  });
+
+  it('keeps the newest acknowledged sync base across a later pending content write', async () => {
+    const memoId = 'memo-sync-base-race';
+    await upsertMemo(
+      eventA,
+      OWNER_A,
+      memo(memoId, '코데이터 솔루', 'hash-local-a', {
+        synced_content: null,
+        synced_content_hash: null,
+      }),
+    );
+    await patchMemoSyncBase(
+      eventA,
+      OWNER_A,
+      memoId,
+      '코데이터 솔루',
+      'hash-server-a',
+    );
+
+    // React에 남아 있던 오래된 pending 행이 뒤늦게 저장되는 상황이다.
+    await upsertMemo(
+      eventA,
+      OWNER_A,
+      memo(memoId, '코데이터 솔루션', 'hash-local-b', {
+        synced_content: null,
+        synced_content_hash: null,
+      }),
+    );
+
+    const stored = inspectDatabase(database => {
+      const row = database
+        .prepare(
+          "SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?",
+        )
+        .get(OWNER_A, memoId) as { payload_json: string };
+      return JSON.parse(row.payload_json) as Record<string, unknown>;
+    });
+    expect(stored.content).toBe('코데이터 솔루션');
+    expect(stored.synced_content).toBe('코데이터 솔루');
+    expect(stored.synced_content_hash).toBe('hash-server-a');
+
+    // 반대 순서로 승인이 뒤늦게 와도 최신 로컬 내용은 건드리지 않는다.
+    await patchMemoSyncBase(
+      eventA,
+      OWNER_A,
+      memoId,
+      '코데이터 솔루션',
+      'hash-server-b',
+    );
+    const patched = inspectDatabase(database => {
+      const row = database
+        .prepare(
+          "SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?",
+        )
+        .get(OWNER_A, memoId) as { payload_json: string };
+      return JSON.parse(row.payload_json) as Record<string, unknown>;
+    });
+    expect(patched.content).toBe('코데이터 솔루션');
+    expect(patched.synced_content).toBe('코데이터 솔루션');
+    expect(patched.synced_content_hash).toBe('hash-server-b');
   });
 
   it('stores 1024 float32 values as a 4096-byte BLOB and records empty indexes', async () => {
@@ -582,6 +663,436 @@ describe('local memo vector SQLite store', () => {
         row => row.memoId === 'remote-gone',
       ),
     ).toBe(false);
+  });
+
+  it('skips both synced deletion and remote upsert for preserved record ids', async () => {
+    const localProtected = {
+      id: 'protected-calendar',
+      local_sync_status: 'synced',
+      title: '열려 있는 로컬 일정',
+      updated_at: '2026-08-11T00:00:00.000Z',
+    };
+    await invoke(
+      'local-db:upsert',
+      eventA,
+      OWNER_A,
+      'calendar',
+      localProtected.id,
+      localProtected,
+    );
+    await invoke(
+      'local-db:upsert',
+      eventA,
+      OWNER_A,
+      'calendar',
+      'stale-calendar',
+      {
+        id: 'stale-calendar',
+        local_sync_status: 'synced',
+        title: '삭제될 일정',
+        updated_at: '2026-08-11T00:00:00.000Z',
+      },
+    );
+
+    const records = (await invoke(
+      'local-db:replace-synced',
+      eventA,
+      OWNER_A,
+      'calendar',
+      [
+        {
+          id: localProtected.id,
+          title: '원격 일정',
+          updated_at: '2026-08-12T00:00:00.000Z',
+        },
+        {
+          id: 'new-calendar',
+          title: '새 원격 일정',
+          updated_at: '2026-08-12T00:00:00.000Z',
+        },
+      ],
+      [localProtected.id],
+    )) as Array<{ id: string; title: string }>;
+
+    expect(records.find(record => record.id === localProtected.id)?.title).toBe(
+      '열려 있는 로컬 일정',
+    );
+    expect(records.some(record => record.id === 'stale-calendar')).toBe(false);
+    expect(records.find(record => record.id === 'new-calendar')?.title).toBe(
+      '새 원격 일정',
+    );
+  });
+
+  it('does not overwrite locally modified records during a synced replacement', async () => {
+    const cases = [
+      { id: 'pending-memo', recordType: 'memo', status: 'pending' },
+      { id: 'failed-calendar', recordType: 'calendar', status: 'failed' },
+      { id: 'deleted-inbox', recordType: 'inbox', status: 'pending_delete' },
+    ];
+
+    for (const testCase of cases) {
+      await invoke(
+        'local-db:upsert',
+        eventReplace,
+        OWNER_REPLACE,
+        testCase.recordType,
+        testCase.id,
+        {
+          id: testCase.id,
+          local_sync_status: testCase.status,
+          marker: 'local',
+          updated_at: '2026-08-11T00:00:00.000Z',
+        },
+      );
+
+      const records = (await invoke(
+        'local-db:replace-synced',
+        eventReplace,
+        OWNER_REPLACE,
+        testCase.recordType,
+        [
+          {
+            id: testCase.id,
+            marker: 'remote',
+            updated_at: '2026-08-12T00:00:00.000Z',
+          },
+          {
+            id: `${testCase.id}-new`,
+            marker: 'new-remote',
+            updated_at: '2026-08-12T00:00:00.000Z',
+          },
+        ],
+      )) as Array<{
+        id: string;
+        local_sync_status?: string;
+        marker: string;
+      }>;
+
+      expect(records.find(record => record.id === testCase.id)).toEqual(
+        expect.objectContaining({
+          local_sync_status: testCase.status,
+          marker: 'local',
+        }),
+      );
+      expect(records.find(record => record.id === `${testCase.id}-new`)).toEqual(
+        expect.objectContaining({
+          local_sync_status: 'synced',
+          marker: 'new-remote',
+        }),
+      );
+    }
+  });
+
+  it('deletes a pending inbox row only when no delete tombstone won the race', async () => {
+    const recordId = 'conditional-inbox-delete';
+    const pending = {
+      ...inboxRecord('pending create'),
+      id: recordId,
+      local_sync_status: 'pending',
+    };
+    await invoke(
+      'local-db:upsert',
+      eventA,
+      OWNER_A,
+      'inbox',
+      recordId,
+      pending,
+    );
+    await expect(
+      invoke(
+        'local-db:delete-inbox-pending-if-not-deleted',
+        eventA,
+        OWNER_A,
+        recordId,
+      ),
+    ).resolves.toBe(true);
+
+    await invoke(
+      'local-db:upsert',
+      eventA,
+      OWNER_A,
+      'inbox',
+      recordId,
+      { ...pending, local_sync_status: 'pending_delete' },
+    );
+    await expect(
+      invoke(
+        'local-db:delete-inbox-pending-if-not-deleted',
+        eventA,
+        OWNER_A,
+        recordId,
+      ),
+    ).resolves.toBe(false);
+
+    const rows = (await invoke(
+      'local-db:list',
+      eventA,
+      OWNER_A,
+      'inbox',
+    )) as Array<{ id: string; local_sync_status: string }>;
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        id: recordId,
+        local_sync_status: 'pending_delete',
+      }),
+    );
+  });
+
+  it('restores the exact local memo snapshot when a pane becomes active during pull', async () => {
+    const memoId = 'late-active-memo';
+    const localSnapshot = {
+      content: '편집기가 가진 A',
+      content_hash: 'hash-a',
+      created_at: '2026-08-11T00:00:00.000Z',
+      id: memoId,
+      is_archived: false,
+      local_sync_status: 'pending',
+      synced_content: '기준 A',
+      synced_content_hash: 'base-hash-a',
+      updated_at: '2026-08-11T00:00:01.000Z',
+    };
+
+    await invoke(
+      'local-db:upsert',
+      eventReplace,
+      OWNER_REPLACE,
+      'memo',
+      memoId,
+      { ...localSnapshot, local_sync_status: 'synced' },
+    );
+    await invoke(
+      'local-db:replace-synced',
+      eventReplace,
+      OWNER_REPLACE,
+      'memo',
+      [
+        {
+          content: '원격 B',
+          content_hash: 'hash-b',
+          created_at: '2026-08-11T00:00:00.000Z',
+          id: memoId,
+          is_archived: false,
+          synced_content: '원격 B',
+          synced_content_hash: 'hash-b',
+          updated_at: '2026-08-12T00:00:00.000Z',
+        },
+      ],
+    );
+
+    await invoke(
+      'local-db:restore-memo-snapshot-after-pull',
+      eventReplace,
+      OWNER_REPLACE,
+      memoId,
+      localSnapshot,
+    );
+
+    const restored = inspectDatabase(database => {
+      const row = database
+        .prepare(
+          "SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?",
+        )
+        .get(OWNER_REPLACE, memoId) as { payload_json: string };
+      return JSON.parse(row.payload_json) as Record<string, unknown>;
+    });
+    expect(restored).toEqual(localSnapshot);
+  });
+
+  it('keeps a newer local edit while repairing its sync base after pull', async () => {
+    const memoId = 'late-active-newer-edit';
+    const editorSnapshot = {
+      content: '편집기가 가진 A',
+      content_hash: 'hash-a',
+      created_at: '2026-08-11T00:00:00.000Z',
+      id: memoId,
+      is_archived: false,
+      local_sync_status: 'synced',
+      synced_content: '기준 A',
+      synced_content_hash: 'base-hash-a',
+      updated_at: '2026-08-11T00:00:01.000Z',
+    };
+    await invoke(
+      'local-db:upsert',
+      eventReplace,
+      OWNER_REPLACE,
+      'memo',
+      memoId,
+      editorSnapshot,
+    );
+    await invoke(
+      'local-db:replace-synced',
+      eventReplace,
+      OWNER_REPLACE,
+      'memo',
+      [
+        {
+          ...editorSnapshot,
+          content: '원격 B',
+          content_hash: 'hash-b',
+          synced_content: '원격 B',
+          synced_content_hash: 'hash-b',
+          updated_at: '2026-08-12T00:00:00.000Z',
+        },
+      ],
+    );
+
+    // The user can type again before the renderer notices the late-active pane.
+    // That write must keep its content, but the base installed from remote B is
+    // still wrong for the live editor that started from A.
+    await invoke(
+      'local-db:upsert',
+      eventReplace,
+      OWNER_REPLACE,
+      'memo',
+      memoId,
+      {
+        ...editorSnapshot,
+        content: '사용자가 방금 입력한 A′',
+        content_hash: 'hash-a-prime',
+        local_sync_status: 'pending',
+        synced_content: null,
+        synced_content_hash: null,
+        updated_at: '2026-08-12T00:00:01.000Z',
+      },
+    );
+    await invoke(
+      'local-db:restore-memo-snapshot-after-pull',
+      eventReplace,
+      OWNER_REPLACE,
+      memoId,
+      editorSnapshot,
+    );
+
+    const restored = inspectDatabase(database => {
+      const row = database
+        .prepare(
+          "SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?",
+        )
+        .get(OWNER_REPLACE, memoId) as { payload_json: string };
+      return JSON.parse(row.payload_json) as Record<string, unknown>;
+    });
+    expect(restored).toEqual(
+      expect.objectContaining({
+        content: '사용자가 방금 입력한 A′',
+        content_hash: 'hash-a-prime',
+        local_sync_status: 'pending',
+        synced_content: '기준 A',
+        synced_content_hash: 'base-hash-a',
+      }),
+    );
+  });
+
+  it('applies a memo sync result only when the expected local content still matches', async () => {
+    const memoId = 'atomic-sync-result';
+    const local = memo(memoId, 'local B', 'hash-b', {
+      synced_content: 'base A',
+      synced_content_hash: 'hash-a',
+    });
+    await upsertMemo(eventReplace, OWNER_REPLACE, local);
+
+    const canonical = {
+      ...local,
+      content: 'canonical B',
+      content_hash: 'canonical-hash-b',
+      local_sync_status: 'synced',
+      synced_content: 'canonical B',
+      synced_content_hash: 'canonical-hash-b',
+    };
+    await expect(
+      invoke(
+        'local-db:apply-memo-sync-result',
+        eventReplace,
+        OWNER_REPLACE,
+        memoId,
+        'local B',
+        canonical,
+      ),
+    ).resolves.toBe(true);
+
+    const newerLocal = {
+      ...canonical,
+      content: 'newer C',
+      content_hash: 'hash-c',
+      local_sync_status: 'pending',
+    };
+    await upsertMemo(eventReplace, OWNER_REPLACE, newerLocal);
+    await expect(
+      invoke(
+        'local-db:apply-memo-sync-result',
+        eventReplace,
+        OWNER_REPLACE,
+        memoId,
+        'canonical B',
+        canonical,
+      ),
+    ).resolves.toBe(false);
+
+    const stored = inspectDatabase(database => {
+      const row = database
+        .prepare(
+          "SELECT payload_json FROM local_records WHERE owner_id = ? AND record_type = 'memo' AND record_id = ?",
+        )
+        .get(OWNER_REPLACE, memoId) as { payload_json: string };
+      return JSON.parse(row.payload_json) as Record<string, unknown>;
+    });
+    expect(stored).toEqual(
+      expect.objectContaining({
+        content: 'newer C',
+        local_sync_status: 'pending',
+      }),
+    );
+  });
+
+  it('strictly validates atomic memo sync result records', () => {
+    expect(() =>
+      invoke(
+        'local-db:apply-memo-sync-result',
+        eventReplace,
+        OWNER_REPLACE,
+        'memo-a',
+        'content',
+        {
+          content: 'content',
+          id: 'memo-b',
+          local_sync_status: 'synced',
+          synced_content: 'content',
+          synced_content_hash: null,
+        },
+      ),
+    ).toThrow('Invalid memo sync result record');
+  });
+
+  it('strictly validates the optional preserved record id collection', () => {
+    expect(() =>
+      invoke(
+        'local-db:replace-synced',
+        eventA,
+        OWNER_A,
+        'memo',
+        [],
+        'memo-id',
+      ),
+    ).toThrow('Invalid preserved record ids');
+    expect(() =>
+      invoke(
+        'local-db:replace-synced',
+        eventA,
+        OWNER_A,
+        'memo',
+        [],
+        Array.from({ length: 501 }, (_, index) => `memo-${index}`),
+      ),
+    ).toThrow('Invalid preserved record ids');
+    expect(() =>
+      invoke(
+        'local-db:replace-synced',
+        eventA,
+        OWNER_A,
+        'memo',
+        [],
+        [''],
+      ),
+    ).toThrow('Invalid preserved record id');
   });
 
   it('searches active vectors by cosine rank, threshold, owner, and current memo exclusion', async () => {

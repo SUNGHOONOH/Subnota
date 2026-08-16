@@ -16,7 +16,11 @@ export const FormattingShortcuts = Extension.create({
     return {
       "Mod-Shift-x": () => this.editor.commands.toggleStrike(),
       "Mod-k": () => {
-        window.dispatchEvent(new CustomEvent(OPEN_LINK_EVENT))
+        window.dispatchEvent(
+          new CustomEvent(OPEN_LINK_EVENT, {
+            detail: { editor: this.editor },
+          }),
+        )
         return true
       },
     }

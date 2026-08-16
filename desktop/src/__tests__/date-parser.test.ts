@@ -33,6 +33,46 @@ describe('date parser', () => {
   });
 });
 
+describe('English date expressions', () => {
+  const base = new Date(2026, 6, 19, 10, 0, 0).getTime(); // 2026-07-19
+
+  it('recognizes relative dates and 12-hour time', () => {
+    const match = parseDates('Tomorrow at 3:30 PM, review the draft', base)[0];
+
+    expect(match).toMatchObject({ hasTime: true, kind: 'english-date' });
+    expect(match.date.getDate()).toBe(20);
+    expect(match.date.getHours()).toBe(15);
+    expect(match.date.getMinutes()).toBe(30);
+  });
+
+  it('recognizes both common named-month orders', () => {
+    expect(parseDates('Aug 20 at noon', base)[0]).toMatchObject({
+      hasTime: true,
+      kind: 'english-date',
+    });
+    expect(parseDates('20 August 2026', base)[0].date.getMonth()).toBe(7);
+  });
+
+  it('recognizes future offsets and weekdays without parsing ambiguous numeric dates', () => {
+    expect(parseDates('in two weeks', base)[0].date.getDate()).toBe(2);
+    expect(parseDates('next Friday', base)[0].date.getDay()).toBe(5);
+    expect(parseDates('Meet on 6/10', base, 'en', 'mdy')[0]).toMatchObject({
+      kind: 'short-date',
+    });
+    expect(parseDates('Meet on 6/10', base, 'en', 'dmy')[0]).toMatchObject({
+      kind: 'short-date',
+    });
+    expect(parseDates('Meet on 6/10', base, 'en', 'ymd')).toHaveLength(0);
+    expect(parseDates('Meet on 6/10', base, 'en', null)).toHaveLength(0);
+    expect(parseDates('Meet on 6/10/2026', base, 'en', 'mdy')[0].date).toEqual(
+      new Date(2026, 5, 10),
+    );
+    expect(parseDates('Meet on 6/10/2026', base, 'en', 'dmy')[0].date).toEqual(
+      new Date(2026, 9, 6),
+    );
+  });
+});
+
 describe('time recognition', () => {
   const base = new Date(2026, 6, 19, 10, 0, 0).getTime(); // 2026-07-19 (일)
 

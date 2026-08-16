@@ -23,7 +23,12 @@ import { OPEN_LINK_EVENT } from "@/components/tiptap-extension/formatting-shortc
 // --- UI Primitives ---
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button/button"
 import { Button } from "@/components/tiptap-ui-primitive/button/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/tiptap-ui-primitive/popover/popover"
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/tiptap-ui-primitive/popover/popover"
 import { Separator } from "@/components/tiptap-ui-primitive/separator/separator"
 import { Card, CardBody, CardItemGroup } from "@/components/tiptap-ui-primitive/card/card"
 import { Input } from "@/components/tiptap-ui-primitive/input/input"
@@ -191,11 +196,9 @@ const LinkMain: React.FC<LinkMainProps> = ({
  */
 export const LinkContent: React.FC<{
   editor?: Editor | null
-  currentFilePath?: string | null
-}> = ({ editor, currentFilePath }) => {
+}> = ({ editor }) => {
   const linkPopover = useLinkPopover({
     editor,
-    currentFilePath,
   })
 
   return <LinkMain {...linkPopover} />
@@ -211,7 +214,6 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
     {
       editor: providedEditor,
       hideWhenUnavailable = false,
-      currentFilePath,
       onSetLink,
       onOpenChange,
       autoOpenOnLinkActive = true,
@@ -238,9 +240,20 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
     } = useLinkPopover({
       editor,
       hideWhenUnavailable,
-      currentFilePath,
       onSetLink,
     })
+
+    const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null)
+
+    const updateAnchor = useCallback(() => {
+      if (!editor || editor.isDestroyed) return
+      try {
+        const coords = editor.view.coordsAtPos(editor.state.selection.from)
+        setAnchor({ left: coords.left, top: coords.top })
+      } catch {
+        setAnchor(null)
+      }
+    }, [editor])
 
     const handleOnOpenChange = useCallback(
       (nextIsOpen: boolean) => {
@@ -259,28 +272,33 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
       (event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event)
         if (event.defaultPrevented) return
+        updateAnchor()
         setIsOpen(!isOpen)
       },
-      [onClick, isOpen]
+      [isOpen, onClick, updateAnchor]
     )
 
     useEffect(() => {
       if (autoOpenOnLinkActive && isActive) {
+        updateAnchor()
         setIsOpen(true)
       }
-    }, [autoOpenOnLinkActive, isActive])
+    }, [autoOpenOnLinkActive, isActive, updateAnchor])
 
     // ⌘K (from the editor keymap) opens this popover so links can be added
     // without reaching for the toolbar.
     useEffect(() => {
-      const handleOpen = () => {
+      const handleOpen = (event: Event) => {
+        const requestedEditor = (event as CustomEvent<{ editor?: Editor }>).detail?.editor
+        if (requestedEditor && requestedEditor !== editor) return
         if (canSet || isActive) {
+          updateAnchor()
           setIsOpen(true)
         }
       }
       window.addEventListener(OPEN_LINK_EVENT, handleOpen)
       return () => window.removeEventListener(OPEN_LINK_EVENT, handleOpen)
-    }, [canSet, isActive])
+    }, [canSet, isActive, updateAnchor])
 
     if (!isVisible) {
       return null
@@ -303,7 +321,22 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
           </LinkButton>
         </PopoverTrigger>
 
-        <PopoverContent>
+        {anchor && (
+          <PopoverAnchor
+            asChild
+            style={{
+              height: 1,
+              left: anchor.left,
+              position: "fixed",
+              top: anchor.top,
+              width: 1,
+            }}
+          >
+            <span aria-hidden="true" className="tiptap-link-popover-anchor" />
+          </PopoverAnchor>
+        )}
+
+        <PopoverContent align="start" side="top" sideOffset={8}>
           <LinkMain
             url={url}
             setUrl={setUrl}

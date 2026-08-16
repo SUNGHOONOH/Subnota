@@ -1,8 +1,13 @@
+/* @font-face 가 먼저 와야 한다 — 뒤에 오면 첫 페인트가 폴백으로 그려진다. */
+@use './styles/fonts';
 @use './styles/variables';
 @use './styles/keyframe-animations';
 @use './styles/subnota-workspace';
 
 body {
   margin: 0;
+  /* 앱 셸이 100vh를 채우고 내부에서만 스크롤한다. 사이드 패널이 슬라이드로
+     드나들 때 화면 밖으로 나가도 가로 스크롤바가 생기지 않게 한다. */
+  overflow: hidden;
   padding: 0;
 }

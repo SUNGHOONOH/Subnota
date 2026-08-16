@@ -6,14 +6,22 @@ export interface SelectionSchedule {
   title: string;
 }
 
+export const didScheduleConfirmSelectionChange = (
+  initialStart: number,
+  initialEnd: number,
+  currentStart: number,
+  currentEnd: number,
+) => initialStart !== currentStart || initialEnd !== currentEnd;
+
 // 선택 문장에서 일정 제목/날짜를 뽑는다. 날짜 표현("7월 25일 오후 2시")은
 // 제목에서 제거하고, 인식 실패 시 date=null(사용자가 날짜를 직접 선택).
 export const buildScheduleFromSelection = (
   selectedText: string,
   now = Date.now(),
+  language: 'en' | 'ko' = 'ko',
 ): SelectionSchedule => {
   const text = selectedText.trim();
-  const match = parseDates(text, now)[0] ?? null;
+  const match = parseDates(text, now, language)[0] ?? null;
 
   if (!match) {
     return { allDay: true, date: null, title: text };

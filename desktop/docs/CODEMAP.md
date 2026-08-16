@@ -1,6 +1,6 @@
 # Subnota Desktop Code Map
 
-Last verified: 2026-07-28
+Last verified: 2026-08-15
 
 This document maps the active unified Electron app in `desktop/`. The legacy
 `macos/` and `windows/` folders are migration safety copies, not sources to
@@ -13,7 +13,7 @@ edit or merge back into the app.
 - Platform policy is centralized in `src/platform/policy.ts`.
 - Renderer UI and SCSS stay shared. Platform branches expose or hide only
   approved platform capabilities.
-- Mini Subnota and the main Inbox work on both platforms.
+- Quick Subnota and the main Inbox work on both platforms.
 - Windows defers automatic current-browser capture, not manual Inbox URLs.
 - Local-first writes reach SQLite before optional remote synchronization.
 
@@ -58,12 +58,12 @@ raw IPC access.
 | --- | --- |
 | `src/main.ts` | BrowserWindow creation, native menu/tray, close behavior, second-instance/deep-link dispatch, IPC, OAuth, Mini and update setup. |
 | `src/local-database.ts` | `node:sqlite` `DatabaseSync` work on a worker thread, WAL, storage location, backup and restore. |
-| `src/mini-subnota.ts` | Mini window positioning/toggling, shortcut registration, recent items and macOS AppleScript capture. |
+| `src/mini-subnota.ts` | Quick Subnota window positioning/toggling, shortcut registration, recent items and macOS AppleScript capture. Capture never reveals the panel — it reports through `onCaptureStart`/`onCaptureError` so the tray can show progress. |
 | `src/deep-link.ts` | Pure parser for `subnota://memo` and `subnota://capture`. Routing permission remains in platform policy. |
 | `src/auto-updater.ts` | Packaged macOS Squirrel.Mac native update feed. Returns inactive on Windows. |
 | `src/update-checker.ts` | GitHub latest-release fallback; selects DMG on macOS and Setup EXE on Windows. |
 | `src/window-close-handler.ts` | Waits for renderer save/flush before closing. |
-| `src/local-embedding.ts` | On-device embeddings via ONNX Runtime (Transformers.js, `Xenova/bge-m3` q8). Model download/cache, separate interactive vs background-index sessions, `local-embed:*` IPC. |
+| `src/local-embedding.ts` | On-device embeddings via ONNX Runtime (Transformers.js, pinned `Xenova/bge-m3` q8 revision). Model download/cache, separate interactive vs background-index sessions, `local-embed:*` IPC. |
 
 ## Platform capability matrix
 
@@ -95,17 +95,47 @@ and automatic browser capture are separate capabilities.
 | `src/features/memo/components/SourceDetailPane.tsx` | Saved web-source detail view. |
 | `src/features/calendar/CalendarWorkspace.tsx` | Week/month calendar and completion flows. |
 | `src/features/inbox/InboxWorkspace.tsx` | Manual URL form, local/remote saved items and source opening. |
-| `src/features/schedule/ScheduleInboxWorkspace.tsx` | Schedule inbox and recommendations. Renamed from `BriefingWorkspace`; briefings themselves remain iOS-only. |
+| `src/features/schedule/ScheduleInboxWorkspace.tsx` | Schedule inbox and recommendations. New entry uses the calendar's rightmost app-side panel; restored legacy view tabs reuse the same component. Week-view drops override the candidate date/time. |
 | `src/features/search/GlobalSearchOverlay.tsx` | Cross-surface search overlay. |
 | `src/features/search/LocalIndexProgress.tsx` | First-run local index progress and model download state. |
-| `src/features/preview/PreviewPanel.tsx` | Read-only preview panel for *reference* opens. Third `.app-shell` grid column, so it is independent of the split-pane count. |
+| `src/features/preview/PreviewPanel.tsx` | Read-only preview panel for *reference* opens. Rendered through the app-level side-panel slot in the last `.app-shell` grid column, so it is independent of the split-pane count. |
 | `src/features/settings/SettingsModal.tsx` | Account, theme, storage and platform-available shortcuts. |
-| `src/features/mini/MiniComposer.tsx` | Shared Mini quick memo renderer. |
-| `src/features/tree/**` | Completion-derived growing tree and forest UI/model. |
+| `src/features/mini/MiniComposer.tsx` | Shared Quick Subnota renderer (paths/classes stay `mini-*`). |
+| `src/components/SubnotaMark.tsx` | **The only place the logo is drawn.** Petal path, the five placements and the viewBox; every other mark component imports from here. Colour comes from `--app-color-brand-mark`. |
+| `src/components/BootBrandMark.tsx` | Boot Phase A motion — scattered note cards gather and unfold into the mark (`assemble`), or a petal chase spinner for reloads (`spin`). Pure CSS; do not reintroduce a JS motion library on the boot path. |
+| `src/components/SubnotaSpinner.tsx` | Small petal-chase spinner for anything that used to rotate an icon (update popover, nav-rail update button). |
+| `src/components/SubnotaScatterMark.tsx` | The inverse of the boot motion — petals fly outward and morph into circles. Used while State B searches for nearby memos. |
+| `src/features/report/**` | Monthly report: heatmap, counts, topics and knowledge growth derived from local data. Replaced the removed growing-tree feature. |
+| `src/components/EmptyState.tsx` | The only empty-state surface. `size` from the container, `tone` from the reason; the mark appears on `start` only, never in `inline`. |
+| `src/components/WorkspaceBootSkeleton.tsx` | Boot Phase B app-shell skeleton (command bar / rail / sidebar / tab bar / body). |
+| `src/features/inbox/InboxCardSkeleton.tsx` | Inbox card placeholders, only when there are no cards at all. |
+| `src/lib/bootPhase.ts` | Boot phases and the two rules that go with them: `resolveBootMarkVariant` (assemble only on the app's first window, and only when it is not a reload) and `resolveBootCloseDelayMs` (a cold start plays the motion to the end; the spinner never holds the screen). |
+| `scripts/generate-brand-assets.mjs` | Bakes `tray.png`(+@2x), `icon.ico`, the icns master PNG and the DMG background from the logo. Uses sharp, not `qlmanage` — Quick Look fills transparency with white, which is what made the menu-bar icon a white square. |
 
 `src/App.tsx` caps split panes at two. A pane can host multiple editor/view tabs.
 Opening a source detail appends or focuses its source tab rather than replacing
 the originating tab.
+
+### Two ways to reach the main window
+
+`main.ts` has two delivery helpers and they are not interchangeable.
+
+| Helper | Creates a window | Shows / focuses | Used by |
+| --- | --- | --- | --- |
+| `sendToMainWindow` | yes, visible | **yes** | `open-settings`, app-menu `new-memo` |
+| `deliverToMainWindow` | yes, **hidden** | **no** | every `inbox-capture` path |
+
+Web clipping and quick memo run while the user is in a browser. Closing the main
+window means "I am using Subnota from the tray and Quick panel" — a clipped link
+must never resurrect that window or steal focus from the browser. The renderer
+still has to run (it owns the local SQLite write and the Supabase session), so
+`deliverToMainWindow` creates one **hidden** when none exists; the tray's
+`Subnota 열기` brings that same window forward later.
+
+Capture feedback therefore lives on the tray, not in a window:
+`⋯` while capturing, `•` once saved, `!` when it failed. The failure also stays
+at the top of the tray menu until the user clicks it, because the OS notification
+is silently dropped when notifications are off or Focus is on.
 
 ### Navigate vs reference opens
 
@@ -122,6 +152,18 @@ neighbour graph nodes (memo and source), Topics chips, Topics graph inbox
 nodes, and the calendar's "open source note". They call `onOpenPreview`, which
 `src/App.tsx` turns into preview-panel state. The panel is reused rather than
 stacked, so clicking through a graph never accumulates panels.
+
+App-level side panels use the same rightmost `.app-shell` slot. They are not
+rendered inside a split pane; feature-internal utility panels (such as the
+calendar's selected-day panel or settings navigation) remain inside their own
+feature layout and are not app-level side panels.
+
+The calendar's top-right Inbox button opens `ScheduleInboxWorkspace` in this
+slot. Every candidate remains draggable; only week view accepts drops, shows a
+green one-hour placement preview, and removes the candidate locally as soon as
+the calendar block is saved. A small local action outbox retries the server
+`accepted`/`dismissed` status later. At narrow window widths the slot overlays
+the workspace from the right instead of shrinking the calendar further.
 
 Navigate opens (12) keep using `openMemoInFocusedSplitPane`, `openViewAsTab`,
 `openMemoInPane` and `openSourceInPane`. A reference open must never take over
@@ -155,7 +197,7 @@ React Native WebView bridge.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/services/local/offlineStore.ts` | Local memos, calendar, Inbox queue, completion/tree data and SQLite persistence facade. |
+| `src/services/local/offlineStore.ts` | Local memos, calendar, Inbox queue, completion and growth events, and the SQLite persistence facade. |
 | `src/services/supabase/client.ts` | Supabase anon client configuration. |
 | `src/services/supabase/data.ts` | Remote data fetch/upsert functions. |
 | `src/services/supabase/memoSync.ts` | Memo sync and conflict behavior. |
@@ -186,15 +228,15 @@ Two invariants live in code comments and regression tests. Do not undo them:
   quantization invalidates every stored vector; the signature column exists so
   stale vectors are discarded rather than silently mixed.
 
-Trigger delays come from the writing stage rather than a single idle timer,
-because a 2s pause lands on someone still composing (keystroke-logging research
-puts the transcription/planning boundary at ~2000ms):
+The writing stage still selects the query text, but every stage waits 5 seconds.
+This deliberately favors a quiet writing flow over earlier recommendations that
+used 1.5–2 second stage-specific delays:
 
 | Stage | Delay | Query |
 | --- | --- | --- |
-| Cursor in a heading | 1.5s | The heading text |
-| Current block empty (just pressed Enter) | 2s | The previous sibling block |
-| Text before the cursor ends at a sentence boundary | 2s | Cursor sentence ±1 |
+| Cursor in a heading | 5s | The heading text |
+| Current block empty (just pressed Enter) | 5s | The previous sibling block |
+| Text before the cursor ends at a sentence boundary | 5s | Cursor sentence ±1 |
 | Otherwise | 5s | Cursor sentence ±1 |
 
 The "previous sibling" lookup walks up the ancestor chain rather than reading
@@ -241,6 +283,7 @@ Windows does not enter the automatic flow.
 | `src/styles/subnota-workspace.scss` | Shared desktop layout, typography, dimensions, components and responsive rules. |
 | `src/lib/colorTokens.ts` | TypeScript/Mantine color values. |
 | `src/lib/mantineTheme.ts` | Mantine mapping for brand, fonts, radii and shadows. |
+| `src/lib/appSettings.ts` / `src/lib/uiLanguage.ts` | Persisted `ko`/`en` UI setting, system-language fallback, localized labels and date locales. |
 | `src/features/mini/MiniComposer.scss` | Shared Mini presentation. |
 | `src/components/**.scss` | Colocated editor component styles. |
 
@@ -274,6 +317,10 @@ The human-facing rules and parity checklist are in `docs/design.md`.
 - `hotkey-hint.test.ts` — ambient shortcuts registered and conflict-free.
 - `offline-store.test.ts` — local-first persistence.
 - `window-close-handler.test.ts` — save-before-close behavior.
+- `empty-state.test.tsx` — when the mark appears, that the seven legacy classes are
+  gone, and that empty is never dressed up as an error.
+- `loading-ux.test.tsx` — boot phases and the fullscreen cap, which surfaces get a
+  skeleton vs. an inline dot, and which keep their existing content while loading.
 
 Run the full suite before deleting legacy folders. Windows installation and UI
 parity still require a real Windows host; CI compilation alone is insufficient.
@@ -288,5 +335,5 @@ Do not delete `macos/` or `windows/` until all are true:
 4. Windows Setup EXE builds, installs, launches and updates on Windows.
 5. Main UI screenshots/flows match the macOS baseline except approved policy
    differences.
-6. Mini quick memo and manual Inbox URL flows pass on both platforms.
+6. Quick Subnota and manual Inbox URL flows pass on both platforms.
 7. The unified CI has succeeded before the legacy CI is removed.

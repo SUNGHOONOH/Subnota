@@ -10,8 +10,8 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "start": "electron-forge start",
-    "make": "electron-forge make",
+    "start": "node node_modules/@electron-forge/cli/dist/electron-forge.js start",
+    "make": "node node_modules/@electron-forge/cli/dist/electron-forge.js make",
     "lint": "eslint --ext .ts,.tsx .",
     "icon": "sh scripts/generate-icon.sh",
     "build:mac": "sh scripts/build-dmg.sh",
@@ -77,7 +77,6 @@
     "@tiptap/extension-list": "3.26.1",
     "@tiptap/extension-subscript": "3.26.1",
     "@tiptap/extension-superscript": "3.26.1",
-    "@tiptap/extension-table": "3.26.1",
     "@tiptap/extension-text-align": "3.26.1",
     "@tiptap/extension-typography": "3.26.1",
     "@tiptap/extensions": "3.26.1",
@@ -95,12 +94,10 @@
     "lodash.throttle": "^4.1.1",
     "lowlight": "^3.3.0",
     "minisearch": "7.2.0",
+    "posthog-js": "^1.415.7",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hotkeys-hook": "^5.3.2",
     "sigma": "^3.0.3"
-  },
-  "pnpm": {
-    "blockExoticSubdeps": false
   }
 }

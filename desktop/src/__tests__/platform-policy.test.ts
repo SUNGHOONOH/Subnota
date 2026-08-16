@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { getDesktopPlatformFeatures } from '../platform/policy';
 
 describe('desktop platform policy', () => {
-  it('keeps Mini Subnota and manual inbox links on Windows without web clipping', () => {
+  it('keeps Quick Subnota and manual inbox links on Windows without web clipping', () => {
     expect(getDesktopPlatformFeatures('win32')).toEqual({
       browserExtensionClipper: false,
       captureShortcut: false,

@@ -29,7 +29,11 @@ describe('upsertMemo (optimistic concurrency)', () => {
 
     expect(rpc).toHaveBeenCalledWith(
       'upsert_memo_if_base_hash',
-      expect.objectContaining({ p_base_hash: 'hBase', p_id: 'm1' }),
+      expect.objectContaining({
+        p_base_hash: 'hBase',
+        p_id: 'm1',
+        p_preserve_conflict_copy: false,
+      }),
     );
     expect(res.status).toBe('updated');
     expect(res.memo?.content).toBe('hello');

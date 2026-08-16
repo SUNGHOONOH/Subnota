@@ -1,0 +1,77 @@
+name: desktop-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: Release notes
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  release-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "$CERTIFICATE_P12_BASE64"
+          test -n "$CERTIFICATE_PASSWORD"
+          CERTIFICATE_PATH="$RUNNER_TEMP/subnota-certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/subnota-build.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          echo "SUBNOTA_BUILD_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build, notarize, verify, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_MEMO_BACKEND_URL: ${{ vars.VITE_MEMO_BACKEND_URL }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: pnpm run release:mac -- "$RELEASE_NOTES"
+
+      - name: Remove temporary keychain
+        if: always()
+        run: |
+          if [ -n "${SUBNOTA_BUILD_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SUBNOTA_BUILD_KEYCHAIN" || true
+          fi

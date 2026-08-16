@@ -34,7 +34,7 @@ export const mantineTheme = createTheme({
     xs: 'var(--legacy-radius-xs)', // 4px
     sm: 'var(--legacy-radius-row)', // 6px
     md: 'var(--legacy-radius-card)', // 8px
-    lg: 'var(--legacy-radius-panel)', // 12px
+    lg: 'var(--legacy-radius-panel)', // 14px
     xl: '1rem', // 16px (legacy 스케일 밖 — Mantine 전용)
   },
 
@@ -86,9 +86,15 @@ export const mantineTheme = createTheme({
         },
       },
     }),
-    // 메모 사이드바의 커스텀 .segment-control과 같은 계열로:
-    // 트랙은 은은한 활성 배경, 선택 인디케이터는 종이색.
+    // 앱의 세그먼트 계열은 트랙에 은은한 배경을 사용하고,
+    // 선택 인디케이터는 종이색으로 띄운다. 트랙은 중성 회색이다 —
+    // 코랄 틴트를 쓰면 늘 켜져 있는 브랜드 강조처럼 보인다.
     SegmentedControl: SegmentedControl.extend({
+      // 999를 넘겨야 진짜 알약이 된다. 테마의 radius.xl은 1rem(16px)이라
+      // 모서리만 둥근 상자로 남는다. Mantine이 이 값으로 트랙과 인디케이터를
+      // 함께 계산하므로, 여기 한 줄이면 네 곳(메모 사이드바·링크 저장함·
+      // 설정·웹 요약)이 같이 바뀐다.
+      defaultProps: { radius: 999 },
       styles: {
         indicator: {
           backgroundColor: 'var(--legacy-bg-canvas)',
@@ -97,7 +103,7 @@ export const mantineTheme = createTheme({
           color: 'var(--legacy-ink)',
         },
         root: {
-          backgroundColor: 'var(--legacy-bg-active-soft)',
+          backgroundColor: 'var(--app-color-bg-muted)',
         },
       },
     }),

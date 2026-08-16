@@ -54,7 +54,7 @@ backend/
       utils.py                      # DB operation helpers
     features/                       # Core enrichment pipelines
       inbox/                        # Web clipping, scraping, summary (Gemini/Playwright)
-      memo/                         # Sentence chunking (Kiwi) and embedding creation
+      memo/                         # Kiwi Korean chunks + pySBD English refinement and embeddings
       network/                      # Cursor chunk similarity search (pgvector)
       schedule/                     # Nightly schedule candidate extraction
       topics/                       # State A topic clustering pipeline
@@ -153,8 +153,27 @@ Topic discovery thresholds live in `app/constants.py`, not `.env`.
 Current embedding model:
 
 ```text
-dragonkue/BGE-m3-ko
+BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181
 ```
 
 Embeddings are requested through Hugging Face Inference API. The backend does not download
-the model locally; it only receives vectors and runs clustering locally.
+the model locally; it only receives vectors and runs clustering locally. Hugging Face
+serverless inference receives the model id rather than a Hub commit, so the revision above
+is a cache/audit identifier, not a runtime weight pin.
+
+## Language handling
+
+- Inbox summaries and topic labels use the source content's dominant language:
+  clearly English content is generated in English; Korean or mixed content keeps
+  the existing Korean output for stability. Metadata-only fallbacks use the same
+  rule. URL summaries ask the model to infer the source language.
+- Korean sentence/chunk boundaries use Kiwi.
+- English and mixed Korean/English text is refined with pySBD after Kiwi. Inline
+  Markdown/code/math is masked and source offsets are preserved; unsupported
+  cases remain plain text rather than being split aggressively.
+- Schedule extraction supports the shared Korean rules plus a bounded set of
+  English expressions (named months, relative offsets, weekdays, AM/PM, noon,
+  and midnight). Ambiguous numeric English dates such as `6/10` remain
+  unparsed in the backend because batch jobs do not receive the user's device
+  region; the desktop parser may interpret them only when its locale clearly
+  establishes MDY or DMY.

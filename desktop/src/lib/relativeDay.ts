@@ -7,9 +7,12 @@
  */
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+export type RelativeDayLanguage = 'en' | 'ko';
+
 export const formatRelativeDay = (
   timestamp: number | null | undefined,
   now: number = Date.now(),
+  language: RelativeDayLanguage = 'ko',
 ): string => {
   if (timestamp == null || !Number.isFinite(timestamp)) {
     return '';
@@ -24,12 +27,19 @@ export const formatRelativeDay = (
   const days = Math.round((startOfDay(now) - startOfDay(timestamp)) / MS_PER_DAY);
 
   if (days < 0) return '';
-  if (days === 0) return '오늘';
-  if (days === 1) return '어제';
+  if (days === 0) return language === 'en' ? 'Today' : '오늘';
+  if (days === 1) return language === 'en' ? 'Yesterday' : '어제';
   // 7일까지는 "7일 전"으로 센다. 일주일은 아직 날짜로 세는 감각이라
   // "1주 전"보다 구체적이고, 8일부터 주 단위로 접는다.
-  if (days <= 7) return `${days}일 전`;
-  if (days < 30) return `${Math.floor(days / 7)}주 전`;
-  if (days < 365) return `${Math.floor(days / 30)}개월 전`;
-  return `${Math.floor(days / 365)}년 전`;
+  if (days <= 7) return language === 'en' ? `${days} days ago` : `${days}일 전`;
+  if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return language === 'en' ? `${weeks}w ago` : `${weeks}주 전`;
+  }
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return language === 'en' ? `${months}mo ago` : `${months}개월 전`;
+  }
+  const years = Math.floor(days / 365);
+  return language === 'en' ? `${years}y ago` : `${years}년 전`;
 };
