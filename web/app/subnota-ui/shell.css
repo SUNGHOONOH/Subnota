@@ -259,6 +259,13 @@
   transition: transform 150ms ease;
 }
 
+.topic-folder-icon {
+  align-items: center;
+  color: var(--app-color-muted);
+  display: inline-flex;
+  flex: none;
+}
+
 .topic-folder-label {
   flex: 1;
   font-size: var(--app-font-md);
@@ -379,6 +386,50 @@
   flex: 1.35 1 0;
 }
 
+/* 새 탭에서 열 수 있는 네 가지 기본 화면. 실제 앱의 빈 패널 선택 화면과
+   같은 밀도만 남겨 대표 씬에서도 기능 범위를 한눈에 읽게 한다. */
+.new-tab-picker-stage {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  padding: 32px;
+}
+
+.new-tab-picker-panel {
+  width: min(340px, 100%);
+}
+
+.new-tab-picker-title {
+  color: var(--app-color-text);
+  font-size: var(--app-font-md);
+  font-weight: var(--app-weight-black);
+  margin: 0 0 18px;
+}
+
+.new-tab-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.new-tab-picker-item {
+  align-items: center;
+  color: var(--app-color-text);
+  display: flex;
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-black);
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.new-tab-picker-item svg {
+  color: var(--app-color-muted);
+  flex: 0 0 auto;
+}
+
 .split-pane-header {
   align-items: center;
   display: flex;
@@ -404,7 +455,7 @@
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-row);
+  border-radius: var(--app-radius-pill);
   color: var(--app-color-muted-control);
   display: flex;
   font-size: var(--app-font-xs);
@@ -414,15 +465,22 @@
   justify-content: center;
   max-width: 100px;
   min-width: 52px;
-  padding: 0 9px;
-  transition: background-color 140ms ease, color 140ms ease;
+  padding: 0 11px;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
   white-space: nowrap;
 }
 
-/* 사이드바 선택과 같은 규칙 — 활성 탭은 테두리로 상자를 그리지 않고 면이 뜬다. */
+/* 실제 앱과 같은 브랜드 워시 — 활성 탭은 테두리 대신 차가운 면으로 뜬다. */
 .split-editor-tab.active {
-  background: var(--app-color-state-raised);
-  box-shadow: var(--app-color-state-raised-shadow);
+  background: rgba(var(--app-color-brand-rgb), 0.07);
+  box-shadow:
+    0 1px 2px rgba(var(--app-color-brand-rgb), 0.1),
+    0 4px 10px rgba(var(--app-color-brand-rgb), 0.08);
+  color: var(--app-color-brand-700);
+}
+
+.split-editor-tab:not(.active):hover {
+  background: rgba(var(--app-color-brand-rgb), 0.04);
   color: var(--app-color-text);
 }
 

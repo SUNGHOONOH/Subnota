@@ -150,6 +150,36 @@
   transform: translateX(-50%);
 }
 
+.scene-float-capture {
+  left: 40px;
+  right: auto;
+  top: 76px;
+}
+
+/* Safari 목업 자체가 트래픽 라이트를 그린다. SceneShowcase의 앱용 라이트는
+   한 겹 더 생기므로 이 장면에서는 숨긴다. */
+.reuse-browser-scene .showcase-dots {
+  display: none;
+}
+
+/* 이 장면은 앱 창 안에 웹페이지를 넣는 대신, Safari를 좌측 상단에서 살짝
+   띄워 보여 준다. 오른쪽·아래쪽은 무대 끝까지 밀어 자연스럽게 잘라 낸다. */
+.reuse-browser-scene .showcase-window {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  height: calc(100% - 40px);
+  left: 56px;
+  top: 40px;
+  transform: none;
+  width: calc(100% - 56px);
+}
+
+.reuse-browser-scene .scene-stage > svg {
+  display: block;
+  max-width: none;
+}
+
 .scene-float-hotkey {
   align-items: center;
   display: flex;
@@ -170,6 +200,83 @@
   min-width: 40px;
   padding: 11px 12px;
   text-align: center;
+}
+
+.safari-mockup-content {
+  background: #fffdf9;
+  color: #2c2520;
+  font-family: var(--font-sans);
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.safari-menu-mark {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.safari-menu-mark svg {
+  color: var(--app-color-brand-mark);
+}
+
+.safari-page-content {
+  max-width: 760px;
+  padding: 200px 92px;
+}
+
+.safari-page-content__eyebrow {
+  color: #a28c73;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.safari-page-content h3 {
+  font-family: var(--app-font-wordmark);
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin: 18px 0 16px;
+}
+
+.safari-page-content p {
+  color: #76695e;
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.safari-page-content__rule {
+  background: #e9e2d8;
+  height: 1px;
+  margin: 38px 0 24px;
+  width: 100%;
+}
+
+.safari-page-content__lines {
+  display: grid;
+  gap: 10px;
+}
+
+.safari-page-content__lines span {
+  background: #eee8df;
+  border-radius: 4px;
+  display: block;
+  height: 8px;
+  width: 78%;
+}
+
+.safari-page-content__lines span:nth-child(2) {
+  width: 92%;
+}
+
+.safari-page-content__lines span:nth-child(3) {
+  width: 64%;
 }
 
 /* 수집함 자리표시자 줄 — 앱의 납작한 회색 스켈레톤과 같은 값. */
@@ -205,6 +312,7 @@
 }
 
 .fragment-memo {
+  width: 430px;
   position: relative;
 }
 
@@ -223,8 +331,13 @@
   gap: 7px;
   left: 14px;
   position: absolute;
-  top: 13px;
+  top: 23px;
   z-index: 5;
+}
+
+/* 창 조각에서도 탭은 macOS 트래픽 라이트 영역을 침범하지 않는다. */
+.fragment-memo .split-pane-header {
+  padding-left: 72px;
 }
 
 .fragment-dots span {
@@ -246,14 +359,8 @@
 }
 
 .fragment-memo-body {
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
+  display: block;
   min-height: 260px;
-}
-
-.fragment-memo-rail {
-  background: var(--app-color-chrome-bg);
-  padding: 12px 8px;
 }
 
 .fragment-memo-editor {
@@ -263,11 +370,6 @@
   padding: 4px 0 16px;
 }
 
-/* 조각 안에서는 신호등이 레일 위에 있으므로 목록을 그만큼 내린다. */
-.fragment-memo-rail {
-  padding-top: 34px;
-}
-
 /* 팝오버는 선택한 문장 바로 아래에 뜬다. */
 .fragment-float {
   position: absolute;
@@ -275,21 +377,113 @@
 }
 
 .fragment-float-bubble {
-  left: 188px;
+  left: 20px;
   top: 264px;
 }
 
-.fragment-link {
+.fragment-links {
   align-self: center;
-  height: 120px;
+  height: 520px;
   overflow: visible;
-  width: 140px;
+  width: 110px;
 }
 
 .fragment-calendar {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
+}
+
+/* 일정이 생겨도 카드의 외곽과 월간 격자 행은 흔들리지 않는다. */
+.fragment-calendar > .cal-fragment:first-child {
+  box-sizing: border-box;
+  height: 280px;
+  overflow: hidden;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-head .cal-col-head {
+  gap: 2px;
+  padding: 3px 0;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-head .cal-col-dow,
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-head .cal-col-date {
+  font-size: var(--app-font-xs);
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-allday {
+  min-height: 20px;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-grid {
+  flex: 0 0 auto;
+  height: 140px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-grid .cal-hour-label {
+  font-size: 9px;
+  padding-right: 5px;
+  transform: translateY(-5px);
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-grid .cal-event {
+  padding: 2px 4px;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-grid .cal-event strong {
+  font-size: 9px;
+  line-height: 10px;
+}
+
+.fragment-calendar > .cal-fragment:first-child .cal-fragment-week-grid .cal-event span {
+  font-size: 8px;
+  line-height: 9px;
+}
+
+.fragment-calendar > .cal-fragment:last-child {
+  box-sizing: border-box;
+  height: 226px;
+  overflow: hidden;
+}
+
+.fragment-calendar > .cal-fragment:last-child .cal-month-grid {
+  flex: 0 0 160px;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  height: 160px;
+  min-height: 0;
+}
+
+.fragment-calendar .cal-month-cell {
+  min-height: 0;
+}
+
+.fragment-calendar .cal-month-items {
+  min-height: 0;
+}
+
+@keyframes fragment-cal-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  70% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fragment-calendar .cal-pop-item {
+  animation: fragment-cal-pop 260ms ease-out both;
+  transform-origin: center;
 }
 
 /* 흉내 낸 포인터. 무대 좌표에 얹히므로 문서 흐름 밖이다. */

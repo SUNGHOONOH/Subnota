@@ -11,7 +11,6 @@ import {
   Network,
   Plus,
   Search,
-  X,
 } from './icons';
 
 /* 문장을 드래그해 선택하면 뜨는 팝오버. 서식 버튼 다음에 구분선을 두고,
@@ -69,7 +68,6 @@ export function PaneTabs({
             key={tab.id}
           >
             <span className="split-tab-label">{tab.label}</span>
-            {tab.id === activeId && <X size={12} />}
           </span>
         ))}
         <span className="split-editor-tab-add">

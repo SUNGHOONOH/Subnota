@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '../../subnota-ui/AppShell';
 import { AmbientGhost, MemoPane, NoteHeader } from '../../subnota-ui/EditorPane';
 import { PreviewPanel } from '../../subnota-ui/Panels';
+import { ARROW_UP, HandNote } from '../annotations';
 import { Caret, SceneShowcase, useSceneSteps, useTyping } from '../Scene';
 
 const LINE_ONE = '지난번처럼 그 자리에서 떠올리면 늦는다.';
@@ -87,6 +88,12 @@ export default function ConnectedMemoryScene() {
             </div>
           </MemoPane>
         </AppShell>
+        <HandNote
+          arrow={ARROW_UP}
+          arrowId="connected-memory-note"
+          style={{ left: 46, top: 280 }}
+          text="7일 전에 썼던 메모네요!"
+        />
       </SceneShowcase>
     </div>
   );

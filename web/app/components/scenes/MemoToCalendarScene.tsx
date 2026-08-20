@@ -31,30 +31,39 @@ import {
 } from './fixtures';
 
 const SENTENCE = '내일 오후 3시 팀 미팅 참석하기';
-/* 드래그로 잡히는 구간. 문장 앞쪽의 날짜 표현이다. */
-const PICK = 8;
+/* 날짜 표현을 먼저 감지하지만, 일정 등록은 문장 전체를 대상으로 한다. */
+const DATE_END = 8;
+/* 선택 글자 수와 무관하게 마우스 이동과 드래그가 같은 시간에 끝난다. */
+const DRAG_DURATION_MS = 1500;
 
 /* 타이핑 → 커서가 문장 앞으로 → 끌어서 선택 → 팝오버 → [일정 등록] 클릭 →
    캘린더에 배치 */
 const DURATIONS = [2600, 700, 1000, 1200, 600, 2800];
 
-/* 무대(.fragment-memo) 기준 좌표. 실측값이다 — 날짜 토큰 x 188, 아래 255. */
+/* 무대(.fragment-memo) 기준 좌표. 메모 레일을 두지 않고 본문을 바로 보여 준다. */
 const CURSOR = {
-  button: { x: 300, y: 286 },
+  button: { x: 190, y: 286 },
   rest: { x: 150, y: 320 },
-  tokenEnd: { x: 292, y: 246 },
-  tokenStart: { x: 188, y: 246 },
+  tokenEnd: { x: 320, y: 246 },
+  tokenStart: { x: 22, y: 246 },
 };
 
-const STRIP_HOURS = ['04', '08', '12', '16', '20'];
+const STRIP_HOURS = ['09', '11', '13', '15', '17'];
 const MEMO_TABS = [{ id: 't1', label: '내일 팀 미팅' }];
 
 export default function MemoToCalendarScene() {
   const { step, hostRef } = useSceneSteps(DURATIONS);
   const typing = useTyping(SENTENCE, step === 0);
-  const picked = useSelection(PICK, step === 2);
+  const picked = useSelection(
+    SENTENCE.length,
+    step === 2,
+    DRAG_DURATION_MS / SENTENCE.length,
+  );
 
-  const selectedCount = step === 2 ? picked : step > 2 && step < 5 ? PICK : 0;
+  const selectedCount =
+    step === 2 ? picked : step > 2 && step < 5 ? SENTENCE.length : 0;
+  const selectedDateEnd = Math.min(selectedCount, DATE_END);
+  const selectedRestLength = Math.max(0, selectedCount - DATE_END);
   const showBubble = step === 3 || step === 4;
   const placed = step >= 5;
 
@@ -85,35 +94,24 @@ export default function MemoToCalendarScene() {
                 <span />
               </div>
               <div className="fragment-memo-body">
-                <div className="fragment-memo-rail">
-                  <div className="memo-row active">
-                    <strong>내일 팀 미팅</strong>
-                    <span>회의 준비물 정리하고…</span>
-                  </div>
-                  <div className="memo-row">
-                    <strong>주간 회고</strong>
-                    <span>이번 주에 놓친 것 세 가지</span>
-                  </div>
-                  <div className="memo-row">
-                    <strong>읽을거리</strong>
-                    <span>검색 UX 관련 글 모음</span>
-                  </div>
-                </div>
                 <div className="fragment-memo-editor">
                   <PaneTabs activeId="t1" tabs={MEMO_TABS} />
                   <NoteHeader title="내일 팀 미팅" />
                   <div className="simple-editor-content" style={{ padding: '14px 20px' }}>
                     <p>회의 준비물 정리하고,</p>
                     <p>
-                      {/* 잡힌 만큼만 선택 배경이 깔린다. 나머지는 날짜 표시
-                          그대로 남아 "끌고 있는 중"으로 읽힌다. */}
+                      {/* 날짜 표현은 감지된 문법을 유지하되, 드래그는 문장 전체를
+                          선택해 일정 제목과 시간이 함께 전달되는 흐름이다. */}
                       <span className="date-token">
                         <span className="editor-selection">
-                          {typing.typed.slice(0, selectedCount)}
+                          {typing.typed.slice(0, selectedDateEnd)}
                         </span>
-                        {typing.typed.slice(selectedCount, PICK)}
+                        {typing.typed.slice(selectedDateEnd, DATE_END)}
                       </span>
-                      {typing.typed.slice(PICK)}
+                      <span className={selectedRestLength ? 'editor-selection' : undefined}>
+                        {typing.typed.slice(DATE_END, DATE_END + selectedRestLength)}
+                      </span>
+                      {typing.typed.slice(DATE_END + selectedRestLength)}
                       {!typing.done && <Caret />}
                     </p>
                   </div>
@@ -139,7 +137,8 @@ export default function MemoToCalendarScene() {
             </AnimatePresence>
 
             <SimulatedCursor
-              duration={step === 2 ? 0.9 : 0.45}
+              duration={step === 2 ? DRAG_DURATION_MS / 1000 : 0.45}
+              ease={step === 2 ? 'linear' : 'easeOut'}
               pressing={step === 4}
               visible={step >= 1 && step <= 4}
               x={cursor.x}
@@ -147,24 +146,55 @@ export default function MemoToCalendarScene() {
             />
           </div>
 
-          {/* 문장에서 캘린더로 건너가는 선. 등록이 끝나면 그어진다. */}
-          <svg aria-hidden="true" className="fragment-link" viewBox="0 0 140 120">
-            <motion.path
-              animate={{ pathLength: placed ? 1 : 0 }}
-              d="M4,96 C48,92 78,58 134,30 M120,16 C127,22 131,27 134,30 M118,34 C126,33 131,31 134,30"
-              fill="none"
-              initial={{ pathLength: 0 }}
-              stroke="#c9b98f"
-              strokeLinecap="round"
-              strokeWidth="2.4"
-              transition={{ duration: 0.55, ease: 'easeOut' }}
-            />
+          {/* 등록 결과가 주간·월간 캘린더로 각각 갈라지는 흐름을 보여 준다. */}
+          <svg aria-hidden="true" className="fragment-links" viewBox="0 0 110 520">
+            <defs>
+              {/* The older landing version used one noisy stroke, rather than a
+                  second dashed stroke that could linger during the reset. */}
+              <filter id="fragment-pencil" height="130%" width="130%" x="-15%" y="-15%">
+                <feTurbulence
+                  baseFrequency="0.09"
+                  numOctaves="4"
+                  result="noise"
+                  type="fractalNoise"
+                />
+                <feDisplacementMap
+                  in="SourceGraphic"
+                  in2="noise"
+                  scale="2.8"
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                />
+              </filter>
+            </defs>
+            {[{
+              body: 'M4,260 C38,260 57,108 105,82',
+            }, {
+              body: 'M4,260 C38,260 57,407 105,434',
+            }].map(({ body }) => (
+              <g key={body}>
+                <motion.path
+                  animate={placed ? { pathLength: 1, opacity: 0.86 } : { pathLength: 0, opacity: 0 }}
+                  d={body}
+                  filter="url(#fragment-pencil)"
+                  fill="none"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  stroke="#c9962f"
+                  strokeLinecap="round"
+                  strokeWidth="3.2"
+                  transition={placed
+                    ? { duration: 0.9, ease: 'easeInOut' }
+                    : { duration: 0 }}
+                />
+              </g>
+            ))}
           </svg>
 
           {/* 오른쪽 — 캘린더 조각 둘 */}
           <div className="fragment-calendar">
             <CalendarWeekStrip
               badge="8월 3주차"
+              popItems={placed}
               hours={STRIP_HOURS}
               rows={placed ? WEEK_ROWS_PLACED : WEEK_ROWS}
               title="이번주 블록"
@@ -172,6 +202,7 @@ export default function MemoToCalendarScene() {
             <CalendarMonth
               badge="8월"
               cells={placed ? MONTH_CELLS_PLACED : MONTH_CELLS}
+              popItems={placed}
               title="2026년 8월"
             />
           </div>

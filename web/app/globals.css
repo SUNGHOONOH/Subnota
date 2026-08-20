@@ -44,6 +44,12 @@
   --brand-mark: #4c71b7;
   --brand-petal: #0b6e4f;
 
+  /* 히어로 파랑. 위가 진할수록 유리 조각이 또렷해진다 — 이 값이 조각이
+     보이느냐 마느냐를 혼자 결정한다. */
+  --hero-top: #4a77c6;
+  --hero-mid: #86aade;
+  --hero-low: #cfdff3;
+
   --shadow-panel: 0 2px 6px rgba(92, 77, 60, 0.06);
   --shadow-frame: 0 1px 2px rgba(44, 37, 32, 0.05), 0 18px 44px rgba(44, 37, 32, 0.08);
 
@@ -127,10 +133,10 @@ button:focus-visible {
 /* ===== 헤더 ===== */
 .site-header {
   align-items: center;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  border-bottom: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
   display: flex;
   gap: 24px;
   justify-content: space-between;
@@ -170,29 +176,35 @@ button:focus-visible {
 .nav-links {
   align-items: center;
   display: flex;
-  gap: 4px;
+  gap: 8px;
   margin-right: auto;
   padding-left: 22px;
 }
 
 .nav-links > a,
 .nav-menu-trigger {
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
+  /* 헤더 바 자체가 이미 흰 유리라 흰 알약을 또 얹으면 묻힌다 — 아주 옅은
+     잉크 틴트와 헤어라인으로 면을 만든다. 짧은 라벨 하나를 담는 칸이라
+     999px 이 맞다. */
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(20, 20, 19, 0.07);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: var(--ink-soft);
   cursor: pointer;
   display: inline-block;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
-  padding: 7px 11px;
-  transition: color 140ms ease, background-color 140ms ease;
+  padding: 7px 15px;
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease;
 }
 
 .nav-links > a:hover,
 .nav-menu-trigger:hover,
 .nav-menu-trigger[aria-expanded='true'] {
-  background: rgba(20, 20, 19, 0.04);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(20, 20, 19, 0.13);
   color: var(--ink);
 }
 
@@ -341,6 +353,50 @@ button:focus-visible {
   transform: scale(var(--press-scale));
 }
 
+/* 언어 전환. 트랙 하나가 유리고 그 안에서 선택된 칸만 흰 면으로 솟는다.
+   칸마다 테두리를 주면 "버튼 두 개"가 되어 하나의 스위처로 안 읽힌다 —
+   앱의 주/월 스위처와 같은 문법이다. */
+.lang-switch {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  display: flex;
+  flex: none;
+  padding: 3px;
+}
+
+.lang-switch button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 5px 12px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.lang-switch button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.lang-switch button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.lang-switch button[aria-current='true'] {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.12);
+  color: var(--ink);
+}
+
 /* ===== 공통 레이아웃 ===== */
 /* 헤더가 fixed라 앵커로 온 목적지 제목이 그 아래로 숨는다. */
 section[id] {
@@ -361,25 +417,27 @@ main {
 /* ===== Hero =====
    첫 화면은 제품의 얼굴로 시작한다. 배경은 로고의 잉크 블루에서 내려온 면과
    아주 옅게 깔린 물망초 마크뿐 — 새 마케팅 그래픽을 만들지 않는다. */
+/* 앱의 정체성을 배경 하나로 세운다. 그 위에 흩어진 생각 조각이 유리
+   알약으로 떠 있고, 가운데 문장이 그것을 거둬들인다는 이야기다. */
 .hero {
+  align-items: center;
+  background: linear-gradient(
+    180deg,
+    var(--hero-top) 0%,
+    var(--hero-mid) 44%,
+    var(--hero-low) 74%,
+    #ffffff 100%
+  );
+  display: grid;
   isolation: isolate;
+  /* 콘텐츠를 한가운데 고정한다. 그래야 위·아래 띠가 콘텐츠 높이와 무관하게
+     일정해지고, 문구를 고쳐도 조각이 밀리지 않는다. */
+  justify-items: center;
+  min-height: clamp(600px, 86vh, 820px);
   overflow: hidden;
-  padding-block: clamp(76px, 11vw, 132px) clamp(72px, 10vw, 116px);
+  padding-block: 100px 80px;
   position: relative;
   text-align: center;
-}
-
-.hero-bg {
-  background:
-    radial-gradient(110% 78% at 50% -6%, #dfebfc 0%, #eff5fe 42%, #ffffff 76%);
-  inset: 0;
-  position: absolute;
-  z-index: -1;
-}
-
-.hero-mark {
-  color: var(--brand-mark);
-  margin-bottom: 26px;
 }
 
 .hero-inner {
@@ -387,27 +445,96 @@ main {
   display: flex;
   flex-direction: column;
   position: relative;
+  z-index: 3;
 }
 
 .hero h1 {
+  color: #ffffff;
   font-family: var(--font-display);
   word-break: keep-all;
-  font-size: clamp(32px, 5.4vw, 60px);
+  font-size: clamp(34px, 5.4vw, 62px);
   font-weight: 600;
   letter-spacing: -0.034em;
   line-height: 1.16;
   max-width: 20ch;
+  text-shadow: 0 1px 20px rgba(24, 52, 96, 0.18);
   text-wrap: balance;
 }
 
-.hero-lead {
-  color: var(--ink-soft);
-  word-break: keep-all;
-  font-size: clamp(15px, 1.5vw, 18px);
-  line-height: 1.68;
-  margin-top: 22px;
-  max-width: 50ch;
+.wordmark-text {
+  font-family: var(--font-wordmark);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
+
+/* ── 흩어진 생각 조각 ──
+   가운데 텍스트 열을 침범하지 않게 좌우 바깥쪽에만 둔다. 작게 만든 이유는
+   둘이다: 작아야 많이 흩뿌릴 수 있고, 작아야 좁은 화면에서 가운데 글자를
+   안 건드리고 남는다. 크기만 창 폭을 따라가고 좌표는 고정이라, 어느
+   화면에서나 같은 흩어짐이 유지된다 — 줄로 정렬하지 않는다. */
+.thought {
+  border-radius: 999px;
+  font-size: clamp(11px, 1.25vw, 15px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: clamp(6px, 0.78vw, 9px) clamp(11px, 1.35vw, 18px);
+  position: absolute;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.thought-frost {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 6px 18px rgba(26, 52, 96, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  color: #223c68;
+}
+
+/* 흰 글자라 파랑이 진한 위 띠에서만 쓴다. 아래 띠는 배경이 거의 흰색이라
+   글자가 사라진다 — 규칙을 어기면 바로 안 보인다. */
+.thought-ink {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 18px rgba(26, 52, 96, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+
+/* 멀리 있는 조각은 작고 흐리다 — 모션이 없으니 위계는 이걸로만 만든다. */
+.thought-far {
+  font-size: clamp(10px, 1.12vw, 13.5px);
+  opacity: 0.84;
+}
+
+/* 조각 안의 날짜 표시. 앱의 .date-token 과 같은 올리브지만 무대 밖이라
+   이름이 겹치지 않게 조각 안으로 한정한다. */
+.thought .thought-date {
+  background: rgba(102, 112, 90, 0.2);
+  border-radius: 3px;
+  color: #3f4a37;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.thought-ink .thought-date {
+  background: rgba(255, 255, 255, 0.34);
+  color: #ffffff;
+}
+
+/* 좌표는 한 벌뿐이다. 지켜야 할 규칙 하나: 세로 32~68% 구간은 비워 둔다.
+   콘텐츠가 히어로 한가운데 고정돼 있고 좁은 화면에서는 그게 폭을 꽉 채우기
+   때문이다. 좌우 값은 일부러 규칙 없이 흩었다 — 줄이 보이면 목록이 된다. */
+.t1 { left: 6%; top: 12%; }
+.t2 { right: 8%; top: 21%; }
+.t3 { left: 24%; top: 25%; }
+.t4 { right: 19%; top: 76%; }
+.t5 { left: 7%; top: 84%; }
+.t6 { right: 5%; top: 88%; }
 
 .hero-actions {
   align-items: center;
@@ -415,15 +542,15 @@ main {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
-  margin-top: 34px;
+  margin-top: 28px;
 }
 
 /* OS 스토어 배지 형태. 링크가 아직 없어도 형태는 그대로 두고 상단 라벨만
    "출시 예정"으로 바꾼다 — 404로 보내는 버튼은 없는 버튼보다 나쁘다. */
 .download-btn {
   align-items: center;
-  background: rgba(18, 17, 15, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 17, 15, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-sm);
   color: #ffffff;
   display: inline-flex;
@@ -477,10 +604,16 @@ main {
   letter-spacing: -0.1px;
 }
 
+/* 히어로 안내문은 그라디언트의 옅은 아래쪽 띠에 앉는다. 흰 글자로 두면
+   배경과 같이 밝아져 읽히지 않으므로 진한 잉크 블루로 뒤집는다. */
 .hero-note {
   color: var(--muted);
   font-size: 13px;
   margin-top: 16px;
+}
+
+.hero .hero-note {
+  color: var(--brand-ink);
 }
 
 /* ===== About / Features 도입부 ===== */
@@ -491,46 +624,178 @@ main {
   margin-bottom: 14px;
 }
 
+/* 흰 페이지 위 흰 글자 덩어리라 섹션이 어디서 시작하는지 안 보였다. 옅은
+   면 하나를 깔아 "여기부터 다른 이야기"를 만들고, 그 위에 히어로의 조각을
+   다시 몇 개 흘려 둔다 — 같은 말을 하는 두 화면이라는 표시다. */
 .about {
-  border-top: 1px solid var(--line);
-  padding-block: clamp(52px, 7vw, 88px);
+  padding-block: clamp(56px, 7vw, 96px);
 }
 
-.about > h2 {
+.about-panel {
+  background: linear-gradient(180deg, #f4f7fd 0%, #fafbfe 62%, #ffffff 100%);
+  border: 1px solid #e8edf6;
+  border-radius: 28px;
+  isolation: isolate;
+  overflow: hidden;
+  --about-pad-x: clamp(24px, 4vw, 64px);
+  --about-pad-y: clamp(36px, 5vw, 72px);
+  padding: var(--about-pad-y) var(--about-pad-x);
+  position: relative;
+}
+
+/* 묶음이 패널 "안쪽" 상자가 된다. 이걸 안 두면 조각이 패널 padding box 를
+   기준으로 잡혀 여백을 넘어 테두리까지 붙는다. */
+.about-echoes {
+  inset: var(--about-pad-y) var(--about-pad-x);
+  pointer-events: none;
+  position: absolute;
+}
+
+/* 흰 알약을 옅게 깔면 패널도 거의 흰색이라 아예 안 보인다 — 조용한 것과
+   없는 것은 다르다. 색을 주고 불투명하게 두되, 크기와 채도로만 본문보다
+   뒤에 있게 한다. */
+.about-echo {
+  background: #ffffff;
+  border: 1px solid #d7e2f4;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(38, 66, 112, 0.07);
+  color: #5c7ba6;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 15px;
+  position: absolute;
+  white-space: nowrap;
+}
+
+/* 오른쪽 들여쓰기는 % 가 아니라 px 이다. % 로 두면 폭마다 조각이 본문 쪽으로
+   더 밀려 들어와 여유가 들쭉날쭉해진다 — 실제로 900~660px 구간에서 겹쳤다. */
+.e1 { right: 8px; top: 10%; transform: rotate(2.5deg); }
+.e2 { right: 40px; top: 43%; transform: rotate(-2deg); }
+.e3 { right: 0; top: 76%; transform: rotate(1.5deg); }
+
+.about h2 {
   font-family: var(--font-display);
-  font-size: clamp(24px, 3.1vw, 36px);
+  font-size: clamp(26px, 3.4vw, 42px);
   font-weight: 600;
-  letter-spacing: -0.026em;
-  line-height: 1.24;
+  letter-spacing: -0.028em;
+  line-height: 1.22;
   text-wrap: balance;
+  word-break: keep-all;
+}
+
+/* 첫 문단은 본문보다 크다. 여기서 문제를 한 번에 말하고 나머지는 설명이다. */
+.about-lead {
+  color: var(--ink);
+  font-size: clamp(18px, 2vw, 23px);
+  line-height: 1.62;
+  margin-top: 30px;
+  max-width: 30ch;
+  word-break: keep-all;
 }
 
 .about-body {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  margin-top: 26px;
+  color: var(--ink-soft);
+  column-gap: 46px;
+  columns: 2;
+  margin-top: 34px;
+  max-width: 62ch;
+  word-break: keep-all;
 }
 
 .about-body p {
-  color: var(--ink-soft);
+  break-inside: avoid;
   line-height: 1.75;
-  max-width: 46ch;
+  margin-bottom: 18px;
 }
 
-.features-intro {
-  border-top: 1px solid var(--line);
-  padding-block: clamp(48px, 6vw, 76px) 0;
+/* 마지막 한 줄은 결론이 아니라 첨언이다. 본문보다 작게, 살짝 눕혀서, 여백에
+   적어 둔 것처럼 둔다. 구분선과 큰 인용부호는 뺐다 — 속삭임에 무대를 깔아
+   주면 더 이상 속삭임이 아니다. */
+.about-aside {
+  color: var(--muted);
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+  margin-top: 40px;
+  position: relative;
+  transform: rotate(-1.2deg);
+  transform-origin: left center;
+  word-break: keep-all;
 }
 
-.features-intro > h2 {
-  font-family: var(--font-display);
-  font-size: clamp(24px, 3.1vw, 36px);
-  font-weight: 600;
-  letter-spacing: -0.026em;
-  line-height: 1.24;
-  max-width: 22ch;
-  text-wrap: balance;
+.about-aside span {
+  display: inline-block;
+  padding-left: 18px;
+  position: relative;
+}
+
+/* 짧은 선 하나만 앞에 둔다. "이건 본문이 아니다" 라는 최소한의 표시다. */
+.about-aside span::before {
+  background: #c3d3ea;
+  content: '';
+  height: 1px;
+  left: 0;
+  position: absolute;
+  top: 0.75em;
+  width: 10px;
+}
+
+/* ── 넓을 때만: 문단을 살짝 어긋나게 놓는다 ──
+   2단으로 반듯하게 잘라 놓으면 "흩어진 생각을 모은다"는 이야기를 하면서
+   정작 화면은 신문 조판이다. 어긋냄은 읽는 순서를 흔들지 않는 선까지만
+   이다 — 위에서 아래로 그대로 읽히고, 어긋난 양은 한 글자에서 대여섯 글자
+   사이다. */
+@media (min-width: 901px) {
+  .about h2 { margin-left: -2px; }
+  .about-lead { margin-left: 18px; max-width: 34ch; }
+  .about-body { columns: auto; max-width: none; }
+  .about-body p { max-width: 52ch; }
+  .about-body p:nth-child(1) { margin-left: 0; max-width: 48ch; }
+  .about-body p:nth-child(2) { margin-left: 92px; margin-top: 26px; }
+  .about-body p:nth-child(3) { margin-left: 38px; margin-top: 26px; max-width: 50ch; }
+  .about-aside { margin-left: 120px; }
+
+  /* 문단이 세로로 길어졌으니 조각도 그 길이에 맞춰 다시 흩는다. */
+  .e1 { right: 4%; top: 6%; }
+  .e2 { right: 10%; top: 38%; }
+  .e3 { right: 2%; top: 68%; }
+}
+
+@media (max-width: 900px) {
+  /* 조각은 끝까지 옆에 둔다. 본문을 비율로 줄이면 창이 좁아질수록 같이
+     좁아져 금방 못 읽게 되므로, 조각이 실제로 차지하는 폭만큼만 고정으로
+     비워 둔다 = 가장 넓은 조각(138) + 최대 들여쓰기(30) + 여유(18) = 186. */
+  .about-body,
+  .about-lead { max-width: calc(100% - 186px); }
+  .about-body { columns: 1; }
+  .about h2 { max-width: calc(100% - 160px); }
+  .about-echo { font-size: 11px; padding: 6px 11px; }
+  .e1 { right: 6px; top: 9%; }
+  .e2 { right: 30px; top: 42%; }
+  .e3 { right: 0; top: 73%; }
+}
+
+@media (max-width: 560px) {
+  /* 여기서야 포기한다. 186px 을 비우고 나면 한국어 한 줄에 열몇 자밖에 안
+     들어간다. 올릴 때도 줄로 세우지는 않는다 — 가지런하면 태그 목록이다. */
+  .about-body,
+  .about h2 { max-width: none; }
+  .about-lead { max-width: 30ch; }
+
+  .about-echoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    inset: auto;
+    margin-bottom: 30px;
+    padding-block: 4px 10px;
+    position: static;
+  }
+
+  .about-echo { position: static; inset: auto; }
+  .e1 { transform: rotate(-2deg) translateY(3px); }
+  .e2 { transform: rotate(1.5deg) translateY(-4px); }
+  .e3 { transform: rotate(-1deg) translateY(5px); }
 }
 
 /* ===== 챕터 ===== */
@@ -589,12 +854,6 @@ main {
   margin-top: 14px;
 }
 
-/* Features 도입부 바로 뒤에 오는 첫 챕터는 선을 한 번 더 긋지 않는다. */
-.features-intro + .chapter {
-  border-top: 0;
-  padding-block-start: clamp(30px, 4vw, 48px);
-}
-
 /* 손글씨 주석이 여기에 얹힌다. */
 .chapter-stage {
   margin-top: clamp(26px, 3.5vw, 40px);
@@ -610,25 +869,6 @@ main {
   justify-content: space-between;
 }
 
-.chapter-steps {
-  margin-top: 20px;
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 13px;
-  gap: 8px;
-}
-
-.chapter-steps li {
-  list-style: none;
-}
-
-.chapter-steps li + li::before {
-  color: var(--muted);
-  content: '→';
-  margin-right: 8px;
-}
-
 .more-link {
   align-items: center;
   border: 1px solid var(--line);
@@ -639,7 +879,7 @@ main {
   font-size: 14px;
   font-weight: 600;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 0;
   padding: 10px 16px;
   transition: background-color 140ms ease, border-color 140ms ease;
   white-space: nowrap;
@@ -681,6 +921,12 @@ main {
   font-weight: 500;
   gap: 6px;
   margin-bottom: 22px;
+}
+
+/* 상세 페이지의 뒤로가기와 챕터 칩은 같은 줄에 놓이지 않는다. */
+.detail-hero > .back-link {
+  display: flex;
+  width: fit-content;
 }
 
 .back-link:hover {
@@ -785,6 +1031,10 @@ main {
   padding-block: clamp(52px, 7vw, 92px);
 }
 
+.download-cta .hero-actions {
+  justify-content: flex-start;
+}
+
 .download-cta > h2 {
   font-family: var(--font-display);
   font-size: clamp(26px, 3.4vw, 40px);
@@ -883,6 +1133,11 @@ main {
     padding: 10px 13px;
   }
 
+  /* 좁아지면 자리를 내준다. 기능으로 가는 길과 CTA 가 먼저다. */
+  .lang-switch {
+    display: none;
+  }
+
   .hero-actions {
     width: 100%;
   }
@@ -915,6 +1170,40 @@ main {
   grid-column: span 2;
 }
 
+/* 더보기 카드는 각 챕터의 무대 색을 이어받는다. 본문과 UI 조각은 흰 표면을
+   유지해 읽기 부담은 늘리지 않고, 카드 바깥만 챕터의 색으로 구분한다. */
+.feature-grid.tone-blue {
+  --feature-card-tint: #e3f0fd;
+  --feature-stage-tint: rgba(255, 255, 255, 0.48);
+}
+
+.feature-grid.tone-green {
+  --feature-card-tint: #e6f4ea;
+  --feature-stage-tint: rgba(255, 255, 255, 0.48);
+}
+
+.feature-grid.tone-amber {
+  --feature-card-tint: #fdf1dd;
+  --feature-stage-tint: rgba(255, 255, 255, 0.48);
+}
+
+.feature-grid.tone-clay {
+  --feature-card-tint: #fbebe5;
+  --feature-stage-tint: rgba(255, 255, 255, 0.48);
+}
+
+.feature-grid[class*='tone-'] .feature-card {
+  background: var(--feature-card-tint);
+}
+
+.feature-grid[class*='tone-'] .feature-card-stage {
+  background: var(--feature-stage-tint);
+}
+
+.feature-grid[class*='tone-'] .feature-card-body {
+  background: var(--paper-strong);
+}
+
 .feature-card-stage {
   align-items: center;
   background: var(--paper-soft);
@@ -932,6 +1221,7 @@ main {
 }
 
 .feature-card-body {
+  flex: 1;
   padding: 22px 24px 26px;
 }
 
@@ -991,6 +1281,105 @@ main {
   padding: 8px;
 }
 
+.feature-piece .split-mock-panel {
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 12px 30px rgba(44, 37, 32, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 224px;
+  overflow: hidden;
+  padding: 11px 13px 12px;
+}
+
+.feature-piece .mock-traffic-lights {
+  display: flex;
+  gap: 6px;
+}
+
+.feature-piece .mock-traffic-lights span {
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.feature-piece .mock-traffic-lights span:nth-child(1) {
+  background: #ee6a5f;
+}
+
+.feature-piece .mock-traffic-lights span:nth-child(2) {
+  background: #f4bf4f;
+}
+
+.feature-piece .mock-traffic-lights span:nth-child(3) {
+  background: #61c554;
+}
+
+.feature-piece .split-mock-panel-tabs {
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  gap: 4px;
+  padding-bottom: 7px;
+}
+
+.feature-piece .split-mock-panel-tabs span {
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.feature-piece .split-mock-panel-tabs span.active {
+  background: rgba(var(--app-color-brand-rgb), 0.08);
+  color: var(--app-color-brand-700);
+  font-weight: 600;
+}
+
+.feature-piece .split-mock-panel .cal-fragment {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  gap: 5px;
+  min-height: 0;
+  padding: 0;
+}
+
+.feature-piece .split-mock-panel .cal-fragment-head strong {
+  font-size: 14px;
+}
+
+.feature-piece .split-mock-panel .cal-fragment-badge {
+  font-size: 10px;
+  padding: 3px 7px;
+}
+
+.feature-piece .split-mock-panel .cal-col-head {
+  gap: 3px;
+  padding: 3px 0;
+}
+
+.feature-piece .split-mock-panel .cal-col-dow,
+.feature-piece .split-mock-panel .cal-col-date,
+.feature-piece .split-mock-panel .cal-hour-label {
+  font-size: 10px;
+}
+
+.feature-piece .split-mock-panel .cal-hour-label {
+  padding-right: 4px;
+}
+
+.preview-piece-large {
+  min-height: 190px;
+}
+
+.preview-piece-large .preview-panel {
+  height: 100%;
+}
+
 .feature-piece .piece-rail {
   background: var(--app-color-chrome-bg);
   border: 1px solid var(--line);
@@ -998,6 +1387,17 @@ main {
   box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 12px 30px rgba(44, 37, 32, 0.08);
   overflow: hidden;
   padding: 10px 8px;
+}
+
+/* 랜딩의 폴더 미리보기는 실제 사이드바보다 한 단계 가볍게 보여 준다. 제목이
+   화면을 장악하지 않아 폴더 구조와 자동 분류라는 기능이 먼저 읽힌다. */
+.feature-piece .topic-folder-label,
+.feature-piece .topic-folder-count {
+  font-weight: var(--app-weight-regular);
+}
+
+.feature-piece .topic-folder-memos .memo-row strong {
+  font-weight: var(--app-weight-semibold);
 }
 
 .feature-piece .piece-line {

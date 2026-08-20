@@ -437,8 +437,19 @@ describe('pending local write shutdown handshake', () => {
     expect(latestFlushRequest()?.reason).toBe('shutdown');
     await vi.advanceTimersByTimeAsync(15_000);
 
+    const [, options] = mockShowMessageBox.mock.calls[0] ?? [];
     expect(mockAppQuit).not.toHaveBeenCalled();
     expect(mockShowMessageBox).toHaveBeenCalledOnce();
+    expect(options).toMatchObject({
+      cancelId: 0,
+      defaultId: 0,
+    });
+    expect((options as Electron.MessageBoxOptions).buttons).toEqual([
+      expect.stringMatching(/계속 열기|Keep app open/),
+      expect.stringMatching(
+        /저장 확인 없이 종료|Quit without confirming saved changes/,
+      ),
+    ]);
     vi.useRealTimers();
   });
 

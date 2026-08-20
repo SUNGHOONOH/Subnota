@@ -734,6 +734,119 @@
 }
 
 /* ── Quick Subnota ── */
+.web-clip-preview {
+  background: var(--app-color-bg);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-panel);
+  box-shadow: 0 16px 38px rgba(44, 37, 32, 0.16);
+  color: var(--app-color-text);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--app-font-ui);
+  overflow: hidden;
+  width: 380px;
+}
+
+.web-clip-preview__browser,
+.web-clip-preview__footer {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.web-clip-preview__browser {
+  border-bottom: 1px solid var(--app-color-border);
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xs);
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.web-clip-preview__dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 2px;
+}
+
+.web-clip-preview__dots i {
+  background: var(--app-color-muted);
+  border-radius: 50%;
+  display: block;
+  height: 5px;
+  width: 5px;
+}
+
+.web-clip-preview__domain {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-clip-preview__content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 96px;
+  padding: 14px 16px 12px;
+}
+
+.web-clip-preview__eyebrow,
+.web-clip-preview__meta,
+.web-clip-preview__status {
+  color: var(--app-color-muted-soft);
+  font-size: var(--app-font-xs);
+}
+
+.web-clip-preview__content strong {
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.35;
+}
+
+.web-clip-preview__footer {
+  border-top: 1px solid var(--app-color-border);
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 7px 12px;
+}
+
+.web-clip-preview__brand {
+  align-items: center;
+  color: var(--app-color-brand-700);
+  display: inline-flex;
+  font-family: var(--app-font-wordmark);
+  font-size: var(--app-font-sm);
+  font-weight: var(--app-weight-black);
+  gap: 4px;
+}
+
+.web-clip-preview__brand svg {
+  color: var(--app-color-brand-mark);
+}
+
+.web-clip-preview__action {
+  background: var(--app-color-action-secondary-bg);
+  border: 1px solid var(--app-color-action-secondary-border);
+  border-radius: var(--app-radius-card);
+  color: var(--app-color-action-secondary-text);
+  font-size: var(--control-font-compact);
+  font-weight: var(--app-weight-medium);
+  padding: 5px 8px;
+  transition: transform 140ms ease;
+}
+
+.web-clip-preview__action--pressed {
+  transform: scale(var(--app-press-scale));
+}
+
+.web-clip-preview__status {
+  margin: 0;
+  min-height: 15px;
+  padding: 0 12px 8px;
+}
+
 .mini-composer {
   background: var(--app-color-bg);
   border: 1px solid var(--app-color-border);
@@ -833,14 +946,18 @@
    쓰고 있고, 작은 패널에 원색 버튼까지 얹으면 시선이 분산된다. */
 .mini-composer__secondary,
 .mini-composer__save {
+  align-items: center;
   background: var(--app-color-action-secondary-bg);
   border: 1px solid var(--app-color-action-secondary-border);
   border-radius: var(--app-radius-card);
   color: var(--app-color-action-secondary-text);
+  display: inline-flex;
   font-size: var(--control-font-compact);
   font-weight: var(--app-weight-medium);
   height: var(--control-size-compact);
+  justify-content: center;
   padding: 0 var(--control-padding-compact);
+  white-space: nowrap;
 }
 
 .mini-composer__status {

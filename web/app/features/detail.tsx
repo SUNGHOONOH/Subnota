@@ -80,8 +80,18 @@ export function FeatureCard({
   );
 }
 
-export function FeatureGrid({ children }: { children: ReactNode }) {
-  return <div className="feature-grid">{children}</div>;
+export function FeatureGrid({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone?: 'blue' | 'green' | 'amber' | 'clay';
+}) {
+  return (
+    <div className={tone ? `feature-grid tone-${tone}` : 'feature-grid'}>
+      {children}
+    </div>
+  );
 }
 
 /* 무대 위에 조각을 놓는 자리. 기울기와 위치로만 배치한다. */

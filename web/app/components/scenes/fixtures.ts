@@ -96,24 +96,22 @@ type StripRow = {
 };
 
 export const WEEK_ROWS: StripRow[] = [
-  { blocks: [], date: '8.16', label: '토' },
-  {
-    blocks: [
-      { at: 3, span: 1, sub: '꽃바구니 예약', title: '생신', tone: 'clay' },
-      { at: 4, span: 1, sub: '한정식 집', title: '식사', tone: 'blue' },
-    ],
-    date: '8.17',
-    label: '일',
-  },
+  { blocks: [], date: '8.16', label: '일' },
+  { blocks: [], date: '8.17', label: '월' },
+  { blocks: [], date: '8.18', label: '화' },
+  { blocks: [], date: '8.19', label: '수' },
+  { blocks: [], date: '8.20', label: '목' },
+  { blocks: [], date: '8.21', label: '금' },
+  { blocks: [], date: '8.22', label: '토' },
 ];
 
 export const WEEK_ROWS_PLACED: StripRow[] = [
   {
-    blocks: [{ at: 3, span: 1, sub: '15:00', title: '팀 미팅', tone: 'green' }],
+    blocks: [{ at: 4, span: 1, sub: '15:00', title: '팀 미팅', tone: 'green' }],
     date: '8.16',
     label: '토',
   },
-  WEEK_ROWS[1],
+  ...WEEK_ROWS.slice(1),
 ];
 
 const blank = (count: number, from: number): MonthCell[] =>
@@ -138,11 +136,7 @@ export const MONTH_CELLS: MonthCell[] = [
 export const MONTH_CELLS_PLACED: MonthCell[] = [
   ...week(9),
   ...week(16, {
-    16: [{ title: '15:00 팀 미팅', tone: 'green' }],
-    17: [
-      { title: '엄마 생신', tone: 'clay' },
-      { title: '가족 식사', tone: 'blue' },
-    ],
+    16: [{ title: '팀 미팅', tone: 'green' }],
   }),
   ...blank(7, 23),
 ];

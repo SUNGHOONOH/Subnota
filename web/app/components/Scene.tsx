@@ -151,12 +151,14 @@ export function SimulatedCursor({
   visible,
   pressing = false,
   duration = 0.5,
+  ease = 'easeOut',
 }: {
   x: number;
   y: number;
   visible: boolean;
   pressing?: boolean;
   duration?: number;
+  ease?: 'linear' | 'easeOut';
 }) {
   return (
     <motion.svg
@@ -165,7 +167,7 @@ export function SimulatedCursor({
       className="sim-cursor"
       height="22"
       initial={false}
-      transition={{ duration, ease: 'easeOut' }}
+      transition={{ duration, ease }}
       viewBox="0 0 16 22"
       width="16"
     >
@@ -234,17 +236,18 @@ export function SceneShowcase({
       }}
     >
       <div className="showcase-window">
-        {/* 앱 상단에는 바가 없다(hiddenInset). 신호등만 작업공간 위에 얹힌다. */}
-        <div aria-hidden="true" className="showcase-dots">
-          <span />
-          <span />
-          <span />
-        </div>
         <div className="showcase-viewport" ref={viewportRef}>
           <div
             className="scene-stage"
             style={{ height, transform: `scale(${scale ?? 1})`, width }}
           >
+            {/* 앱 상단에는 바가 없다(hiddenInset). 신호등도 화면과 같은
+                스케일 안에 두어 창이 줄어들 때 함께 줄어든다. */}
+            <div aria-hidden="true" className="showcase-dots">
+              <span />
+              <span />
+              <span />
+            </div>
             {children}
           </div>
         </div>

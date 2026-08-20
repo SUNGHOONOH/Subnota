@@ -3,7 +3,14 @@
 /* 수집함 — 검색줄 + 카드 격자.
    원본은 desktop/src/features/inbox/InboxWorkspace.tsx. */
 
-import { Heart, MoreHorizontal, Search, Trash2 } from './icons';
+import {
+  ExternalLink,
+  Heart,
+  MoreHorizontal,
+  Search,
+  SubnotaMark,
+  Trash2,
+} from './icons';
 
 export interface InboxItem {
   id: string;
@@ -16,6 +23,51 @@ export interface InboxItem {
   /* 썸네일이 없으면 요약 발췌가 그 자리를 대신한다. */
   excerpt?: string;
   loading?: boolean;
+}
+
+/* 웹에서 보고 있던 페이지를 주워 담는 장면. Quick Subnota를 직접 입력창으로
+   보여주지 않고, 현재 페이지 저장 → 요약이라는 실제 클리핑 흐름만 남긴다. */
+export function WebClipPreview({
+  pressing = false,
+  status,
+}: {
+  pressing?: boolean;
+  status?: string;
+}) {
+  return (
+    <div aria-label="현재 페이지 저장 미리보기" className="web-clip-preview">
+      <div className="web-clip-preview__browser">
+        <span aria-hidden="true" className="web-clip-preview__dots">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="web-clip-preview__domain">youtube.com</span>
+        <ExternalLink size={12} />
+      </div>
+      <div className="web-clip-preview__content">
+        <span className="web-clip-preview__eyebrow">현재 보고 있는 페이지</span>
+        <strong>회의 전에 30분을 쓰면 회의가 절반이 된다</strong>
+        <span className="web-clip-preview__meta">영상 · 14:22</span>
+      </div>
+      <div className="web-clip-preview__footer">
+        <span className="web-clip-preview__brand">
+          <SubnotaMark size={14} />
+          Subnota
+        </span>
+        <span
+          className={
+            pressing
+              ? 'web-clip-preview__action web-clip-preview__action--pressed'
+              : 'web-clip-preview__action'
+          }
+        >
+          현재 페이지 저장
+        </span>
+      </div>
+      <p className="web-clip-preview__status">{status}</p>
+    </div>
+  );
 }
 
 export function InboxCard({

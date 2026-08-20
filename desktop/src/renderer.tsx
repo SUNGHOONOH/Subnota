@@ -7,7 +7,6 @@ import MantineRoot from './components/MantineRoot';
 import RenderErrorBoundary from './components/RenderErrorBoundary';
 import SubnotaMark from './components/SubnotaMark';
 import { localize, useUiLanguage } from './lib/uiLanguage';
-import { DESKTOP_PLATFORM_FEATURES } from './platform/policy';
 import './index.scss';
 
 const posthogToken = import.meta.env.VITE_POSTHOG_PROJECT_TOKEN?.trim();
@@ -31,7 +30,8 @@ const isMiniWindow = window.location.hash.replace(/^#/, '').split('?')[0] === 'm
 
 // Renderer chrome that is only needed for the macOS hidden title bar uses this
 // attribute instead of duplicating platform-specific React trees.
-document.documentElement.dataset.desktopPlatform = DESKTOP_PLATFORM_FEATURES.platform;
+document.documentElement.dataset.desktopPlatform =
+  window.electronAPI?.getPlatformFeatures?.().platform ?? 'macos';
 
 const rootElement = document.getElementById('root');
 

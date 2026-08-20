@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { SubnotaMark } from '../subnota-ui/icons';
 
 interface LegalDocumentProps {
   children: ReactNode;
@@ -17,7 +18,7 @@ export default function LegalDocument({
       <div className="legal-page-shell">
         <header className="legal-page-header">
           <Link className="legal-brand" href="/">
-            <span aria-hidden="true" className="legal-brand-mark">✳</span>
+            <SubnotaMark className="legal-brand-mark" size={28} />
             <span>Subnota</span>
           </Link>
           <nav aria-label="법적 문서">

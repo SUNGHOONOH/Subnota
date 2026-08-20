@@ -19,11 +19,9 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ArrowUpRight, SubnotaMark } from './subnota-ui/icons';
+import { ArrowUpRight } from './subnota-ui/icons';
 import { CHAPTERS, DownloadRow, SiteFooter, SiteHeader } from './components/site';
 import {
-  ARROW_UP,
-  HandNote,
   Marker,
 } from './components/annotations';
 import ConnectedMemoryScene from './components/scenes/ConnectedMemoryScene';
@@ -52,7 +50,6 @@ const ProductivityScene = lazyScene(
 const CHAPTER_COPY: {
   lead: ReactNode;
   scene: ReactNode;
-  steps: string[];
   note?: ReactNode;
 }[] = [
   {
@@ -63,16 +60,7 @@ const CHAPTER_COPY: {
         누르면 그 문장이 있던 원본이 옆에서 열립니다. 계정을 연결하면 동작합니다.
       </>
     ),
-    note: (
-      <HandNote
-        arrow={ARROW_UP}
-        arrowId="note-ghost"
-        style={{ left: '26%', top: '41%' }}
-        text="7일 전에 쓴 문장"
-      />
-    ),
     scene: <ConnectedMemoryScene />,
-    steps: ['문장 쓰기', '손을 멈추면', '관련 문장 한 줄', '원본 열림'],
   },
   {
     lead: (
@@ -83,29 +71,26 @@ const CHAPTER_COPY: {
       </>
     ),
     scene: <MemoToCalendarScene />,
-    steps: ['문장 드래그', '일정 등록', '캘린더에 바로'],
   },
   {
     lead: (
       <>
-        읽던 페이지에서 <Marker tone="amber">단축키 하나</Marker>. 저장은 그걸로
-        끝이고, 제목과 요약과 키워드는 알아서 따라붙습니다. 나중에 뭐였는지
-        떠올리려고 링크를 다시 열 일이 없습니다.
+        읽던 페이지에서 <Marker tone="amber">간편하게 주워 담습니다</Marker>.
+        알아서 요약하고 정리해드릴게요. 귀찮은 일이니까요.
       </>
     ),
     scene: <ReuseInboxScene />,
-    steps: ['단축키 하나', '저장 완료', '요약이 따라옴'],
   },
   {
     lead: (
       <>
-        단축키 하나로 작은 창이 뜹니다. 적고 저장하면{' '}
-        <Marker tone="clay">하던 화면 그대로</Marker> 돌아옵니다. 메모와 캘린더를
-        나란히 두고 보는 것도 같은 창 안에서 합니다.
+        필요한 화면을 새 탭으로 바로 열고{' '}
+        <Marker tone="clay">하던 흐름 그대로</Marker> 이어갑니다. 필요한 화면을
+        찾겠다고 창 사이를 전전할 필요는 없습니다. 생각보다 창은 많고, 생각은
+        더 빨리 사라지니까요.
       </>
     ),
     scene: <ProductivityScene />,
-    steps: ['단축키', 'Quick Subnota', '기록', '원래 화면으로'],
   },
 ];
 
@@ -119,51 +104,84 @@ export default function Home() {
 
       <main id="main">
         <section className="hero" id="top">
-          {/* 배경은 로고의 잉크 블루에서 내려온 면 하나뿐이다. 새 마케팅
-              그래픽을 만들지 않는다. */}
-          <div aria-hidden="true" className="hero-bg" />
+          {/* 흩어진 생각 조각. 여섯 개만 둔다 — 많아지면 눈이 읽는 순서를
+              만들어 "흩어짐"이 아니라 목록이 된다. 각각 다른 종류의 걱정이고,
+              끝이 안 맺힌 말투를 섞어야 할 일 목록으로 안 읽힌다. */}
+          <span aria-hidden="true" className="thought thought-frost t1">
+            <span className="thought-date">내일 3시</span> 팀 미팅
+          </span>
+          <span aria-hidden="true" className="thought thought-ink t2">
+            주간보고 <span className="thought-date">금요일</span>까지
+          </span>
+          <span aria-hidden="true" className="thought thought-frost t3">
+            그 영상 어디 저장했더라
+          </span>
+          <span aria-hidden="true" className="thought thought-frost thought-far t4">
+            그때 그 아이디어 뭐였지
+          </span>
+          <span aria-hidden="true" className="thought thought-frost thought-far t5">
+            엄마 생신 선물
+          </span>
+          <span aria-hidden="true" className="thought thought-frost t6">
+            운동 가야 하는데 3일째
+          </span>
+
           <div className="hero-inner shell">
-            {/* 마크는 알아볼 수 있는 크기로 제 색을 갖고 선다. 거대한 회색
-                워터마크로 깔면 로고가 아니라 얼룩으로 읽힌다. */}
-            <SubnotaMark className="hero-mark" size={54} />
             <h1>
               적어 두기만 하세요.
               <br />
-              정리하고 이어주는 일은 Subnota가 합니다
+              정리와 연결은 <span className="wordmark-text">Subnota</span>가 합니다
             </h1>
-            <p className="hero-lead">
-              메모 속 날짜는 캘린더로 옮겨 두고, 지금 쓰는 문장과 닿아 있는 과거의
-              생각은 그 자리로 가져옵니다. 폴더를 만들 일도, 나중에 정리하겠다고
-              다짐할 일도 없습니다.
-            </p>
             <DownloadRow />
           </div>
         </section>
 
         <section aria-labelledby="about-title" className="about shell" id="about">
-          <p className="section-label">About</p>
-          <h2 id="about-title">
-            메모앱은 많지만, 정리와 발견은
-            <br />
-            여전히 당신의 몫이었습니다
-          </h2>
-          <div className="about-body">
-            <p>
-              캘린더로 옮기지 못한 약속, 탭 속에 갇힌 영상과 스크랩, 메모장 어딘가에
-              묻힌 지난달의 생각. 우리는 매일 조각을 사방에 흩뿌려 두고, 그것을 다시
-              모으는 일까지 스스로 합니다.
+          <div className="about-panel">
+            {/* 히어로에서 흩어져 있던 조각이 여기 다시 놓인다 — "아까 그
+                이야기"라는 표시다. */}
+            <div aria-hidden="true" className="about-echoes">
+              <span className="about-echo e1">내일 3시 팀 미팅</span>
+              <span className="about-echo e2">그 영상 어디 저장했더라</span>
+              <span className="about-echo e3">그때 그 아이디어 뭐였지</span>
+            </div>
+
+            <p className="section-label">About</p>
+            <h2 id="about-title">
+              메모앱은 많지만, 정리와 발견은
+              <br />
+              여전히 당신의 몫이었습니다
+            </h2>
+
+            <p className="about-lead">
+              캘린더로 옮기지 못한 약속, 탭 속에 갇힌 영상과 스크랩, 메모장
+              어딘가에 묻혀 잊힌 어느 날의 꽤 괜찮은 생각까지.
             </p>
-            <p>
-              기록은 충분히 쉬워졌습니다. 어려운 것은 적어 둔 것이 쓸모를 갖는
-              일입니다. Subnota는 그 일을 사용자에게 맡기지 않습니다 — 적는 동안
-              날짜를 알아보고, 관련된 과거의 문장을 옆에 놓습니다.
+
+            <div className="about-body">
+              <p>
+                우리는 매일 생각을 사방에 흩뿌려 두고, 나중에 다시 모으는 일까지
+                스스로 해왔습니다. 흩어놓는 일에는 제법 성실했고, 다시 찾는 일은
+                늘 내일로 미뤘습니다. 그러다 대부분은 메모장 어딘가에서 조용히
+                은퇴하고요.
+              </p>
+              <p>
+                기록하는 일은 충분히 쉬워졌습니다. 어려운 것은{' '}
+                <Marker tone="blue">적어 둔 생각이 제때 다시 나타나 쓸모를 갖는 일</Marker>
+                입니다. Subnota는 그 일을 사용자에게 맡기지 않습니다. 너무 귀찮은
+                일이기도 하고, 우리가 대신할 수 있는 일이기도 하니까요.
+              </p>
+              <p>
+                적는 동안 날짜는 일정으로 이어지고, 지금 쓰는 문장과 닿아 있는
+                과거의 문장은 옆으로 돌아옵니다. 정리는 잠깐 미뤄도 괜찮습니다.
+                그 시간에 작업에 더욱 몰두하는 편이 낫잖아요.
+              </p>
+            </div>
+
+            <p className="about-aside">
+              <span>나중에 정리하겠다는 말은, 대체로 나중에도 오지 않으니까요.</span>
             </p>
           </div>
-        </section>
-
-        <section className="features-intro shell">
-          <p className="section-label">Features</p>
-          <h2>한 번 적은 문장이 다음 일과 지난 생각으로 이어집니다</h2>
         </section>
 
         {CHAPTERS.map((chapter, index) => {
@@ -194,21 +212,18 @@ export default function Home() {
                 {copy.scene}
                 {copy.note}
               </div>
-
-              <ul className="chapter-steps">
-                {copy.steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ul>
             </section>
           );
         })}
 
         <section className="download-cta shell" id="download">
-          <h2>먼저 적으세요. 잇는 일은 Subnota가 합니다.</h2>
+          <h2>
+            먼저 적으세요. 잇는 일은 <span className="wordmark-text">Subnota</span>가
+            합니다.
+          </h2>
           <p>
-            첫 메모는 로그인 없이 시작할 수 있습니다. 적은 것은 기기 안에 먼저
-            저장되고, 네트워크가 없어도 쓰는 흐름은 끊기지 않습니다.
+            지금은 무료로 시작할 수 있습니다. 필요한 순간에 적고, 나머지는 Subnota에
+            맡겨 보세요.
           </p>
           <DownloadRow />
         </section>

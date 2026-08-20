@@ -11,7 +11,7 @@ export default function MemoToCalendarPage() {
   return (
     <>
       <DetailHero
-        chip="메모 → 일정"
+        chip="메모가 일정으로"
         lead="약속은 대개 메모 안에서 먼저 생깁니다. 그런데 캘린더로 옮기는 일은 늘 나중으로 밀리고, 그러다 잊힙니다. Subnota는 그 사이의 한 번 더 여는 동작을 없앱니다."
         title="메모가 바로 일정으로 이어집니다"
       />
@@ -28,7 +28,7 @@ export default function MemoToCalendarPage() {
         <p className="detail-section-label">이런 것도 함께 합니다</p>
         <h2>일정으로 가는 길이 여러 개입니다</h2>
 
-        <FeatureGrid>
+        <FeatureGrid tone="green">
         <FeatureCard
           body="감지된 날짜는 바로 저장되지 않고 한 줄짜리 확인 바로 먼저 뜹니다. 날짜 칩을 누르면 그 자리에서 다른 날로 바꿀 수 있습니다."
           note="문장을 직접 선택해서 등록할 수도 있습니다 — 날짜 표현이 없는 문장이라도."

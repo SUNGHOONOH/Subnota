@@ -12,8 +12,8 @@ export default function ReuseInboxPage() {
   return (
     <>
       <DetailHero
-        chip="수집과 재사용"
-        lead="읽던 페이지에서 단축키를 누르면 그걸로 끝입니다. 폴더를 고르지도, 태그를 달지도, 나중에 정리하겠다고 다짐하지도 않습니다. 제목과 요약과 키워드는 저장한 뒤에 알아서 붙습니다."
+        chip="일단 줍고, 다시 쓰기"
+        lead="읽던 페이지에서 간편하게 주워 담습니다. 알아서 요약하고 정리해드릴게요. 귀찮은 일이니까요."
         title="저장은 단축키 하나로 끝납니다"
       />
 
@@ -29,21 +29,14 @@ export default function ReuseInboxPage() {
         <p className="detail-section-label">이런 것도 함께 합니다</p>
         <h2>아, 맞다. 그 링크도 필요할 때 알아서 꺼내 드릴게요</h2>
 
-        <FeatureGrid>
+        <FeatureGrid tone="amber">
         <FeatureCard
-          body="브라우저를 떠나지 않고 단축키로 현재 페이지를 저장합니다. 링크를 직접 붙여넣는 길도 늘 열려 있습니다 — 두 방법 모두 로그인한 기기 안에 먼저 저장됩니다."
-          note="현재 페이지 저장은 macOS에서 제공합니다. 링크 붙여넣기는 두 플랫폼 모두 같습니다."
+          body="브라우저를 떠나지 않고 단축키로 현재 페이지를 저장합니다. 저장한 링크는 로그인한 기기 안에 먼저 담기고, 제목과 요약과 키워드가 뒤따라옵니다."
+          note="현재 페이지 저장은 macOS에서 제공합니다."
           title="브라우저에서 바로"
         >
           <Piece rotate={-1.5} width={380} y={-4}>
-            <MiniComposer
-              recent={[
-                { source: 'YouTube', text: '회의 전에 30분을 쓰면…' },
-                { source: 'nngroup', text: '맥락 안에서 검색하기' },
-              ]}
-              status="현재 페이지를 저장했습니다."
-              text=""
-            />
+            <MiniComposer text="" />
           </Piece>
         </FeatureCard>
 

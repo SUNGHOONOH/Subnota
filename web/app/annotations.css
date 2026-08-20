@@ -67,10 +67,3 @@
     stroke-dashoffset: 0 !important;
   }
 }
-
-/* 좁은 화면에서는 뺀다. 무대가 작아지면 주석이 화면을 가린다. */
-@media (max-width: 900px) {
-  .hand-note {
-    display: none;
-  }
-}

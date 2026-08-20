@@ -62,6 +62,7 @@
   --app-color-brand-500: #325496;
   --app-color-brand-600: #254582;
   --app-color-brand-700: #1b376b;
+  --app-color-brand-rgb: 50, 84, 150;
   --app-color-selection: rgba(50, 84, 150, 0.2);
   /* 마크는 UI 강조색보다 한 단계 밝다 — 로고는 글자 대비 규정 밖이다.
      다섯 잎 중 오른쪽 한 장만 말라카이트다. */

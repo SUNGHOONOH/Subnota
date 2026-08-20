@@ -288,6 +288,17 @@ describe('State B — 주변 메모 검색', () => {
     expect(splitSource).toContain('isNetworkSearchRetryableMessage');
     expect(splitSource).toContain('void runEditorStateBSearch(pane, editor)');
   });
+
+  it('정상 응답의 빈 결과는 오류 카드 대신 로고 빈 상태로 보인다', () => {
+    expect(splitSource).toContain('const isNetworkEmpty =');
+    expect(splitSource).toContain('<EmptyState');
+    expect(splitSource).toContain('className="net-empty-state"');
+    expect(splitSource).toContain('tone="start"');
+    expect(splitSource).toContain(
+      '연결된 메모나 저장한 링크가 아직은 없네요!',
+    );
+    expect(splitSource).not.toContain('response.message ?? NETWORK_SEARCH_EMPTY_MESSAGE');
+  });
 });
 
 describe('Topics', () => {

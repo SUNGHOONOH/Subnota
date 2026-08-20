@@ -63,7 +63,6 @@ import { isMeaningfulChunk, MemoChunk } from '../../../lib/memoChunker';
 import { copyTextToClipboard } from '../../../lib/copy-code';
 import type { AmbientSearchTarget } from '../../../lib/ambientSearch';
 import {
-  NETWORK_SEARCH_EMPTY_MESSAGE,
   NetworkSearchResult,
   formatNetworkSearchErrorMessage,
   isNetworkSearchRetryableMessage,
@@ -1168,10 +1167,7 @@ const MemoSplitWorkspace = ({
           pane.id,
           targetEditor,
           {
-            networkErrorMessage:
-              response.results.length === 0
-                ? (response.message ?? NETWORK_SEARCH_EMPTY_MESSAGE)
-                : null,
+            networkErrorMessage: null,
             networkIsLoading: false,
             networkQueryChunk: response.queryChunk,
             networkRequestId,
@@ -1921,6 +1917,11 @@ const MemoSplitWorkspace = ({
         editor.networkQueryChunk ||
         editor.networkResults
       ) {
+        const isNetworkEmpty =
+          !editor.networkIsLoading &&
+          !editor.networkErrorMessage &&
+          Boolean(editor.networkQueryChunk) &&
+          editor.networkResults?.length === 0;
         // KNN local search view — radial ego-graph of the cursor sentence.
         const graph = buildSplitKnnGraph(
           editor.networkResults ?? [],
@@ -1977,6 +1978,17 @@ const MemoSplitWorkspace = ({
                   <SubnotaScatterMark />
                 </div>
               ))}
+            {isNetworkEmpty && (
+              <EmptyState
+                className="net-empty-state"
+                size="canvas"
+                title={t(
+                  '연결된 메모나 저장한 링크가 아직은 없네요!',
+                  'No related notes or saved links yet.',
+                )}
+                tone="start"
+              />
+            )}
             {editor.networkResults && editor.networkResults.length > 0 && (
               <>
                 <KnowledgeGraphView

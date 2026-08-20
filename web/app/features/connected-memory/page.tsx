@@ -3,7 +3,6 @@
 import ConnectedMemoryScene from '../../components/scenes/ConnectedMemoryScene';
 import { AmbientGhost } from '../../subnota-ui/EditorPane';
 import { KnowledgeGraph, TopicFolders } from '../../subnota-ui/Graph';
-import { PreviewPanel } from '../../subnota-ui/Panels';
 import {
   DetailCta,
   DetailHero,
@@ -14,27 +13,72 @@ import {
 } from '../detail';
 
 const NEARBY_NODES = [
-  { id: 'c', kind: 'center' as const, label: '지금 쓰는 문장', r: 13, x: 260, y: 150 },
-  { id: 'n1', label: '회의 전에 적어 둘 것', r: 10, x: 116, y: 82 },
-  { id: 'n2', label: '질문 목록 초안', r: 8, x: 130, y: 230 },
-  { id: 'n3', label: '지난 회고', r: 7, x: 394, y: 92 },
-  { id: 'n4', kind: 'inbox' as const, label: '저장한 링크', r: 8, x: 404, y: 222 },
+  { id: 'c', kind: 'center' as const, label: '지금 쓰는 문장', r: 15, x: 260, y: 150, color: '#2f3b35' },
+  { id: 'n1', kind: 'memo' as const, label: '회의 준비', r: 11, x: 116, y: 74, color: '#4c71b7' },
+  { id: 'n2', kind: 'memo' as const, label: '질문 목록', r: 10, x: 104, y: 226, color: '#4c71b7' },
+  { id: 'n3', kind: 'memo' as const, label: '지난 회고', r: 10, x: 406, y: 84, color: '#8b7b5a' },
+  { id: 'n4', kind: 'inbox' as const, label: '저장한 링크', r: 10, x: 404, y: 224, color: '#6d7185' },
+  { id: 'n5', kind: 'memo' as const, label: '준비 문서', r: 8, x: 252, y: 54, color: '#396f55', hideLabel: true },
+  { id: 'n6', kind: 'memo' as const, label: '회의 기록', r: 8, x: 252, y: 252, color: '#396f55', hideLabel: true },
+];
+
+const NEARBY_EDGES = [
+  { from: 'c', to: 'n1', color: '#b8c9e8' },
+  { from: 'c', to: 'n2', color: '#b8c9e8' },
+  { from: 'c', to: 'n3', color: '#d4c8b0' },
+  { from: 'c', to: 'n4', color: '#c9cedb' },
+  { from: 'c', to: 'n5', color: '#c3daca' },
+  { from: 'c', to: 'n6', color: '#c3daca' },
+  { from: 'n1', to: 'n5', color: '#c9d5ec' },
+  { from: 'n2', to: 'n6', color: '#c9d5ec' },
+  { from: 'n3', to: 'n5', color: '#ddd6ca' },
+  { from: 'n4', to: 'n6', color: '#d7dbe4' },
 ];
 
 const TOPIC_NODES = [
-  { id: 'c', kind: 'center' as const, label: '회의와 준비', r: 15, x: 200, y: 150 },
-  { id: 'a', label: '질문 정리', r: 10, x: 70, y: 72 },
-  { id: 'b', label: '회고', r: 9, x: 82, y: 234 },
-  { id: 'd', label: '읽을거리', r: 11, x: 386, y: 100 },
-  { id: 'e', label: '여행 준비', r: 9, x: 420, y: 218 },
-  { id: 'f', kind: 'inbox' as const, label: '저장한 링크', r: 8, x: 300, y: 258 },
+  { id: 'c', kind: 'center' as const, label: '회의와 준비', r: 17, x: 258, y: 150, color: '#396f55' },
+  { id: 'q', kind: 'topic' as const, label: '질문 정리', r: 13, x: 100, y: 84, color: '#4c71b7' },
+  { id: 'r', kind: 'topic' as const, label: '회고', r: 12, x: 112, y: 240, color: '#8b7b5a' },
+  { id: 'd', kind: 'topic' as const, label: '읽을거리', r: 13, x: 410, y: 86, color: '#c56a4b' },
+  { id: 't', kind: 'topic' as const, label: '여행 준비', r: 12, x: 414, y: 235, color: '#b38a23' },
+  { id: 'm1', kind: 'memo' as const, label: '질문', r: 8, x: 170, y: 48, color: '#4c71b7', hideLabel: true },
+  { id: 'm2', kind: 'memo' as const, label: '회의록', r: 8, x: 174, y: 118, color: '#4c71b7', hideLabel: true },
+  { id: 'm3', kind: 'memo' as const, label: '회고', r: 8, x: 170, y: 220, color: '#8b7b5a', hideLabel: true },
+  { id: 'm4', kind: 'memo' as const, label: '주간 기록', r: 8, x: 174, y: 282, color: '#8b7b5a', hideLabel: true },
+  { id: 'm5', kind: 'memo' as const, label: '읽을거리', r: 8, x: 348, y: 48, color: '#c56a4b', hideLabel: true },
+  { id: 'm6', kind: 'inbox' as const, label: '저장한 링크', r: 8, x: 352, y: 118, color: '#6d7185', hideLabel: true },
+  { id: 'm7', kind: 'memo' as const, label: '여행 메모', r: 8, x: 350, y: 220, color: '#b38a23', hideLabel: true },
+  { id: 'm8', kind: 'memo' as const, label: '가평 일정', r: 8, x: 346, y: 282, color: '#b38a23', hideLabel: true },
+  { id: 'm9', kind: 'memo' as const, label: '준비 문서', r: 8, x: 258, y: 66, color: '#396f55', hideLabel: true },
+  { id: 'm10', kind: 'memo' as const, label: '회의 체크', r: 8, x: 258, y: 242, color: '#396f55', hideLabel: true },
+];
+
+const TOPIC_EDGES = [
+  { from: 'c', to: 'q', color: '#b8c9e8' },
+  { from: 'c', to: 'r', color: '#d4c8b0' },
+  { from: 'c', to: 'd', color: '#e4b9a9' },
+  { from: 'c', to: 't', color: '#dfcf9b' },
+  { from: 'q', to: 'm1', color: '#b8c9e8' },
+  { from: 'q', to: 'm2', color: '#b8c9e8' },
+  { from: 'r', to: 'm3', color: '#d4c8b0' },
+  { from: 'r', to: 'm4', color: '#d4c8b0' },
+  { from: 'd', to: 'm5', color: '#e4b9a9' },
+  { from: 'd', to: 'm6', color: '#e4b9a9' },
+  { from: 't', to: 'm7', color: '#dfcf9b' },
+  { from: 't', to: 'm8', color: '#dfcf9b' },
+  { from: 'c', to: 'm9', color: '#c3daca' },
+  { from: 'c', to: 'm10', color: '#c3daca' },
+  { from: 'q', to: 'm9', color: '#d1ddef' },
+  { from: 'r', to: 'm10', color: '#d9d0bd' },
+  { from: 'd', to: 'm9', color: '#ebcfc5' },
+  { from: 't', to: 'm10', color: '#e8dbaa' },
 ];
 
 export default function ConnectedMemoryPage() {
   return (
     <>
       <DetailHero
-        chip="관련 기억"
+        chip="기억의 연결"
         lead="적어 둔 것을 다시 만나게 하는 일은 정리가 아니라 마주침의 문제입니다. Subnota는 폴더를 만들라고 하지 않고, 지금 쓰는 문장 옆에 관련된 과거 문장을 조용히 놓아 둡니다."
         title="기록이 연결되고 다시 나타납니다"
       />
@@ -51,7 +95,7 @@ export default function ConnectedMemoryPage() {
         <p className="detail-section-label">이런 것도 함께 합니다</p>
         <h2>흐름이 쌓이면 전체 지도가 보입니다</h2>
 
-        <FeatureGrid>
+        <FeatureGrid tone="blue">
           <FeatureCard
             body="메모 전체가 아니라 문장이 단위입니다. 긴 메모 안에 묻힌 한 줄도 찾아옵니다 — 제목이 달라도, 폴더가 달라도."
             note="메모 단위 검색은 “이 메모가 관련 있다”까지만 말합니다. 문장 단위는 어디가 관련 있는지까지 말합니다."
@@ -71,12 +115,12 @@ export default function ConnectedMemoryPage() {
           </FeatureCard>
 
           <FeatureCard
-            body="한 줄로 부족할 때, 지금 문장을 가운데 두고 가까운 메모들을 펼쳐 봅니다. 가까울수록 가운데에 붙고, 저장한 링크는 회청색으로 구분됩니다."
+            body="지금 쓰는 문장과 가까운 메모를 메모 단위로 펼쳐 봅니다. 관련도가 높은 메모가 중심에 붙고, 저장한 링크는 회청색 노드로 구분됩니다."
             title="주변 메모"
           >
             <Piece width={480}>
               <div className="piece-card piece-card-flush" style={{ height: 286 }}>
-                <KnowledgeGraph centerId="c" nodes={NEARBY_NODES} />
+                <KnowledgeGraph centerId="c" edges={NEARBY_EDGES} nodes={NEARBY_NODES} />
               </div>
             </Piece>
           </FeatureCard>
@@ -89,11 +133,17 @@ export default function ConnectedMemoryPage() {
               <div className="piece-rail">
                 <TopicFolders
                   folders={[
-                    { count: 6, label: '회의와 준비' },
-                    { count: 4, label: '읽을거리' },
-                    { count: 3, label: '여행' },
+                    { count: 12, label: '오늘의 생각' },
+                    { count: 8, label: '팀 프로젝트' },
+                    { count: 6, label: '읽고 저장한 것' },
+                    { count: 4, label: '다음 주 준비' },
                   ]}
-                  memos={['팀 회의 준비', '질문 목록 초안']}
+                  memos={[
+                    { meta: '오늘 · 회의 메모', title: '회의 질문 정리' },
+                    { meta: '어제 · 준비 기록', title: '다음 주 발표 초안' },
+                    { meta: '지난주 · 저장한 링크', title: '읽어볼 자료 모음' },
+                  ]}
+                  openIndex={2}
                 />
               </div>
             </Piece>
@@ -116,39 +166,11 @@ export default function ConnectedMemoryPage() {
           >
             <Piece width={480}>
               <div className="piece-card piece-card-flush" style={{ height: 286 }}>
-                <KnowledgeGraph centerId="c" nodes={TOPIC_NODES} />
+                <KnowledgeGraph centerId="c" edges={TOPIC_EDGES} nodes={TOPIC_NODES} />
               </div>
             </Piece>
           </FeatureCard>
 
-          <FeatureCard
-            body="찾으러 가야 기억나는 것은 대개 영영 안 찾습니다. 그래서 Subnota는 검색창을 하나 더 주는 대신, 쓰고 있는 자리로 가져옵니다. 원본은 쓰던 탭을 빼앗지 않고 오른쪽 패널에서 열립니다."
-            title="잊고 있던 것이 먼저 옵니다"
-            wide
-          >
-            <Piece rotate={-1.5} width={330} x={-196} y={4}>
-              <PreviewPanel
-                body={
-                  '회의 질문은 회의 시작 전에 이미 종이 위에 있어야 한다. 그 자리에서 떠올린 질문은 대체로 이미 나온 이야기의 반복이었다.'
-                }
-                highlight="회의 질문은 회의 시작 전에 이미 종이 위에 있어야 한다."
-                metadata="7일 전 · 회의 메모"
-                similarity="관련 84%"
-                title="회의 전에 적어 둘 것"
-              />
-            </Piece>
-            <Piece rotate={2} width={380} x={196} y={-12}>
-              <div className="piece-card">
-                <span className="piece-label">쓰던 화면은 그대로</span>
-                <p className="piece-line">다음 회의 전에 질문을 정리해야겠다.</p>
-                <AmbientGhost
-                  hovered
-                  meta="7일 전 ·"
-                  text="회의 질문은 시작 전에 이미 종이 위에…"
-                />
-              </div>
-            </Piece>
-          </FeatureCard>
         </FeatureGrid>
       </section>
 

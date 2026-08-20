@@ -5,6 +5,8 @@
 import type { ComponentType, SVGProps } from 'react';
 import {
   ArrowTopRightOnSquareIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
   ArrowUpRightIcon,
   Bars3BottomLeftIcon,
   CalendarDaysIcon,
@@ -18,6 +20,7 @@ import {
   FolderIcon,
   HeartIcon,
   InboxIcon,
+  LinkIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   ShareIcon,
@@ -50,9 +53,12 @@ export const CalendarDays = adapt(CalendarDaysIcon);
 export const ChevronLeft = adapt(ChevronLeftIcon);
 export const ChevronRight = adapt(ChevronRightIcon);
 export const ExternalLink = adapt(ArrowTopRightOnSquareIcon);
+export const Redo = adapt(ArrowUturnRightIcon);
+export const Undo = adapt(ArrowUturnLeftIcon);
 export const Folder = adapt(FolderIcon);
 export const Heart = adapt(HeartIcon);
 export const Inbox = adapt(InboxIcon);
+export const Link = adapt(LinkIcon);
 export const List = adapt(Bars3BottomLeftIcon);
 export const MoreHorizontal = adapt(EllipsisHorizontalIcon);
 export const Network = adapt(ShareIcon);

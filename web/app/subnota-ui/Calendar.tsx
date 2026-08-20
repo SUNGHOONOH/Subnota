@@ -174,10 +174,12 @@ export function CalendarMonth({
   title,
   badge,
   cells,
+  popItems = false,
 }: {
   title: string;
   badge?: string;
   cells: MonthCell[];
+  popItems?: boolean;
 }) {
   return (
     <div className="cal-fragment">
@@ -208,7 +210,7 @@ export function CalendarMonth({
             <div className="cal-month-items">
               {cell.items?.map((item) => (
                 <span
-                  className="cal-month-item"
+                  className={popItems ? 'cal-month-item cal-pop-item' : 'cal-month-item'}
                   key={item.title}
                   style={{
                     background: CAL_TONES[item.tone].bg,
@@ -226,61 +228,84 @@ export function CalendarMonth({
   );
 }
 
-/* 주간 한 줄. 시간대 눈금 위에 블록만 얹은 압축형이다. */
+/* 주간 조각. 실제 주간 뷰와 같은 7열 헤더·시간 거터·시간 격자를 쓴다. */
 export function CalendarWeekStrip({
   title,
   badge,
   hours,
   rows,
+  popItems = false,
 }: {
   title: string;
   badge?: string;
   hours: string[];
+  popItems?: boolean;
   rows: {
     label: string;
     date: string;
     blocks: { at: number; span: number; title: string; sub?: string; tone: CalTone }[];
   }[];
 }) {
+  const hourHeight = 28;
+
   return (
-    <div className="cal-fragment">
+    <div className="cal-fragment cal-week-fragment">
       <div className="cal-fragment-head">
         <strong>{title}</strong>
         {badge && <span className="cal-fragment-badge">{badge}</span>}
       </div>
-      <div className="cal-strip-hours">
+      <div className="cal-timegrid-head cal-fragment-week-head">
         <span />
-        {hours.map((hour) => (
-          <span key={hour}>{hour}</span>
+        {rows.map((row) => (
+          <div className="cal-col-head" key={row.date}>
+            <span className="cal-col-dow">{row.label}</span>
+            <span className="cal-col-date">{row.date.slice(2)}</span>
+          </div>
         ))}
       </div>
-      {rows.map((row) => (
-        <div className="cal-strip-row" key={row.date}>
-          <div className="cal-strip-day">
-            <strong>{row.label}</strong>
-            <span>{row.date}</span>
-          </div>
-          <div className="cal-strip-track">
+      <div className="cal-allday-row cal-fragment-week-allday" />
+      <div
+        className="cal-timegrid-body cal-fragment-week-grid"
+        style={{ height: hours.length * hourHeight }}
+      >
+        <div className="cal-time-gutter">
+          {hours.map((hour) => (
+            <span
+              className="cal-hour-label"
+              key={hour}
+              style={{ height: hourHeight }}
+            >
+              {hour}
+            </span>
+          ))}
+        </div>
+        {rows.map((row) => (
+          <div className="cal-day-col" key={row.date}>
             {hours.map((hour) => (
-              <span className="cal-strip-slot" key={hour} />
+              <div
+                className="cal-hour-cell"
+                key={hour}
+                style={{ height: hourHeight }}
+              />
             ))}
             {row.blocks.map((block) => (
-              <span
-                className="cal-strip-block"
+              <div
+                className={popItems ? 'cal-event cal-pop-item' : 'cal-event'}
                 key={block.title}
                 style={{
                   background: CAL_TONES[block.tone].bg,
                   color: CAL_TONES[block.tone].text,
-                  gridColumn: `${block.at} / span ${block.span}`,
+                  height: block.span * hourHeight - 2,
+                  top: (block.at - 1) * hourHeight,
                 }}
               >
                 <strong>{block.title}</strong>
                 {block.sub && <span>{block.sub}</span>}
-              </span>
+              </div>
             ))}
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

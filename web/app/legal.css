@@ -29,15 +29,10 @@
 }
 
 .legal-brand-mark {
-  align-items: center;
-  background: var(--brand-mark);
-  border-radius: 999px;
-  color: white;
-  display: inline-flex;
-  font-size: 14px;
-  height: 26px;
-  justify-content: center;
-  width: 26px;
+  color: var(--brand-mark);
+  flex: none;
+  height: 28px;
+  width: 28px;
 }
 
 .legal-page-header nav {

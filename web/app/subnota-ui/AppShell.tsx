@@ -7,7 +7,6 @@ import type { ReactNode } from 'react';
 import {
   AppWindow,
   CalendarDays,
-  Columns2,
   Folder,
   List,
   NotebookText,
@@ -16,6 +15,8 @@ import {
   Search,
   Settings,
   Topics,
+  Redo,
+  Undo,
 } from './icons';
 
 export interface MemoRow {
@@ -119,7 +120,10 @@ export function CommandBar({ collapsed = false }: { collapsed?: boolean }) {
       </span>
       <span aria-hidden="true" className="split-command-divider" />
       <span className="split-command-button">
-        <Columns2 size={16} />
+        <Undo size={18} />
+      </span>
+      <span className="split-command-button">
+        <Redo size={18} />
       </span>
     </div>
   );

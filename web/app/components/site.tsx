@@ -6,52 +6,52 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
-  AppWindow,
   CalendarDays,
   Columns2,
-  NotebookText,
+  Inbox,
+  Link as LinkIcon,
   SubnotaMark,
 } from '../subnota-ui/icons';
 
 export const CHAPTERS = [
   {
-    Icon: NotebookText,
-    blurb: '지금 쓰는 문장과 관련된 과거 문장',
+    Icon: LinkIcon,
+    blurb: '',
     anchor: '/#connected-memory',
     href: '/features/connected-memory',
     id: 'connected-memory',
     tone: 'blue',
-    tab: '관련 기억',
+    tab: '기억의 연결',
     title: '기록이 연결되고 다시 나타납니다',
   },
   {
     Icon: CalendarDays,
-    blurb: '문장 속 날짜가 캘린더 일정으로',
+    blurb: '',
     anchor: '/#memo-to-calendar',
     href: '/features/memo-to-calendar',
     id: 'memo-to-calendar',
     tone: 'green',
-    tab: '메모 → 일정',
+    tab: '메모가 일정으로',
     title: '메모가 바로 일정으로 이어집니다',
   },
   {
-    Icon: AppWindow,
-    blurb: '저장한 링크가 필요할 때 다시',
+    Icon: Inbox,
+    blurb: '',
     anchor: '/#reuse-inbox',
     href: '/features/reuse-inbox',
     id: 'reuse-inbox',
     tone: 'amber',
-    tab: '수집과 재사용',
-    title: '모아둔 정보가 다시 쓰이게 됩니다',
+    tab: '일단 줍고, 다시 쓰기',
+    title: '읽던 페이지를 간편하게 주워 담습니다',
   },
   {
     Icon: Columns2,
-    blurb: '빠른 기록과 나란히 보기',
+    blurb: '',
     anchor: '/#productivity',
     href: '/features/productivity',
     id: 'productivity',
     tone: 'clay',
-    tab: '작업 흐름',
+    tab: '멈출 수 없는 작업',
     title: '흐름을 끊지 않고 더 많이 합니다',
   },
 ] as const;
@@ -123,22 +123,35 @@ export function SiteHeader() {
                 className="nav-menu-item"
                 href={chapter.anchor}
                 key={chapter.id}
-                onClick={() => setFeaturesOpen(false)}
+                onClick={(event) => {
+                  setFeaturesOpen(false);
+                  handleHashLinkClick(event);
+                }}
               >
                 <span className={`nav-menu-icon tone-${chapter.tone}`}>
                   <Icon size={17} />
                 </span>
                 <span>
                   <strong>{chapter.tab}</strong>
-                  <span>{chapter.blurb}</span>
+                  {chapter.blurb && <span>{chapter.blurb}</span>}
                 </span>
               </Link>
             ))}
           </div>
         </div>
-        <Link href="/#about">About</Link>
+        <Link href="/#about" onClick={handleHashLinkClick}>About</Link>
       </nav>
-      <Link className="header-cta" href="/#download">
+      {/* EN 은 아직 없다. 자리만 잡아 두고 KO 가 눌린 상태로 둔다 —
+          지금 눌러 봐야 갈 곳이 없으므로 EN 은 비활성이다. */}
+      <div aria-label="언어 선택" className="lang-switch" role="group">
+        <button disabled type="button">
+          EN
+        </button>
+        <button aria-current="true" type="button">
+          KO
+        </button>
+      </div>
+      <Link className="header-cta" href="/#download" onClick={handleHashLinkClick}>
         무료로 시작하기 <span aria-hidden="true">→</span>
       </Link>
     </header>
@@ -147,6 +160,20 @@ export function SiteHeader() {
 
 const MAC_URL = process.env.NEXT_PUBLIC_DOWNLOAD_MAC_URL;
 const WINDOWS_URL = process.env.NEXT_PUBLIC_DOWNLOAD_WIN_URL;
+
+function handleHashLinkClick(event: React.MouseEvent<HTMLAnchorElement>) {
+  const href = event.currentTarget.getAttribute('href');
+  if (!href?.startsWith('/#') || window.location.pathname !== '/') return;
+
+  const hash = href.slice(1);
+  if (window.location.hash !== hash) return;
+
+  const target = document.getElementById(hash.slice(1));
+  if (!target) return;
+
+  event.preventDefault();
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 const AppleGlyph = () => (
   <svg aria-hidden="true" fill="currentColor" height="19" viewBox="0 0 384 512" width="19">

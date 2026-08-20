@@ -59,13 +59,15 @@ import './local-embedding';
 
 const APP_RENDERER_SCHEME = 'subnota-app';
 const APP_RENDERER_ORIGIN = `${APP_RENDERER_SCHEME}://bundle`;
+const POSTHOG_API_ORIGIN = 'https://us.i.posthog.com';
+const POSTHOG_ASSETS_ORIGIN = 'https://us-assets.i.posthog.com';
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
+  `script-src 'self' ${POSTHOG_ASSETS_ORIGIN}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.run.app",
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.run.app ${POSTHOG_API_ORIGIN} ${POSTHOG_ASSETS_ORIGIN}`,
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
@@ -168,6 +170,7 @@ let currentCloseBehavior: DesktopPreferences['closeBehavior'] = 'tray';
 let appIsQuitting = false;
 let allowQuitAfterFlush = false;
 let quitFlushInProgress = false;
+let localWriteFlushFailureDialogInProgress = false;
 let nativeUpdateInstallInProgress = false;
 let localWriteFlushRequestId = 0;
 const LOCAL_WRITE_FLUSH_TIMEOUT_MS = 15_000;
@@ -357,25 +360,42 @@ configureLocalDatabaseMaintenanceHooks({
     }),
 });
 
-const showLocalWriteFlushFailure = () => {
+const showLocalWriteFlushFailure = async () => {
+  if (localWriteFlushFailureDialogInProgress) return;
+  localWriteFlushFailureDialogInProgress = true;
   const options: Electron.MessageBoxOptions = {
-    buttons: [mainT('확인', 'OK')],
+    buttons: [
+      mainT('계속 열기', 'Keep app open'),
+      mainT('저장 확인 없이 종료', 'Quit without confirming saved changes'),
+    ],
+    cancelId: 0,
+    defaultId: 0,
     message: mainT(
-      '아직 저장하지 못한 변경 사항이 있어 앱 종료를 중단했습니다.',
-      'The app will stay open because some changes have not been saved yet.',
+      '최근 변경 사항이 로컬에 저장됐는지 확인하지 못했습니다.',
+      'The app could not confirm that recent changes were saved locally.',
     ),
     detail: mainT(
-      '잠시 후 다시 종료해주세요. 변경 사항이 저장될 때까지 앱은 계속 실행됩니다.',
-      'Please try again shortly. The app will keep running until your changes are saved.',
+      '계속 열어 두고 다시 종료하면 저장을 다시 확인합니다. 지금 종료하면 마지막 변경 사항 일부가 손실될 수 있습니다.',
+      'Keep the app open and try quitting again to check saving again. Quitting now may lose some of your latest changes.',
     ),
-    title: mainT('변경 사항 저장 중', 'Saving changes'),
+    title: mainT(
+      '저장 상태를 확인할 수 없습니다',
+      'Could not confirm saved changes',
+    ),
     type: 'warning',
   };
   const owner = [...mainWindows].find(window => !window.isDestroyed());
-  if (owner) {
-    void dialog.showMessageBox(owner, options);
-  } else {
-    void dialog.showMessageBox(options);
+  try {
+    const result = owner
+      ? await dialog.showMessageBox(owner, options)
+      : await dialog.showMessageBox(options);
+    if (result.response !== 1) return;
+
+    allowQuitAfterFlush = true;
+    appIsQuitting = true;
+    app.exit(0);
+  } finally {
+    localWriteFlushFailureDialogInProgress = false;
   }
 };
 
@@ -402,6 +422,7 @@ app.on('before-quit', event => {
     return;
   }
   event.preventDefault();
+  if (localWriteFlushFailureDialogInProgress) return;
   if (quitFlushInProgress) return;
   quitFlushInProgress = true;
   void flushAllLocalWrites().then(ok => {
@@ -966,6 +987,7 @@ const createWindow = ({ show = true }: { show?: boolean } = {}) => {
     // Only a close that will actually destroy this renderer needs a flush.
     if (currentCloseBehavior !== 'quit') return;
     event.preventDefault();
+    if (localWriteFlushFailureDialogInProgress) return;
     if (closeFlushInProgress) return;
     closeFlushInProgress = true;
     const isLastMainWindow = mainWindows.size === 1;
@@ -1593,10 +1615,10 @@ app.on('ready', () => {
           ...details.responseHeaders,
           'Content-Security-Policy': [
             "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+            `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${POSTHOG_ASSETS_ORIGIN}; ` +
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
             "font-src 'self' data: https://fonts.gstatic.com; " +
-            "connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.run.app; " +
+            `connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.run.app ${POSTHOG_API_ORIGIN} ${POSTHOG_ASSETS_ORIGIN}; ` +
             // https: matches the packaged-app CSP — inbox thumbnails and
             // domain favicons are remote images.
             "img-src 'self' data: blob: https:",
