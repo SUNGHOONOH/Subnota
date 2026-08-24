@@ -271,8 +271,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  electronState.appHandlers['before-quit']?.({ preventDefault: vi.fn() });
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await electronState.appHandlers['will-quit']?.();
   fs.rmSync(temporaryDirectory, {
     force: true,
     maxRetries: 5,

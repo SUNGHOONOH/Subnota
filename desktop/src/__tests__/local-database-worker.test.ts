@@ -101,4 +101,17 @@ describe('local-database worker reliability', () => {
     expect(appHandlers['before-quit']).toBeUndefined();
     expect(appHandlers['will-quit']).toBeTypeOf('function');
   });
+
+  it('waits for the database worker to stop during app shutdown', async () => {
+    const pendingList = list();
+    const created = MockWorker.last;
+    if (!created) throw new Error('worker was not created');
+    const request = created.postMessage.mock.calls[0][0] as { id: number };
+    created.emit('message', { id: request.id, result: [] });
+    await pendingList;
+
+    await appHandlers['will-quit']?.();
+
+    expect(created.terminate).toHaveBeenCalledOnce();
+  });
 });

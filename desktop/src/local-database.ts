@@ -1113,16 +1113,14 @@ export const flushLocalDatabaseOperations = async () => {
   }
 };
 
-app.on('will-quit', () => {
-  void worker?.terminate();
-});
-
 const stopWorker = async () => {
   if (!worker) return;
   const activeWorker = worker;
   worker = null;
   await activeWorker.terminate();
 };
+
+app.on('will-quit', () => stopWorker());
 
 const getStorageInfo = async () => {
   const databasePath = getDatabasePath();
