@@ -75,3 +75,36 @@ jobs:
           if [ -n "${SUBNOTA_BUILD_KEYCHAIN:-}" ]; then
             security delete-keychain "$SUBNOTA_BUILD_KEYCHAIN" || true
           fi
+
+  release-windows:
+    needs: release-macos
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm run lint
+      - run: pnpm audit --prod
+
+      - name: Build and publish Windows installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: pnpm run release:windows -- "$env:RELEASE_NOTES"
