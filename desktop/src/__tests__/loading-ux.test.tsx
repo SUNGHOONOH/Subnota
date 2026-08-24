@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import { MantineProvider } from '@mantine/core';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import WorkspaceBootSkeleton from '../components/WorkspaceBootSkeleton';
 import InboxCardSkeleton from '../features/inbox/InboxCardSkeleton';
@@ -29,6 +29,14 @@ const styles = read('styles/subnota-workspace.scss');
 
 const render = (node: ReactElement) =>
   renderToStaticMarkup(<MantineProvider>{node}</MantineProvider>);
+
+beforeAll(() => {
+  vi.stubGlobal('navigator', { language: 'ko-KR', languages: ['ko-KR'] });
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('앱 시작 — 전체 화면 로딩', () => {
   it('브랜드 목업 → 앱 셸 스켈레톤 → 실제 화면 순서로만 넘어간다', () => {
@@ -266,7 +274,7 @@ describe('State B — 주변 메모 검색', () => {
       styles.indexOf('@keyframes net-search-round'),
       styles.indexOf('@keyframes net-search-round') + 900,
     );
-    const commandCounts = [...round.matchAll(/d:\s*path\(\s*"([^"]+)"/g)].map(
+    const commandCounts = [...round.matchAll(/d:\s*path\(\s*['"]([^'"]+)['"]/g)].map(
       match => (match[1].match(/C/g) ?? []).length,
     );
 
@@ -303,7 +311,9 @@ describe('State B — 주변 메모 검색', () => {
 
 describe('Topics', () => {
   it('기존 clusters가 있으면 지우지 않고 제목 옆 표시만 더한다', () => {
-    expect(splitSource).toContain('{isTopicsLoading && <TopicsBusyDot />}');
+    expect(splitSource).toContain(
+      '{isTopicsLoading && <TopicsBusyDot language={language} />}',
+    );
     expect(splitSource).not.toContain('Topics 계산 결과를 불러오는 중');
   });
 

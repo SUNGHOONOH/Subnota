@@ -12,12 +12,15 @@ import {
   Plus,
   Search,
 } from './icons';
+import { useText } from '../lib/i18n';
 
 /* 문장을 드래그해 선택하면 뜨는 팝오버. 서식 버튼 다음에 구분선을 두고,
    선택한 문장으로 바로 할 수 있는 두 가지 — 검색과 일정 등록 — 이 온다. */
 export function SelectionBubble({ pressing = false }: { pressing?: boolean }) {
+  const text = useText();
+
   return (
-    <div aria-label="선택 텍스트 서식" className="selection-bubble-toolbar">
+    <div aria-label={text('선택 텍스트 서식', 'Selected text formatting')} className="selection-bubble-toolbar">
       <span className="tiptap-button" style={{ fontWeight: 700 }}>
         B
       </span>
@@ -39,7 +42,7 @@ export function SelectionBubble({ pressing = false }: { pressing?: boolean }) {
         style={pressing ? { transform: 'scale(0.96)' } : undefined}
       >
         <CalendarDays size={15} />
-        <span className="tiptap-button-text">일정 등록</span>
+        <span className="tiptap-button-text">{text('일정 등록', 'Add to calendar')}</span>
       </span>
     </div>
   );
@@ -96,9 +99,11 @@ export function NoteHeader({
   saveStatus?: string;
   trailing?: ReactNode;
 }) {
+  const text = useText();
+
   return (
     <div className="split-note-header">
-      <span className="split-note-save-status">{saveStatus}</span>
+      <span className="split-note-save-status">{text(saveStatus, saveStatus === '저장됨' ? 'Saved' : saveStatus)}</span>
       <div className="split-note-title-input">{title}</div>
       <div className="note-fixed-toolbar">
         <span className="tiptap-button" style={{ fontWeight: 700 }}>
@@ -137,12 +142,14 @@ export function AmbientGhost({
   hint?: string;
   hovered?: boolean;
 }) {
+  const textLabel = useText();
+
   return (
     <span className="ambient-ghost-widget">
       <span className={hovered ? 'ambient-ghost hovered' : 'ambient-ghost'}>
         <span className="ambient-ghost-meta">{meta}</span>
         <span className="ambient-ghost-text">{text}</span>
-        <span className="ambient-ghost-hint">{hint}</span>
+        <span className="ambient-ghost-hint">{textLabel(hint, hint === '⌘⏎ 열기' ? '⌘⏎ Open' : hint)}</span>
       </span>
     </span>
   );

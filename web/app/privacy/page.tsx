@@ -1,16 +1,21 @@
 import type { Metadata } from 'next';
 import LegalDocument from '../components/LegalDocument';
+import { privacyTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
   title: '개인정보 처리방침 | Subnota',
   description: 'Subnota의 개인정보 처리방침입니다.',
 };
 
-const EFFECTIVE_DATE = '2026년 8월 15일';
+const EFFECTIVE_DATE = { en: 'August 15, 2026', ko: '2026년 8월 15일' };
 
 export default function PrivacyPage() {
   return (
-    <LegalDocument effectiveDate={EFFECTIVE_DATE} title="개인정보 처리방침">
+    <LegalDocument
+      effectiveDate={EFFECTIVE_DATE}
+      title={{ en: 'Privacy Policy', ko: '개인정보 처리방침' }}
+      translations={privacyTranslations}
+    >
       <p>
         오성훈(이하 “운영자”)은 Subnota(이하 “서비스”)를 운영하며, 서비스
         제공에 필요한 최소한의 개인정보를 처리합니다. 이 방침은 서비스의 웹사이트,

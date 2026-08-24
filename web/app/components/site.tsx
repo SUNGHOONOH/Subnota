@@ -10,8 +10,10 @@ import {
   Columns2,
   Inbox,
   Link as LinkIcon,
+  List as MenuIcon,
   SubnotaMark,
 } from '../subnota-ui/icons';
+import { useLanguage, useText } from '../lib/i18n';
 
 export const CHAPTERS = [
   {
@@ -21,8 +23,8 @@ export const CHAPTERS = [
     href: '/features/connected-memory',
     id: 'connected-memory',
     tone: 'blue',
-    tab: '기억의 연결',
-    title: '기록이 연결되고 다시 나타납니다',
+    tab: { en: 'Connected memory', ko: '기억의 연결' },
+    title: { en: 'Your notes keep connecting', ko: '기록은 끊임없이 연결됩니다' },
   },
   {
     Icon: CalendarDays,
@@ -31,8 +33,8 @@ export const CHAPTERS = [
     href: '/features/memo-to-calendar',
     id: 'memo-to-calendar',
     tone: 'green',
-    tab: '메모가 일정으로',
-    title: '메모가 바로 일정으로 이어집니다',
+    tab: { en: 'Memo to calendar', ko: '메모가 일정으로' },
+    title: { en: 'Memos become schedules', ko: '메모가 바로 일정으로 이어집니다' },
   },
   {
     Icon: Inbox,
@@ -41,8 +43,8 @@ export const CHAPTERS = [
     href: '/features/reuse-inbox',
     id: 'reuse-inbox',
     tone: 'amber',
-    tab: '일단 줍고, 다시 쓰기',
-    title: '읽던 페이지를 간편하게 주워 담습니다',
+    tab: { en: 'Collect and reuse', ko: '일단 줍고, 다시 쓰기' },
+    title: { en: 'Save what you are reading', ko: '읽던 페이지를 간편하게 주워 담습니다' },
   },
   {
     Icon: Columns2,
@@ -51,25 +53,55 @@ export const CHAPTERS = [
     href: '/features/productivity',
     id: 'productivity',
     tone: 'clay',
-    tab: '멈출 수 없는 작업',
-    title: '흐름을 끊지 않고 더 많이 합니다',
+    tab: { en: 'Unbroken workflow', ko: '멈출 수 없는 작업' },
+    title: { en: 'Keep the work moving', ko: '흐름은 끊지 않고, 작업은 이어집니다' },
   },
 ] as const;
 
 export function Brand() {
+  const text = useText();
+
   return (
-    <Link aria-label="Subnota 홈" className="brand" href="/">
+    <Link aria-label={text('Subnota 홈', 'Subnota home')} className="brand" href="/">
       <SubnotaMark size={26} />
       <span>Subnota</span>
     </Link>
   );
 }
 
+function LanguageSwitch({ className = '' }: { className?: string }) {
+  const { language, setLanguage } = useLanguage();
+  const text = useText();
+
+  return (
+    <div
+      aria-label={text('언어 선택', 'Language selection')}
+      className={className ? `lang-switch ${className}` : 'lang-switch'}
+      role="group"
+    >
+      <button
+        aria-pressed={language === 'en'}
+        onClick={() => setLanguage('en')}
+        type="button"
+      >
+        EN
+      </button>
+      <button
+        aria-pressed={language === 'ko'}
+        onClick={() => setLanguage('ko')}
+        type="button"
+      >
+        KO
+      </button>
+    </div>
+  );
+}
+
 export function SiteHeader() {
-  const pathname = usePathname();
+  const text = useText();
   const [scrolled, setScrolled] = useState(false);
   const [featuresOpen, setFeaturesOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const sync = () => setScrolled(window.scrollY > 8);
@@ -79,11 +111,11 @@ export function SiteHeader() {
   }, []);
 
   /* 메뉴 바깥을 누르거나 Esc 로 닫는다. 마우스가 벗어나는 것만으로 닫으면
-     키보드로 연 사람이 닫을 방법이 없다. */
+     키보드로 연 사람이 닫을 방법이 없다. 모바일 패널도 같은 상태를 쓴다. */
   useEffect(() => {
     if (!featuresOpen) return;
     const onPointer = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setFeaturesOpen(false);
+      if (!headerRef.current?.contains(event.target as Node)) setFeaturesOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setFeaturesOpen(false);
@@ -97,12 +129,15 @@ export function SiteHeader() {
   }, [featuresOpen]);
 
   return (
-    <header className={scrolled ? 'site-header scrolled' : 'site-header'}>
+    <header
+      className={scrolled ? 'site-header scrolled' : 'site-header'}
+      ref={headerRef}
+    >
       <Brand />
-      <nav aria-label="주요 메뉴" className="nav-links">
+      <nav aria-label={text('주요 메뉴', 'Main navigation')} className="nav-links">
         {/* hover 로 열고 닫는다. 트리거와 메뉴 사이 틈을 투명한 다리로 메워야
             아래로 내리는 도중에 닫히지 않는다 — 예전 랜딩이 쓰던 방식이다. */}
-        <div className="nav-menu" ref={menuRef}>
+        <div className="nav-menu">
           <button
             aria-expanded={featuresOpen}
             aria-haspopup="true"
@@ -132,7 +167,7 @@ export function SiteHeader() {
                   <Icon size={17} />
                 </span>
                 <span>
-                  <strong>{chapter.tab}</strong>
+                  <strong>{text(chapter.tab.ko, chapter.tab.en)}</strong>
                   {chapter.blurb && <span>{chapter.blurb}</span>}
                 </span>
               </Link>
@@ -141,19 +176,81 @@ export function SiteHeader() {
         </div>
         <Link href="/#about" onClick={handleHashLinkClick}>About</Link>
       </nav>
-      {/* EN 은 아직 없다. 자리만 잡아 두고 KO 가 눌린 상태로 둔다 —
-          지금 눌러 봐야 갈 곳이 없으므로 EN 은 비활성이다. */}
-      <div aria-label="언어 선택" className="lang-switch" role="group">
-        <button disabled type="button">
-          EN
-        </button>
-        <button aria-current="true" type="button">
-          KO
-        </button>
-      </div>
-      <Link className="header-cta" href="/#download" onClick={handleHashLinkClick}>
-        무료로 시작하기 <span aria-hidden="true">→</span>
+      <LanguageSwitch />
+      <Link
+        className="desktop-header-cta header-cta"
+        href="/#download"
+        onClick={handleHashLinkClick}
+      >
+        {text('무료로 시작하기', 'Start for free')} <span aria-hidden="true">→</span>
       </Link>
+      <div className="mobile-header-actions">
+        <Link
+          className="mobile-header-cta header-cta"
+          href="/#download"
+          onClick={handleHashLinkClick}
+        >
+          {text('무료로 시작하기', 'Start for free')}
+        </Link>
+        <div className="mobile-menu">
+          <button
+            aria-controls="mobile-menu-dropdown"
+            aria-expanded={featuresOpen}
+            aria-label={
+              featuresOpen
+                ? text('메뉴 닫기', 'Close menu')
+                : text('메뉴 열기', 'Open menu')
+            }
+            className="mobile-menu-trigger"
+            onClick={() => setFeaturesOpen((open) => !open)}
+            type="button"
+          >
+            <MenuIcon size={20} />
+          </button>
+          <div
+            className={
+              featuresOpen
+                ? 'mobile-menu-dropdown forced'
+                : 'mobile-menu-dropdown'
+            }
+            id="mobile-menu-dropdown"
+          >
+            <Link
+              className="mobile-menu-about"
+              href="/#about"
+              onClick={(event) => {
+                setFeaturesOpen(false);
+                handleHashLinkClick(event);
+              }}
+            >
+              About
+            </Link>
+            <p className="nav-menu-heading">Features</p>
+            {CHAPTERS.map(({ Icon, ...chapter }) => (
+              <Link
+                className="nav-menu-item"
+                href={chapter.anchor}
+                key={chapter.id}
+                onClick={(event) => {
+                  setFeaturesOpen(false);
+                  handleHashLinkClick(event);
+                }}
+              >
+                <span className={`nav-menu-icon tone-${chapter.tone}`}>
+                  <Icon size={17} />
+                </span>
+                <span>
+                  <strong>{text(chapter.tab.ko, chapter.tab.en)}</strong>
+                </span>
+              </Link>
+            ))}
+            <LanguageSwitch className="mobile-menu-language" />
+            <div className="mobile-menu-downloads">
+              <DownloadRow note={false} />
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
   );
 }
@@ -196,11 +293,12 @@ function DownloadButton({
   href?: string;
   platform: string;
 }) {
+  const text = useText();
   const copy = (
     <>
       {glyph}
       <span className="download-btn-copy">
-        <span>{href ? 'Download for' : '출시 예정'}</span>
+        <span>{href ? text('다운로드', 'Download for') : text('출시 예정', 'Coming soon')}</span>
         <strong>{platform}</strong>
       </span>
     </>
@@ -220,6 +318,8 @@ function DownloadButton({
 }
 
 export function DownloadRow({ note = true }: { note?: boolean }) {
+  const text = useText();
+
   return (
     <>
       <div className="hero-actions">
@@ -229,10 +329,14 @@ export function DownloadRow({ note = true }: { note?: boolean }) {
           href={WINDOWS_URL}
           platform="Windows"
         />
+        <DownloadButton glyph={<AppleGlyph />} platform="iOS App Store" />
       </div>
       {note && (
         <p className="hero-note">
-          macOS·Windows 앱을 준비하고 있습니다. iOS 앱은 그다음입니다.
+          {text(
+            'macOS·Windows 앱을 준비하고 있습니다. iOS 앱은 그다음입니다.',
+            'The macOS and Windows apps are in preparation. iOS comes next.',
+          )}
         </p>
       )}
     </>
@@ -241,20 +345,25 @@ export function DownloadRow({ note = true }: { note?: boolean }) {
 
 export function SiteFooter() {
   const pathname = usePathname();
+  const text = useText();
 
   return (
     <footer className="site-footer">
       <div className="shell footer-content">
         <div>
           <Brand />
-          <p className="footer-slogan">정리하지 말고 작성만 하세요.</p>
+          <p className="footer-slogan">
+            {text('적기만 하세요. 나머지는 ', 'Just write. ')}
+            <span className="wordmark-text">Subnota</span>
+            {text('가 합니다', ' takes care of the rest.')}
+          </p>
           <p className="footer-copyright">
             © {new Date().getFullYear()} Subnota. All rights reserved.
           </p>
         </div>
         <div className="footer-info-side">
           <div>
-            <p className="footer-col-title">기능</p>
+            <p className="footer-col-title">{text('기능', 'Features')}</p>
             <div className="footer-links">
               {CHAPTERS.map((chapter) => (
                 <Link
@@ -262,21 +371,21 @@ export function SiteFooter() {
                   href={chapter.href}
                   key={chapter.id}
                 >
-                  {chapter.tab}
+                  {text(chapter.tab.ko, chapter.tab.en)}
                 </Link>
               ))}
             </div>
           </div>
           <div>
-            <p className="footer-col-title">문서</p>
+            <p className="footer-col-title">{text('문서', 'Legal')}</p>
             <div className="footer-links">
-              <Link href="/privacy">개인정보 처리방침</Link>
-              <Link href="/terms">서비스 이용약관</Link>
-              <Link href="/account-deletion">계정 삭제</Link>
+              <Link href="/privacy">{text('개인정보 처리방침', 'Privacy policy')}</Link>
+              <Link href="/terms">{text('서비스 이용약관', 'Terms of service')}</Link>
+              <Link href="/account-deletion">{text('계정 삭제', 'Delete account')}</Link>
             </div>
           </div>
           <div>
-            <p className="footer-col-title">문의</p>
+            <p className="footer-col-title">{text('문의', 'Contact')}</p>
             <div className="footer-links">
               <a className="footer-email" href="mailto:contact@subnota.com">
                 contact@subnota.com

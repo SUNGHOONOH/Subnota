@@ -12,7 +12,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { Heart, MoreHorizontal, Search, Trash2 } from '@/components/icons';
+import { Heart, MoreHorizontal, Search, Trash2, X } from '@/components/icons';
 
 import { InboxSession } from '../../services/backend/inboxService';
 import { faviconUrlFor } from '../../lib/favicon';
@@ -132,6 +132,26 @@ const InboxWorkspace = ({
               setPage(1);
             }}
             placeholder={t('검색', 'Search')}
+            rightSection={
+              query ? (
+                <ActionIcon
+                  aria-label={t('검색어 지우기', 'Clear search')}
+                  className="inbox-search-clear"
+                  onClick={() => {
+                    setQuery('');
+                    setPage(1);
+                  }}
+                  onMouseDown={event => event.preventDefault()}
+                  radius="sm"
+                  title={t('검색어 지우기', 'Clear search')}
+                  variant="subtle"
+                >
+                  <X size={14} />
+                </ActionIcon>
+              ) : undefined
+            }
+            rightSectionPointerEvents="all"
+            rightSectionWidth={30}
             size="xs"
             value={query}
           />

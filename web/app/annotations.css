@@ -10,9 +10,11 @@
    띠보다 이쪽이 또렷하게 읽힌다. 챕터마다 배경판 색과 짝을 맞춘다. */
 .marker {
   border-radius: 4px;
-  display: inline-block;
+  display: inline;
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 2px 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .marker-blue {

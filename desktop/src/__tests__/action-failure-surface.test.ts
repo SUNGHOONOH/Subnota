@@ -16,7 +16,10 @@ describe('사용자가 누른 것이 실패하면 그 자리에서 알린다', (
       '좋아요를 저장하지 못했습니다.',
       '링크를 삭제하지 못했습니다.',
     ]) {
-      expect(app).toContain(`window.alert('${message}`);
+      const escapedMessage = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      expect(app).toMatch(
+        new RegExp(`window\\.alert\\(\\s*t\\(\\s*'${escapedMessage}`),
+      );
     }
   });
 

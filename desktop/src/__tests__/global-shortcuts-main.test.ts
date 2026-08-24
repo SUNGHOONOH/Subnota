@@ -184,6 +184,7 @@ vi.mock('../update-checker', () => ({ checkForUpdate: vi.fn() }));
 vi.mock('../window-close-handler', () => ({ attachCloseHandler: vi.fn() }));
 vi.mock('node:fs', () => ({
   default: {
+    mkdirSync: vi.fn(),
     promises: { readFile: vi.fn(), writeFile: vi.fn() },
     readFileSync: vi.fn(() => {
       throw new Error('missing preferences');

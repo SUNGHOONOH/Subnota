@@ -29,6 +29,7 @@ import {
   WEEK_ROWS,
   WEEK_ROWS_PLACED,
 } from './fixtures';
+import { useText } from '../../lib/i18n';
 
 const SENTENCE = '내일 오후 3시 팀 미팅 참석하기';
 /* 날짜 표현을 먼저 감지하지만, 일정 등록은 문장 전체를 대상으로 한다. */
@@ -49,19 +50,29 @@ const CURSOR = {
 };
 
 const STRIP_HOURS = ['09', '11', '13', '15', '17'];
-const MEMO_TABS = [{ id: 't1', label: '내일 팀 미팅' }];
-
 export default function MemoToCalendarScene() {
+  const text = useText();
   const { step, hostRef } = useSceneSteps(DURATIONS);
-  const typing = useTyping(SENTENCE, step === 0);
+  const sentence = text(SENTENCE, 'Attend the team meeting tomorrow at 3 PM');
+  const memoTabs = [{ id: 't1', label: text('내일 팀 미팅', 'Tomorrow’s team meeting') }];
+  const weekRows = (step >= 5 ? WEEK_ROWS_PLACED : WEEK_ROWS).map((row) => ({
+    ...row,
+    label: text(row.label, { 일: 'Sun', 월: 'Mon', 화: 'Tue', 수: 'Wed', 목: 'Thu', 금: 'Fri', 토: 'Sat' }[row.label] ?? row.label),
+    blocks: row.blocks.map((block) => ({ ...block, title: text(block.title, 'Team meeting') })),
+  }));
+  const monthCells = (step >= 5 ? MONTH_CELLS_PLACED : MONTH_CELLS).map((cell) => ({
+    ...cell,
+    items: cell.items?.map((item) => ({ ...item, title: text(item.title, 'Team meeting') })),
+  }));
+  const typing = useTyping(sentence, step === 0);
   const picked = useSelection(
-    SENTENCE.length,
+    sentence.length,
     step === 2,
-    DRAG_DURATION_MS / SENTENCE.length,
+    DRAG_DURATION_MS / sentence.length,
   );
 
   const selectedCount =
-    step === 2 ? picked : step > 2 && step < 5 ? SENTENCE.length : 0;
+    step === 2 ? picked : step > 2 && step < 5 ? sentence.length : 0;
   const selectedDateEnd = Math.min(selectedCount, DATE_END);
   const selectedRestLength = Math.max(0, selectedCount - DATE_END);
   const showBubble = step === 3 || step === 4;
@@ -80,7 +91,7 @@ export default function MemoToCalendarScene() {
     <div ref={hostRef}>
       <SceneStage
         height={560}
-        label="메모 문장을 끌어 선택하면 일정 등록 팝오버가 뜨고, 캘린더에 바로 앉는 화면"
+        label={text('메모 문장을 끌어 선택하면 일정 등록 팝오버가 뜨고, 캘린더에 바로 앉는 화면', 'A memo sentence becomes a calendar event through the schedule popover')}
         width={1080}
       >
         <div className="fragment-scene">
@@ -95,10 +106,10 @@ export default function MemoToCalendarScene() {
               </div>
               <div className="fragment-memo-body">
                 <div className="fragment-memo-editor">
-                  <PaneTabs activeId="t1" tabs={MEMO_TABS} />
-                  <NoteHeader title="내일 팀 미팅" />
+                  <PaneTabs activeId="t1" tabs={memoTabs} />
+                  <NoteHeader title={text('내일 팀 미팅', 'Tomorrow’s team meeting')} />
                   <div className="simple-editor-content" style={{ padding: '14px 20px' }}>
-                    <p>회의 준비물 정리하고,</p>
+                    <p>{text('회의 준비물 정리하고,', 'Organize the meeting materials,')}</p>
                     <p>
                       {/* 날짜 표현은 감지된 문법을 유지하되, 드래그는 문장 전체를
                           선택해 일정 제목과 시간이 함께 전달되는 흐름이다. */}
@@ -112,7 +123,7 @@ export default function MemoToCalendarScene() {
                         {typing.typed.slice(DATE_END, DATE_END + selectedRestLength)}
                       </span>
                       {typing.typed.slice(DATE_END + selectedRestLength)}
-                      {!typing.done && <Caret />}
+                      {step === 0 && <Caret blinking={typing.done} />}
                     </p>
                   </div>
                 </div>
@@ -168,10 +179,12 @@ export default function MemoToCalendarScene() {
               </filter>
             </defs>
             {[{
-              body: 'M4,260 C38,260 57,108 105,82',
+              body: 'M4,260 C34,258 48,210 78,190 C89,183 98,183 104,188',
+              head: 'M94,180 L104,188 L96,198',
             }, {
-              body: 'M4,260 C38,260 57,407 105,434',
-            }].map(({ body }) => (
+              body: 'M4,260 C38,270 52,354 76,390 C86,404 96,410 104,408',
+              head: 'M94,399 L104,408 L94,416',
+            }].map(({ body, head }) => (
               <g key={body}>
                 <motion.path
                   animate={placed ? { pathLength: 1, opacity: 0.86 } : { pathLength: 0, opacity: 0 }}
@@ -186,6 +199,20 @@ export default function MemoToCalendarScene() {
                     ? { duration: 0.9, ease: 'easeInOut' }
                     : { duration: 0 }}
                 />
+                <motion.path
+                  animate={placed ? { pathLength: 1, opacity: 0.86 } : { pathLength: 0, opacity: 0 }}
+                  d={head}
+                  filter="url(#fragment-pencil)"
+                  fill="none"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  stroke="#c9962f"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3.2"
+                  transition={placed
+                    ? { delay: 0.72, duration: 0.22, ease: 'easeOut' }
+                    : { duration: 0 }}
+                />
               </g>
             ))}
           </svg>
@@ -193,17 +220,17 @@ export default function MemoToCalendarScene() {
           {/* 오른쪽 — 캘린더 조각 둘 */}
           <div className="fragment-calendar">
             <CalendarWeekStrip
-              badge="8월 3주차"
               popItems={placed}
               hours={STRIP_HOURS}
-              rows={placed ? WEEK_ROWS_PLACED : WEEK_ROWS}
-              title="이번주 블록"
+              rows={weekRows}
+              title=""
+              badge={text('8월 3주차', 'Week 3 · August')}
             />
             <CalendarMonth
-              badge="8월"
-              cells={placed ? MONTH_CELLS_PLACED : MONTH_CELLS}
+              badge={text('8월', 'Aug')}
+              cells={monthCells}
               popItems={placed}
-              title="2026년 8월"
+              title={text('2026년 8월', 'August 2026')}
             />
           </div>
         </div>

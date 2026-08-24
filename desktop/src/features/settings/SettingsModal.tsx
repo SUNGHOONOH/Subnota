@@ -862,11 +862,16 @@ const SETTINGS_CSS = `${REFERENCE_CSS}
 }
 
 .settings-reference-segmented .mantine-SegmentedControl-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 24px;
   padding: 0 8px;
   color: var(--app-color-text);
   font-size: 12px;
   font-weight: 500;
+  line-height: 1;
+  text-align: center;
 }
 
 .settings-reference-switch {
@@ -2742,6 +2747,7 @@ export default function SettingsModal(props: SettingsModalProps) {
         overlayProps={{ backgroundOpacity: 0.42, blur: 2 }}
         padding="md"
         radius="md"
+        shadow="sm"
         size={380}
         title={t('계정 삭제', 'Delete account')}
         withCloseButton={!isDeletingAccount}

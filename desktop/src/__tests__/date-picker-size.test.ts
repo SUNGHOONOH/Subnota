@@ -47,20 +47,21 @@ describe('날짜 선택 달력', () => {
   });
 
   it('오전/오후 토글이 줄어들거나 줄바꿈되지 않는다', () => {
-    expect(popover).toContain('aria-label="시간"');
+    expect(popover).toMatch(/aria-label=\{t\(\s*'시간'/);
     expect(styles).toMatch(
       /\.date-schedule-meridiem button \{[\s\S]*?flex: 0 0 28px;[\s\S]*?white-space: nowrap;/,
     );
   });
 
-  // 바로 옆 주간 그리드가 일·월·화를 쓴다. 한 화면에서 언어가 갈리면 안 된다.
-  it('한글로 쓴다', () => {
+  // 주변 화면과 같은 UI 언어를 쓰되, 고정된 한국어 요일 배열을 두지 않는다.
+  it('UI 언어에 맞게 쓴다', () => {
+    expect(popover).toContain('const dateLocale = getUiDateLocale(language);');
+    expect(popover).toContain('const weekdays = useMemo(() =>');
     expect(popover).toContain(
-      "const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];",
+      "new Intl.DateTimeFormat(dateLocale, { weekday: 'short' })",
     );
-    expect(popover).toContain("format(visibleMonth, 'M월', { locale: ko })");
-    expect(popover).toContain('오전');
-    expect(popover).toContain('오후');
+    expect(popover).toMatch(/t\(\s*'오전'/);
+    expect(popover).toMatch(/t\(\s*'오후'/);
     expect(popover).not.toContain("'MMMM'");
   });
 

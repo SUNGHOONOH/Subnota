@@ -91,7 +91,7 @@ describe('Topics 빈 상태', () => {
 
     // tone="start" + 기본 size라야 마크가 붙는다(EmptyState 규칙).
     expect(emptyBranch).toMatch(
-      /<EmptyState\s*\n\s*body="[^"]+"\s*\n\s*title="메모가 쌓이면 주제별로 자동으로 묶입니다"\s*\n\s*tone="start"/,
+      /<EmptyState[\s\S]*?body=\{t\(\s*'비슷한 내용끼리 저절로 모입니다\.'[\s\S]*?title=\{t\(\s*'메모가 쌓이면 주제별로 자동으로 묶입니다'[\s\S]*?tone="start"/,
     );
     // 비었을 때는 "임시 묶음" 설명을 띄우지 않는다.
     expect(emptyBranch.indexOf('카테고리 기반 임시 묶음')).toBeLessThan(

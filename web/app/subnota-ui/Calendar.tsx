@@ -5,8 +5,26 @@
 
 import type { ReactNode } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Inbox } from './icons';
+import { useText } from '../lib/i18n';
 
 const HOUR_HEIGHT = 38;
+const WEEKDAY_EN: Record<string, string> = {
+  일: 'Sun',
+  월: 'Mon',
+  화: 'Tue',
+  수: 'Wed',
+  목: 'Thu',
+  금: 'Fri',
+  토: 'Sat',
+};
+const CALENDAR_TEXT_EN: Record<string, string> = {
+  '팀 미팅': 'Team meeting',
+  스탠드업: 'Stand-up',
+  '디자인 리뷰': 'Design review',
+};
+
+const localizeCalendarText = (value: string, text: ReturnType<typeof useText>) =>
+  text(value, CALENDAR_TEXT_EN[value] ?? value);
 
 /* 의도된 팔레트(캘린더 카테고리 색) — 앱 토큰으로 흡수하지 말 것.
    원본은 CalendarWorkspace.tsx 의 색상 맵. 기본값은 초록(#66705A)이다. */
@@ -54,6 +72,7 @@ export function CalendarWeek({
   dropPreview?: { day: number; startHour: number; title: string; time: string };
   onInboxSlot?: ReactNode;
 }) {
+  const text = useText();
   const gridHeight = hours.length * HOUR_HEIGHT;
   const top = (hour: number) => (hour - hours[0]) * HOUR_HEIGHT;
 
@@ -68,14 +87,14 @@ export function CalendarWeek({
           <CalendarDays size={16} />
         </span>
         <div className="cal-views">
-          <span className="active">주</span>
-          <span>월</span>
+          <span className="active">{text('주', 'Week')}</span>
+          <span>{text('월', 'Month')}</span>
         </div>
         <div className="cal-nav">
           <span className="cal-nav-icon">
             <ChevronLeft size={14} />
           </span>
-          <span className="cal-today">오늘</span>
+          <span className="cal-today">{text('오늘', 'Today')}</span>
           <span className="cal-nav-icon">
             <ChevronRight size={14} />
           </span>
@@ -89,7 +108,7 @@ export function CalendarWeek({
             className={day.today ? 'cal-col-head today' : 'cal-col-head'}
             key={day.date}
           >
-            <span className="cal-col-dow">{day.dow}</span>
+            <span className="cal-col-dow">{text(day.dow, WEEKDAY_EN[day.dow] ?? day.dow)}</span>
             <span className="cal-col-date">{day.date}</span>
           </div>
         ))}
@@ -105,7 +124,10 @@ export function CalendarWeek({
                 key={hour}
                 style={{ height: HOUR_HEIGHT }}
               >
-                {hour <= 12 ? `오전 ${hour}` : `오후 ${hour - 12}`}
+                {text(
+                  hour <= 12 ? `오전 ${hour}` : `오후 ${hour - 12}`,
+                  hour <= 12 ? `${hour} AM` : `${hour - 12} PM`,
+                )}
               </span>
             ))}
           </div>
@@ -134,8 +156,8 @@ export function CalendarWeek({
                       top: top(event.startHour),
                     }}
                   >
-                    <strong>{event.title}</strong>
-                    <span>{event.time}</span>
+                    <strong>{localizeCalendarText(event.title, text)}</strong>
+                    <span>{text(event.time, event.time.replace('오전', 'AM').replace('오후', 'PM'))}</span>
                   </div>
                 ))}
               {dropPreview && dropPreview.day === columnIndex && (
@@ -146,8 +168,8 @@ export function CalendarWeek({
                     top: top(dropPreview.startHour),
                   }}
                 >
-                  <strong>{dropPreview.title}</strong>
-                  <span>{dropPreview.time}</span>
+                  <strong>{localizeCalendarText(dropPreview.title, text)}</strong>
+                  <span>{text(dropPreview.time, dropPreview.time.replace('오전', 'AM').replace('오후', 'PM'))}</span>
                 </div>
               )}
             </div>
@@ -181,6 +203,8 @@ export function CalendarMonth({
   cells: MonthCell[];
   popItems?: boolean;
 }) {
+  const text = useText();
+
   return (
     <div className="cal-fragment">
       <div className="cal-fragment-head">
@@ -190,7 +214,7 @@ export function CalendarMonth({
       <div className="cal-weekday-row">
         {WEEKDAYS.map((day, index) => (
           <span className={index === 0 ? 'sunday' : undefined} key={day}>
-            {day}
+            {text(day, WEEKDAY_EN[day] ?? day)}
           </span>
         ))}
       </div>
@@ -217,7 +241,7 @@ export function CalendarMonth({
                     color: CAL_TONES[item.tone].text,
                   }}
                 >
-                  <span className="cal-month-item-title">{item.title}</span>
+                  <span className="cal-month-item-title">{localizeCalendarText(item.title, text)}</span>
                 </span>
               ))}
             </div>
@@ -228,37 +252,52 @@ export function CalendarMonth({
   );
 }
 
-/* 주간 조각. 실제 주간 뷰와 같은 7열 헤더·시간 거터·시간 격자를 쓴다. */
+/* 주간 조각. 실제 주간 뷰와 같은 헤더·시간 거터·시간 격자를 쓴다.
+   랜딩 목업은 흐름에 필요한 날짜만 보여 줄 수 있으므로 열 수는 rows에 맞춘다. */
 export function CalendarWeekStrip({
   title,
   badge,
   hours,
   rows,
   popItems = false,
+  dropPreview,
 }: {
-  title: string;
+  title?: string;
   badge?: string;
   hours: string[];
   popItems?: boolean;
+  dropPreview?: { day: number; at: number; title: string; time: string };
   rows: {
     label: string;
     date: string;
-    blocks: { at: number; span: number; title: string; sub?: string; tone: CalTone }[];
+    blocks: {
+      at: number;
+      span: number;
+      title: string;
+      sub?: string;
+      tone: CalTone;
+    }[];
   }[];
 }) {
+  const text = useText();
   const hourHeight = 28;
 
   return (
     <div className="cal-fragment cal-week-fragment">
-      <div className="cal-fragment-head">
-        <strong>{title}</strong>
-        {badge && <span className="cal-fragment-badge">{badge}</span>}
-      </div>
-      <div className="cal-timegrid-head cal-fragment-week-head">
+      {(title || badge) && (
+        <div className="cal-fragment-head">
+          {title && <strong>{title}</strong>}
+          {badge && <span className="cal-fragment-badge">{badge}</span>}
+        </div>
+      )}
+      <div
+        className="cal-timegrid-head cal-fragment-week-head"
+        style={{ gridTemplateColumns: `56px repeat(${rows.length}, minmax(0, 1fr))` }}
+      >
         <span />
         {rows.map((row) => (
           <div className="cal-col-head" key={row.date}>
-            <span className="cal-col-dow">{row.label}</span>
+            <span className="cal-col-dow">{text(row.label, WEEKDAY_EN[row.label] ?? row.label)}</span>
             <span className="cal-col-date">{row.date.slice(2)}</span>
           </div>
         ))}
@@ -266,7 +305,10 @@ export function CalendarWeekStrip({
       <div className="cal-allday-row cal-fragment-week-allday" />
       <div
         className="cal-timegrid-body cal-fragment-week-grid"
-        style={{ height: hours.length * hourHeight }}
+        style={{
+          gridTemplateColumns: `56px repeat(${rows.length}, minmax(0, 1fr))`,
+          height: hours.length * hourHeight,
+        }}
       >
         <div className="cal-time-gutter">
           {hours.map((hour) => (
@@ -279,7 +321,7 @@ export function CalendarWeekStrip({
             </span>
           ))}
         </div>
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <div className="cal-day-col" key={row.date}>
             {hours.map((hour) => (
               <div
@@ -299,10 +341,22 @@ export function CalendarWeekStrip({
                   top: (block.at - 1) * hourHeight,
                 }}
               >
-                <strong>{block.title}</strong>
-                {block.sub && <span>{block.sub}</span>}
+                <strong>{localizeCalendarText(block.title, text)}</strong>
+                {block.sub && <span>{text(block.sub, block.sub.replace('오전', 'AM').replace('오후', 'PM'))}</span>}
               </div>
             ))}
+            {dropPreview && dropPreview.day === index && (
+              <div
+                className="cal-schedule-drop-preview"
+                style={{
+                  height: hourHeight - 2,
+                  top: (dropPreview.at - 1) * hourHeight,
+                }}
+              >
+                <strong>{localizeCalendarText(dropPreview.title, text)}</strong>
+                <span>{text(dropPreview.time, dropPreview.time.replace('오전', 'AM').replace('오후', 'PM'))}</span>
+              </div>
+            )}
           </div>
         ))}
       </div>

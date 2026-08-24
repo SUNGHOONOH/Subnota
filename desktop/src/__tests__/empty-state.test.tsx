@@ -171,7 +171,7 @@ describe('문구 — 내부 용어와 부정문 걷어내기', () => {
     const scheduleSource = read('features/schedule/ScheduleInboxWorkspace.tsx');
 
     expect(scheduleSource).toMatch(
-      /className="cal-modal-hint">\s*\n?\s*원문 · \{editingInbox\.source_text\}/,
+      /className="cal-modal-hint">[\s\S]*?t\(\s*'원문'[\s\S]*?editingInbox\.source_text/,
     );
     expect(scheduleSource).not.toMatch(
       /<EmptyState[^>]*>[\s\S]{0,200}editingInbox\.source_text/,

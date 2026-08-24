@@ -4,6 +4,7 @@
    원본은 desktop/src/features/mini/MiniComposer.tsx 와 MiniComposer.scss. */
 
 import { ExternalLink, SubnotaMark, X } from './icons';
+import { useText } from '../lib/i18n';
 
 export function MiniComposer({
   text,
@@ -22,6 +23,8 @@ export function MiniComposer({
   /* 저장 버튼이 눌리는 순간. 앱과 같은 0.96 누름 축소를 쓴다. */
   pressing?: boolean;
 }) {
+  const translate = useText();
+
   return (
     <div className="mini-composer">
       <header className="mini-composer__header">
@@ -35,14 +38,14 @@ export function MiniComposer({
         </div>
       </header>
       <div className={text ? 'mini-composer__input' : 'mini-composer__input placeholder'}>
-        {text || '떠오른 생각을 적어보세요…'}
+        {text || translate('떠오른 생각을 적어보세요…', 'Write down the thought on your mind…')}
         {caret && <span className="editor-caret" />}
       </div>
-      <section aria-label="최근 링크" className="mini-composer__recent">
+      <section aria-label={translate('최근 링크', 'Recent links')} className="mini-composer__recent">
         {/* 두 저장 동작은 최근 링크 머리글과 같은 줄, 오른쪽 끝에 선다. */}
         <div className="mini-composer__recent-head">
           {recent && recent.length > 0 && (
-            <div className="mini-composer__recent-title">최근 링크</div>
+            <div className="mini-composer__recent-title">{translate('최근 링크', 'Recent links')}</div>
           )}
           <div className="mini-composer__actions">
             {showCaptureButton && (
@@ -50,10 +53,10 @@ export function MiniComposer({
                 className="mini-composer__secondary"
                 style={pressing ? { transform: 'scale(0.96)' } : undefined}
               >
-                현재 페이지 저장
+                {translate('현재 페이지 저장', 'Save current page')}
               </span>
             )}
-            <span className="mini-composer__save">메모 저장</span>
+            <span className="mini-composer__save">{translate('메모 저장', 'Save memo')}</span>
           </div>
         </div>
         {recent?.map((item) => (

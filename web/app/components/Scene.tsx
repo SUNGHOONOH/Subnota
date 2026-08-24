@@ -181,9 +181,9 @@ export function SimulatedCursor({
   );
 }
 
-/** 깜빡이는 캐럿. 앱의 캐럿과 같은 굵기·색이다. */
-export function Caret() {
-  return <span className="editor-caret" />;
+/** 앱의 캐럿. 멈춘 입력에는 실제 편집기처럼 깜빡임을 더한다. */
+export function Caret({ blinking = false }: { blinking?: boolean }) {
+  return <span className={blinking ? 'editor-caret editor-caret-blink' : 'editor-caret'} />;
 }
 
 /**
@@ -214,7 +214,11 @@ export function SceneShowcase({
        배율이 그대로 굳는다. */
     const measure = () => {
       const measured = viewport.clientWidth;
-      if (measured > 0) setScale(measured / width);
+      if (measured > 0) {
+        /* 가로 기준으로만 확대한다. 세로 끝은 무대 경계에서 살짝 잘려
+           실제 창을 가까이서 보는 인상을 유지한다. */
+        setScale(measured / width);
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);

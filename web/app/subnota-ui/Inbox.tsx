@@ -11,6 +11,7 @@ import {
   SubnotaMark,
   Trash2,
 } from './icons';
+import { useText } from '../lib/i18n';
 
 export interface InboxItem {
   id: string;
@@ -25,6 +26,21 @@ export interface InboxItem {
   loading?: boolean;
 }
 
+const INBOX_TEXT_EN: Record<string, string> = {
+  '검색 결과를 목록으로 던져 주는 대신, 사용자가 지금 하고 있는 일 옆에 필요한 것만 조용히 놓아 두는 방식에 관하여.': 'A different approach to search: quietly place only what the user needs beside the work at hand.',
+  '검색을 별도 화면이 아니라 작업 흐름 안에 두는 사례들을 정리한 글.': 'Examples of keeping search inside the work flow instead of sending it to a separate screen.',
+  '맥락 안에서 검색하기 — 결과 목록을 넘어서': 'Searching in context — beyond the results list',
+  '회의를 짧게 만드는 것보다 회의 전에 무엇을 정리해 두는지가 더 큰 차이를 만든다는 이야기.': 'A story about how preparing before a meeting makes a bigger difference than making the meeting shorter.',
+  '회의 전 준비 문서 하나가 회의 시간을 절반으로 줄인 팀의 기록.': 'A record of a team that cut meeting time in half with one prep document.',
+  '회의 전에 30분을 쓰면 회의가 절반이 된다': 'How 30 minutes before the meeting cuts it in half',
+  검색: 'Search',
+  전체: 'All',
+  좋아요: 'Liked',
+};
+
+const localizeInboxText = (value: string, translate: ReturnType<typeof useText>) =>
+  translate(value, INBOX_TEXT_EN[value] ?? value);
+
 /* 웹에서 보고 있던 페이지를 주워 담는 장면. Quick Subnota를 직접 입력창으로
    보여주지 않고, 현재 페이지 저장 → 요약이라는 실제 클리핑 흐름만 남긴다. */
 export function WebClipPreview({
@@ -34,8 +50,10 @@ export function WebClipPreview({
   pressing?: boolean;
   status?: string;
 }) {
+  const translate = useText();
+
   return (
-    <div aria-label="현재 페이지 저장 미리보기" className="web-clip-preview">
+    <div aria-label={translate('현재 페이지 저장 미리보기', 'Save current page preview')} className="web-clip-preview">
       <div className="web-clip-preview__browser">
         <span aria-hidden="true" className="web-clip-preview__dots">
           <i />
@@ -46,9 +64,9 @@ export function WebClipPreview({
         <ExternalLink size={12} />
       </div>
       <div className="web-clip-preview__content">
-        <span className="web-clip-preview__eyebrow">현재 보고 있는 페이지</span>
-        <strong>회의 전에 30분을 쓰면 회의가 절반이 된다</strong>
-        <span className="web-clip-preview__meta">영상 · 14:22</span>
+        <span className="web-clip-preview__eyebrow">{translate('현재 보고 있는 페이지', 'Current page')}</span>
+        <strong>{translate('회의 전에 30분을 쓰면 회의가 절반이 된다', 'How 30 minutes before the meeting cuts it in half')}</strong>
+        <span className="web-clip-preview__meta">{translate('영상 · 14:22', 'Video · 14:22')}</span>
       </div>
       <div className="web-clip-preview__footer">
         <span className="web-clip-preview__brand">
@@ -62,7 +80,7 @@ export function WebClipPreview({
               : 'web-clip-preview__action'
           }
         >
-          현재 페이지 저장
+          {translate('현재 페이지 저장', 'Save current page')}
         </span>
       </div>
       <p className="web-clip-preview__status">{status}</p>
@@ -77,23 +95,41 @@ export function InboxCard({
   item: InboxItem;
   hovered?: boolean;
 }) {
+  const translate = useText();
+  const isYouTube = item.source === 'YouTube';
+
   return (
     <article className={hovered ? 'inbox-card hovered' : 'inbox-card'}>
-      <div className={item.excerpt ? 'inbox-thumbnail empty' : 'inbox-thumbnail'}>
-        {item.excerpt && <div className="inbox-thumbnail-text">{item.excerpt}</div>}
+      <div
+        className={
+          isYouTube
+            ? 'inbox-thumbnail inbox-thumbnail-youtube'
+            : item.excerpt
+              ? 'inbox-thumbnail empty'
+              : 'inbox-thumbnail'
+        }
+      >
+        {isYouTube ? (
+          <svg aria-hidden="true" className="inbox-youtube-mark" viewBox="0 0 68 48">
+            <rect fill="#ff0000" height="48" rx="11" width="68" />
+            <path d="M27 14.5 45 24 27 33.5V14.5Z" fill="#fff" />
+          </svg>
+        ) : item.excerpt ? (
+          <div className="inbox-thumbnail-text">{item.excerpt && localizeInboxText(item.excerpt, translate)}</div>
+        ) : null}
         {item.duration && <span className="inbox-duration">{item.duration}</span>}
       </div>
       <div className="inbox-card-content">
-        <div className="inbox-card-title">{item.title}</div>
+        <div className="inbox-card-title">{localizeInboxText(item.title, translate)}</div>
         <div className="inbox-card-source">
           <span className="inbox-domain-favicon" style={{ background: '#e9e7e1' }} />
           {item.source}
         </div>
-        <div className="inbox-card-summary">{item.summary}</div>
+        <div className="inbox-card-summary">{item.summary && localizeInboxText(item.summary, translate)}</div>
         <div className="inbox-card-keywords">
           {item.keywords.map((keyword) => (
             <span className="inbox-keyword" key={keyword}>
-              {keyword}
+              {localizeInboxText(keyword, translate)}
             </span>
           ))}
         </div>
@@ -137,19 +173,21 @@ export function InboxWorkspace({
   hoveredId?: string;
   skeletonCount?: number;
 }) {
+  const translate = useText();
+
   return (
     <div className="inbox-workspace">
       <div className="inbox-list-header">
         <div className="inbox-search-input">
           <Search size={13} />
-          검색
+          {translate('검색', 'Search')}
         </div>
         <span className="split-action-btn">
           <MoreHorizontal size={16} />
         </span>
         <div className="inbox-filter">
-          <span className="active">전체</span>
-          <span>좋아요</span>
+          <span className="active">{translate('전체', 'All')}</span>
+          <span>{translate('좋아요', 'Liked')}</span>
         </div>
       </div>
       <div className="inbox-grid">

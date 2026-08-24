@@ -5,9 +5,10 @@
    사라진다. */
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ChevronLeft } from '../subnota-ui/icons';
 import { DownloadRow } from '../components/site';
+import { useText } from '../lib/i18n';
 
 export function DetailHero({
   chip,
@@ -18,11 +19,13 @@ export function DetailHero({
   title: string;
   lead: string;
 }) {
+  const text = useText();
+
   return (
     <section className="detail-hero shell">
       <Link className="back-link" href="/">
         <ChevronLeft />
-        전체 기능으로
+        {text('전체 기능으로', 'All features')}
       </Link>
       <span className="chapter-chip">{chip}</span>
       <h1>{title}</h1>
@@ -37,15 +40,15 @@ export function DetailSection({
   body,
   children,
 }: {
-  label: string;
-  title: string;
+  label?: string;
+  title?: string;
   body?: string;
   children?: ReactNode;
 }) {
   return (
     <section className="detail-section shell">
-      <p className="detail-section-label">{label}</p>
-      <h2>{title}</h2>
+      {label && <p className="detail-section-label">{label}</p>}
+      {title && <h2>{title}</h2>}
       {body && <p>{body}</p>}
       {children && <div className="chapter-stage">{children}</div>}
     </section>
@@ -59,17 +62,21 @@ export function FeatureCard({
   title,
   body,
   note,
-  wide,
+  className,
   children,
 }: {
   title: string;
   body: string;
   note?: string;
-  wide?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
+  const cardClassName = ['feature-card', className]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <article className={wide ? 'feature-card wide' : 'feature-card'}>
+    <article className={cardClassName}>
       <div className="feature-card-stage">{children}</div>
       <div className="feature-card-body">
         <h3>{title}</h3>
@@ -115,11 +122,16 @@ export function Piece({
   return (
     <div
       className="feature-piece"
-      style={{
-        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`,
-        width,
-        zIndex: z,
-      }}
+      style={
+        {
+          '--piece-x': `${x}px`,
+          '--piece-y': `${y}px`,
+          '--piece-rotate': `${rotate}deg`,
+          '--piece-scale': scale,
+          width,
+          zIndex: z,
+        } as CSSProperties
+      }
     >
       {children}
     </div>
@@ -127,12 +139,21 @@ export function Piece({
 }
 
 export function DetailCta() {
+  const text = useText();
+
   return (
     <section className="download-cta shell">
-      <h2>먼저 적으세요. 잇는 일은 Subnota가 합니다.</h2>
+      <h2>
+        {text('지금 ', 'Download ')}<span className="wordmark-text">Subnota</span>{text('를 다운로드하고', ' now and')}
+        <br />
+        {text('작업에 몰입하세요.', 'focus on your work.')}
+      </h2>
       <p>
-        첫 메모는 로그인 없이 시작할 수 있습니다. 적은 것은 기기 안에 먼저
-        저장되고, 네트워크가 없어도 쓰는 흐름은 끊기지 않습니다.
+        {text('지금은 무료로 시작할 수 있습니다.', 'Start for free today.')}
+        <br />
+        {text('필요한 순간에 적고, 나머지는 ', 'Write when you need to and leave the rest to ')}
+        <span className="wordmark-text">Subnota</span>
+        {text('에 맡겨 보세요.', '.')}
       </p>
       <DownloadRow />
     </section>

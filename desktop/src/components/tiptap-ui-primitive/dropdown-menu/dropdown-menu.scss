@@ -32,7 +32,7 @@
   padding: 0.375rem;
   background-color: var(--tt-dropdown-menu-bg-color);
   color: var(--tt-dropdown-menu-text-color);
-  box-shadow: var(--tt-shadow-elevated-md);
+  box-shadow: var(--app-shadow-popover);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   transition-duration: 100ms;
 }
@@ -72,7 +72,7 @@
   border-radius: calc(var(--padding) + var(--tt-radius-lg));
   padding: 0.25rem;
   background-color: var(--tt-dropdown-menu-bg-color);
-  box-shadow: var(--tt-shadow-elevated-md);
+  box-shadow: var(--app-shadow-popover);
   color: var(--tt-dropdown-menu-text-color);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   transition-duration: 100ms;

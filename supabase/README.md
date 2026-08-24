@@ -40,18 +40,21 @@ supabase/migrations/20260706020000_fix_network_rate_limit_timestamp.sql
 supabase/migrations/20260707190355_topic_memo_inbox_edges.sql
 supabase/migrations/20260708000000_topic_cluster_inbox_items.sql
 supabase/migrations/20260812113011_calendar_block_category_id.sql
+supabase/migrations/20260824075337_revoke_tombstone_trigger_execute.sql
 ```
 
 ## Production history
 
-Production currently has 30 recorded migrations through
-`20260707190355_topic_memo_inbox_edges`. The live schema reflects the feature
+Production currently has 34 recorded migrations through
+`20260824075409_revoke_tombstone_trigger_execute`. The live schema reflects the feature
 SQL represented by the local files, but several production entries use
 generated timestamps because some SQL was executed manually before being
 recorded in migration history. The inbox-topic membership change is recorded in
 production as `20260707181903_topic_cluster_inbox_items` and
 `20260707182219_topic_cluster_inbox_items_service_grant`; the local
 `20260708000000_topic_cluster_inbox_items.sql` is the consolidated equivalent.
+The local tombstone privilege migration is recorded in production as
+`20260824075409_revoke_tombstone_trigger_execute`.
 
 Do **not** run a blanket `supabase db push` until the local filenames and
 production history mapping are deliberately reconciled. Re-applying a local

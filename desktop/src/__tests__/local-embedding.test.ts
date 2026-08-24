@@ -78,7 +78,9 @@ vi.mock('@huggingface/transformers', () => ({
 }));
 
 const trustedEvent = { senderFrame: { url: 'http://localhost:5173/' } };
-const testModelRoot = '/tmp/subnota-test-userdata/models/Xenova/bge-m3';
+const testUserDataRoot = '/tmp/subnota-test-userdata';
+const testModelRoot = `${testUserDataRoot}/Models/Embedding/Xenova/bge-m3`;
+const legacyModelRoot = `${testUserDataRoot}/models/Xenova/bge-m3`;
 const testWeightsPath = path.join(
   testModelRoot,
   '4de13258303883538bd53b696b452bf8099f0858/onnx/model_quantized.onnx',
@@ -92,7 +94,7 @@ const seedVerifiedWeights = () => {
 
 describe('local-embedding IPC', () => {
   beforeEach(async () => {
-    fs.rmSync(testModelRoot, { force: true, recursive: true });
+    fs.rmSync(testUserDataRoot, { force: true, recursive: true });
     extractCalls.length = 0;
     pipelineCalls.length = 0;
     downloadMocks.downloadWeightsResumable.mockReset();
@@ -107,7 +109,7 @@ describe('local-embedding IPC', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(testModelRoot, { force: true, recursive: true });
+    fs.rmSync(testUserDataRoot, { force: true, recursive: true });
   });
 
   it('대화형·색인용 IPC 채널을 등록한다', () => {
@@ -142,14 +144,14 @@ describe('local-embedding IPC', () => {
     expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledWith(
       expect.objectContaining({
         targetPath:
-          '/tmp/subnota-test-userdata/models/Xenova/bge-m3/' +
+          '/tmp/subnota-test-userdata/Models/Embedding/Xenova/bge-m3/' +
           '4de13258303883538bd53b696b452bf8099f0858/onnx/model_quantized.onnx',
       }),
     );
   });
 
   it('기존 main 캐시가 같은 파일이면 재다운로드 없이 pinned 경로로 이동한다', async () => {
-    const legacyPath = path.join(testModelRoot, 'onnx/model_quantized.onnx');
+    const legacyPath = path.join(legacyModelRoot, 'onnx/model_quantized.onnx');
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
     fs.closeSync(fs.openSync(legacyPath, 'w'));
     fs.truncateSync(legacyPath, 569_694_530);

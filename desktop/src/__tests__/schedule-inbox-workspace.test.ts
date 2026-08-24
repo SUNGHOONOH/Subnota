@@ -67,10 +67,12 @@ describe('ScheduleInboxWorkspace', () => {
     expect(source).toMatch(
       /className="schedule-approve-open"\s*\n\s*draggable\s*\n[\s\S]*?onDragStart=\{event => handleDragStart\(event, item\)\}/,
     );
-    expect(source).toContain('title="클릭해 시간·제목 수정 · 주간 캘린더로 드래그해 배치"');
+    expect(source).toMatch(
+      /title=\{t\(\s*'클릭해 시간·제목 수정 · 주간 캘린더로 드래그해 배치'/,
+    );
     // 아이콘 버튼은 이름이 없으면 무엇인지 알 수 없다.
-    expect(source).toContain('aria-label="캘린더에 배치"');
-    expect(source).toContain('aria-label="삭제"');
+    expect(source).toMatch(/aria-label=\{t\(\s*'캘린더에 배치'/);
+    expect(source).toMatch(/aria-label=\{t\(\s*'삭제'/);
     // ✎는 행이 이미 하는 일이라 중복이다. 아이콘이 3개가 되면 제목 폭이 줄어든다.
     expect(source).not.toContain('>수정<');
     expect(source).not.toContain('approve-btn');
@@ -338,7 +340,7 @@ describe('ScheduleInboxWorkspace', () => {
     expect(calendarSource).toContain('cal-month-item');
     expect(calendarSource).toContain('cal-month-suggestion');
     expect(calendarSource).toContain('cal-month-more');
-    expect(calendarSource).toContain('+{hiddenCount}개');
+    expect(calendarSource).toMatch(/t\(\s*`\+\$\{hiddenCount\}개`/);
     expect(calendarSource).toMatch(
       /cal-month-meta[\s\S]*?cal-month-more[\s\S]*?cal-daynum/,
     );
@@ -358,7 +360,9 @@ describe('ScheduleInboxWorkspace', () => {
     expect(calendarSource).toContain('const [isMonthTodoOverlayOpen');
     expect(calendarSource).toContain('className="cal-month-todo-overlay"');
     expect(calendarSource).toContain('key="month-todo-overlay"');
-    expect(calendarSource).toContain("aria-label={`${format(selectedDay, 'M월 d일')} 할 일 상세`}");
+    expect(calendarSource).toMatch(
+      /aria-label=\{t\(\s*`\$\{formatCalendarDate\(selectedDay\)\} 할 일 상세`/,
+    );
     expect(calendarSource).toContain('onToggleDetail={() => setMonthTodoOverlayOpen(false)}');
     expect(calendarSource).toContain("if (event.key === 'Escape')");
     expect(styles).toMatch(
@@ -381,7 +385,9 @@ describe('ScheduleInboxWorkspace', () => {
     expect(calendarSource).toContain('const draggedBlockRef = useRef<CalendarBlockRow | null>(null);');
     expect(calendarSource).toContain('setCalendarDropPreview({');
     expect(calendarSource).toContain('durationMs,');
-    expect(calendarSource).toContain('formatPreviewDuration(calendarDropPreview.durationMs)');
+    expect(calendarSource).toContain(
+      'formatPreviewDuration(calendarDropPreview.durationMs, language)',
+    );
     expect(calendarSource).toContain('drop-target${calendarDropPreview.isAvailable');
     expect(styles).toMatch(
       /\.cal-schedule-drop-preview\s*\{[\s\S]*?background:\s*rgba\(74, 153, 92, 0\.11\)[\s\S]*?border:\s*1px dashed rgba\(61, 139, 87, 0\.7\)/,
@@ -396,7 +402,7 @@ describe('ScheduleInboxWorkspace', () => {
 
   it('lets an all-day event become a timed event when dropped in the week grid', () => {
     expect(calendarSource).toMatch(
-      /className=\{`cal-allday-event[\s\S]*?draggable[\s\S]*?onDragStart=\{event => startDrag\(event, block\)\}/,
+      /className=\{`cal-allday-event[\s\S]*?draggable[\s\S]*?onDragStart=\{\(event\) => startDrag\(event, block\)\}/,
     );
     expect(calendarSource).toMatch(
       /const dropOnColumn[\s\S]*?onSaveBlock\(\{[\s\S]*?allDay: false,[\s\S]*?endDate: new Date\(next\.getTime\(\) \+ durationMs\)\.toISOString\(\)/,
@@ -405,10 +411,10 @@ describe('ScheduleInboxWorkspace', () => {
 
   it('removes an item after a calendar drop through the shared placement flow', () => {
     expect(appSource).toMatch(
-      /const dropScheduleInboxItem[\s\S]*?placeScheduleInboxItem\(item, \{ allDay: false, startDate \}\)/,
+      /const dropScheduleInboxItem[\s\S]*?placeScheduleInboxItem\(item,\s*\{\s*allDay:\s*false,\s*startDate\s*\}\)/,
     );
     expect(appSource).toMatch(
-      /const placeScheduleInboxItem[\s\S]*?setScheduleInbox\(previous => previous\.filter\(inbox => inbox\.id !== item\.id\)\);[\s\S]*?const deleteScheduleInboxItem/,
+      /const placeScheduleInboxItem[\s\S]*?setScheduleInbox\(\(previous\) =>[\s\S]*?previous\.filter\(\(inbox\) => inbox\.id !== item\.id\)[\s\S]*?const deleteScheduleInboxItem/,
     );
     expect(appSource).toMatch(
       /upsertLocalScheduleInboxAction[\s\S]*?removeLocalScheduleInboxItem[\s\S]*?setScheduleInbox[\s\S]*?updateScheduleInboxStatus/,

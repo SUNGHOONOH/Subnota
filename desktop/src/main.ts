@@ -54,6 +54,12 @@ import {
   configureLocalDatabaseMaintenanceHooks,
   flushLocalDatabaseOperations,
 } from './local-database';
+import {
+  getDataDirectory,
+  getRuntimeDirectory,
+  getStorageRoot,
+  prepareAppStorage,
+} from './app-storage';
 // local-embed:* IPC 핸들러는 이 모듈의 최상위 부수효과로 등록된다.
 import './local-embedding';
 
@@ -109,6 +115,10 @@ protocol?.registerSchemesAsPrivileged([
 if (started) {
   app.quit();
 }
+
+// Electron must receive the custom sessionData path before it creates the
+// default session. This also migrates existing userData contents once.
+prepareAppStorage();
 
 const pendingDeepLinks: string[] = [];
 let appReady = false;
@@ -439,11 +449,18 @@ app.on('before-quit', event => {
 });
 
 const readDesktopPreferences = (): DesktopPreferences => {
+  const preferencePaths = [
+    path.join(getDataDirectory(), DESKTOP_PREFERENCES_FILE),
+    ...(typeof app.getPath === 'function'
+      ? [path.join(getStorageRoot(), DESKTOP_PREFERENCES_FILE)]
+      : []),
+  ];
   try {
-    const raw = fs.readFileSync(
-      path.join(app.getPath('userData'), DESKTOP_PREFERENCES_FILE),
-      'utf8',
+    const preferencePath = preferencePaths.find(candidate =>
+      fs.existsSync(candidate),
     );
+    if (!preferencePath) throw new Error('Desktop preferences are absent.');
+    const raw = fs.readFileSync(preferencePath, 'utf8');
     const value = JSON.parse(raw) as Partial<DesktopPreferences>;
     return {
       closeBehavior: value.closeBehavior === 'quit' ? 'quit' : 'tray',
@@ -455,8 +472,9 @@ const readDesktopPreferences = (): DesktopPreferences => {
 };
 
 const saveDesktopPreferences = (preferences: DesktopPreferences) => {
+  fs.mkdirSync(getDataDirectory(), { recursive: true });
   fs.writeFileSync(
-    path.join(app.getPath('userData'), DESKTOP_PREFERENCES_FILE),
+    path.join(getDataDirectory(), DESKTOP_PREFERENCES_FILE),
     JSON.stringify(preferences, null, 2),
     'utf8',
   );
@@ -1521,6 +1539,9 @@ app.on('ready', () => {
   currentCloseBehavior = desktopPreferences.closeBehavior;
   app.setLoginItemSettings?.({ openAtLogin: desktopPreferences.launchAtLogin });
   registerRendererProtocol();
+  session.defaultSession.setCodeCachePath?.(
+    path.join(getRuntimeDirectory(), 'Code Cache'),
+  );
   // The renderer loads only bundled content and needs no device permissions
   // (camera, mic, geolocation, notifications, etc.). Without a handler Electron
   // auto-approves permission requests, which a renderer compromise could abuse.

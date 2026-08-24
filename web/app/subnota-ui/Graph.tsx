@@ -8,8 +8,10 @@
 
 const NODE = '#396f55';
 const INBOX_NODE = '#6d7185';
-const EDGE = '#e6e3dd';
+const EDGE = '#b8c9e8';
+const TOPIC_EDGE = '#d7d9dd';
 const ACTIVE = '#1d1d1f';
+const NETWORK_MIN_SIMILARITY = 0.35;
 
 export interface GraphNode {
   id: string;
@@ -20,10 +22,12 @@ export interface GraphNode {
   kind?: 'memo' | 'inbox' | 'center' | 'topic';
   color?: string;
   hideLabel?: boolean;
+  similarity?: number;
 }
 
 const fillFor = (kind: GraphNode['kind']) => {
-  if (kind === 'center' || kind === 'topic') return ACTIVE;
+  if (kind === 'center') return ACTIVE;
+  if (kind === 'topic') return '#4c71b7';
   if (kind === 'inbox') return INBOX_NODE;
   return NODE;
 };
@@ -38,13 +42,63 @@ export function KnowledgeGraph({
   nodes,
   centerId,
   edges,
+  variant = 'nearby',
 }: {
   nodes: GraphNode[];
   centerId: string;
   edges?: GraphEdge[];
+  variant?: 'nearby' | 'topics';
 }) {
+  const isTopics = variant === 'topics';
   const center = nodes.find((node) => node.id === centerId);
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const similarNodes = nodes.filter(
+    (node) => node.id !== centerId && typeof node.similarity === 'number',
+  );
+  const lowestSimilarity = Math.min(
+    ...similarNodes.map((node) => node.similarity ?? 0),
+  );
+  const highestSimilarity = Math.max(
+    ...similarNodes.map((node) => node.similarity ?? 0),
+  );
+  const similaritySpan = Math.max(highestSimilarity - lowestSimilarity, 0);
+  const geometryFor = (node: GraphNode) => {
+    if (!center || node.id === centerId || typeof node.similarity !== 'number') {
+      return { x: node.x, y: node.y, r: node.r };
+    }
+
+    const score = Math.min(Math.max(node.similarity ?? 0, 0), 1);
+    const absoluteWeight = Math.min(
+      Math.max(
+        (score - NETWORK_MIN_SIMILARITY) / (1 - NETWORK_MIN_SIMILARITY),
+        0,
+      ),
+      1,
+    );
+    const relativeWeight = similaritySpan >= 0.08
+      ? Math.min(
+          Math.max((score - lowestSimilarity) / similaritySpan, 0),
+          1,
+        )
+      : absoluteWeight;
+    const visualWeight = Math.min(
+      Math.max(
+        absoluteWeight + relativeWeight * (1 - absoluteWeight) * 0.35,
+        0,
+      ),
+      1,
+    );
+    const resultIndex = similarNodes.findIndex((similar) => similar.id === node.id);
+    const angle = (Math.PI * 2 * resultIndex) / Math.max(similarNodes.length, 1) - Math.PI / 2;
+
+    return {
+      x: center.x + Math.cos(angle) * (1.35 - visualWeight * 0.95) * 150,
+      y: center.y + Math.sin(angle) * (1.35 - visualWeight * 0.95) * 108,
+      r: 7.5 + visualWeight * 15.5,
+    };
+  };
+  const geometryById = new Map(
+    nodes.map((node) => [node.id, { node, ...geometryFor(node) }]),
+  );
   const graphEdges: GraphEdge[] =
     edges ??
     nodes
@@ -59,14 +113,15 @@ export function KnowledgeGraph({
     >
       {center &&
         graphEdges.map((edge) => {
-          const from = nodeById.get(edge.from);
-          const to = nodeById.get(edge.to);
+          const from = geometryById.get(edge.from);
+          const to = geometryById.get(edge.to);
           if (!from || !to) return null;
           return (
             <line
               key={`edge-${edge.from}-${edge.to}`}
-              stroke={edge.color ?? EDGE}
-              strokeWidth={edge.color ? 2 : 1.5}
+              stroke={edge.color ?? (isTopics ? TOPIC_EDGE : EDGE)}
+              strokeOpacity={isTopics ? 0.9 : 1}
+              strokeWidth={isTopics ? 1.2 : edge.color ? 2 : 1.5}
               x1={from.x}
               x2={to.x}
               y1={from.y}
@@ -74,51 +129,59 @@ export function KnowledgeGraph({
             />
           );
         })}
-      {nodes.map((node) => (
-        <g key={node.id}>
-          {node.kind === 'memo' || node.kind === 'inbox' ? (
-            <>
+      {nodes.map((node) => {
+        const geometry = geometryById.get(node.id);
+        if (!geometry) return null;
+
+        const labelX = geometry.x;
+        const labelY = geometry.y + geometry.r + 14;
+
+        return (
+          <g key={node.id}>
+            {isTopics ? (
               <circle
-                cx={node.x}
-                cy={node.y}
-                fill="#fff"
-                r={node.r}
-                stroke={node.color ?? fillFor(node.kind)}
-                strokeWidth={2}
+                cx={geometry.x}
+                cy={geometry.y}
+                fill={node.color ?? fillFor(node.kind)}
+                r={geometry.r}
+                stroke="#fff"
+                strokeOpacity={0.7}
+                strokeWidth={0.8}
               />
-              <path
-                d={`M${node.x - 3},${node.y - 4}h4l2,2v6h-6z M${node.x + 1},${node.y - 4}v3h2`}
-                fill="none"
-                stroke={node.color ?? fillFor(node.kind)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
+            ) : node.kind === 'memo' || node.kind === 'inbox' ? (
+              <circle
+                cx={geometry.x}
+                cy={geometry.y}
+                fill={node.color ?? fillFor(node.kind)}
+                r={geometry.r}
+                stroke="#fff"
+                strokeWidth={1.5}
               />
-            </>
-          ) : (
-            <circle
-              cx={node.x}
-              cy={node.y}
-              fill={node.color ?? fillFor(node.kind)}
-              r={node.r}
-              stroke={node.kind === 'topic' ? '#fff' : undefined}
-              strokeWidth={node.kind === 'topic' ? 2 : undefined}
-            />
-          )}
-          {!node.hideLabel && (
-            <text
-              fill={node.kind === 'center' || node.kind === 'topic' ? ACTIVE : '#5c5348'}
-              fontSize={node.kind === 'center' || node.kind === 'topic' ? 12 : 10}
-              fontWeight={node.kind === 'center' || node.kind === 'topic' ? 600 : 500}
-              textAnchor="middle"
-              x={node.x}
-              y={node.y + node.r + 14}
-            >
-              {node.label}
-            </text>
-          )}
-        </g>
-      ))}
+            ) : (
+              <circle
+                cx={geometry.x}
+                cy={geometry.y}
+                fill={node.color ?? fillFor(node.kind)}
+                r={geometry.r}
+                stroke={node.kind === 'topic' ? ACTIVE : undefined}
+                strokeWidth={node.kind === 'topic' ? 2 : undefined}
+              />
+            )}
+            {!isTopics && !node.hideLabel && (
+              <text
+                fill={node.kind === 'center' ? ACTIVE : '#5c5348'}
+                fontSize={node.kind === 'center' ? 12 : 10}
+                fontWeight={node.kind === 'center' ? 600 : 500}
+                textAnchor="middle"
+                x={labelX}
+                y={labelY}
+              >
+                {node.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }

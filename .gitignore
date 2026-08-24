@@ -90,6 +90,12 @@ mobile/pwa/dist/
 pwa/.vercel/
 *.tsbuildinfo
 
+# Generated Next.js declarations
+/web/next-env.d.ts
+
+# Local design review mock
+/design-mocks/shadow-ui/
+
 # Local docs / working notes
 docs/
 !desktop/docs/

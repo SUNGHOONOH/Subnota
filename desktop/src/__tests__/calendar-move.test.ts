@@ -234,9 +234,9 @@ describe('calendar block resize', () => {
     );
   });
 
-  // 공간은 제목이 먼저 가져간다. 시간은 남을 때만 붙는다.
-  //   ~24px  제목 한 줄 / ~43px  제목 두 줄 / 44px~  제목 두 줄 + 시간
-  it('제목 두 줄이 45분 블록에 들어가고, 시간은 남을 때만 붙는다', () => {
+  // 공간은 제목이 먼저 가져간다. 45·60분 블록은 제목이 한 줄일 때만
+  // 시간을 보이고, 두 줄 제목은 시간을 숨긴다.
+  it('제목 두 줄이 45분 블록에 들어가며 한 줄일 때만 시간을 붙인다', () => {
     const base = styles.slice(
       styles.indexOf('.cal-event {'),
       styles.indexOf('.cal-event > span'),
@@ -249,7 +249,14 @@ describe('calendar block resize', () => {
 
     // 45분 블록 = (45/60) * 40 - 2 = 28px
     expect(padding + titleLine * 2).toBeLessThanOrEqual(28);
-    // 시간까지 붙는 단계는 그만한 높이를 확보해 두고 켠다.
+    // 제목 한 줄과 시간은 45분 블록에도 함께 들어간다.
+    expect(padding + titleLine + timeLine).toBeLessThanOrEqual(28);
+    expect(calendarSource).toContain(
+      'const EVENT_SINGLE_LINE_TIME_HEIGHT_PX = 28;',
+    );
+    expect(calendarSource).toContain('singleLineTimedEventKeys.has(eventKey)');
+    expect(calendarSource).toContain('data-calendar-event-key={eventKey}');
+    // 두 줄 제목과 시간은 90분 이상에서만 함께 보인다.
     expect(padding + titleLine * 2 + timeLine).toBeLessThanOrEqual(44);
     expect(calendarSource).toContain('const EVENT_TIME_HEIGHT_PX = 44;');
 

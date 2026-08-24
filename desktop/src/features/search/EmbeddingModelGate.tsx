@@ -43,7 +43,7 @@ const EmbeddingModelGate = ({
   }, [isOpen]);
 
   return (
-    <Modal centered onClose={onClose} opened={isOpen} size="sm" title={null} withCloseButton>
+    <Modal centered onClose={onClose} opened={isOpen} shadow="sm" size="sm" title={null} withCloseButton>
       <div className="embedding-gate">
         <h2 className="embedding-gate-title">{t('연관 문장 검색 준비', 'Prepare related-passage search')}</h2>
         <p className="embedding-gate-body">

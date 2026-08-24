@@ -40,8 +40,12 @@ describe('calendar category picker', () => {
     expect(calendarSource).toContain('format="hex"');
     expect(calendarSource).toContain('withinPortal={false}');
     expect(calendarSource).not.toContain('type="color"');
-    expect(calendarSource).toContain('aria-label="선택한 색상 미리보기"');
-    expect(calendarSource).toContain('aria-label="선택한 RGBA 색상"');
+    expect(calendarSource).toMatch(
+      /aria-label=\{t\(\s*'선택한 색상 미리보기'/,
+    );
+    expect(calendarSource).toMatch(
+      /aria-label=\{t\(\s*'선택한 RGBA 색상'/,
+    );
     expect(calendarSource).toContain('className="cal-category-color-confirm"');
     expect(styles).toMatch(
       /\.cal-category-name-input\s*\{[\s\S]*?font-size:\s*14px/,

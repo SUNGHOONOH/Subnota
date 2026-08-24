@@ -113,7 +113,7 @@ const MonthlyReportModal = ({
     : 0;
 
   return (
-    <Modal centered onClose={onClose} opened={isOpen} size="lg" title={null} withCloseButton>
+    <Modal centered onClose={onClose} opened={isOpen} shadow="md" size="lg" title={null} withCloseButton>
       <div className="monthly-report">
         <header className="report-header">
           <button aria-label={t('이전 달', 'Previous month')} className="report-nav" onClick={onPrevMonth} type="button">

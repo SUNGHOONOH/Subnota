@@ -9,6 +9,7 @@
 
 import type { ReactNode } from 'react';
 import { PanelRightClose, X } from './icons';
+import { useText } from '../lib/i18n';
 
 export function PreviewPanel({
   title,
@@ -24,6 +25,8 @@ export function PreviewPanel({
   body: string;
   highlight?: string;
 }) {
+  const translate = useText();
+  const isYouTube = metadata.startsWith('YouTube');
   const [before, after] = highlight
     ? (() => {
         const index = body.indexOf(highlight);
@@ -34,11 +37,17 @@ export function PreviewPanel({
     : [body, ''];
 
   return (
-    <aside aria-label="미리보기" className="preview-panel">
+    <aside aria-label={translate('미리보기', 'Preview')} className="preview-panel">
       <header className="preview-panel-header">
         <div className="preview-panel-heading">
           <span className="preview-panel-title">{title}</span>
           <span className="preview-panel-metadata">
+            {isYouTube && (
+              <svg aria-hidden="true" className="preview-panel-youtube-mark" viewBox="0 0 68 48">
+                <rect fill="#ff0000" height="48" rx="11" width="68" />
+                <path d="M27 14.5 45 24 27 33.5V14.5Z" fill="#fff" />
+              </svg>
+            )}
             <span className="preview-panel-metadata-text">{metadata}</span>
             {similarity && (
               <span className="preview-panel-similarity">{similarity}</span>
@@ -80,10 +89,12 @@ export function ScheduleInboxPanel({
   items: ScheduleCandidate[];
   footer?: ReactNode;
 }) {
+  const translate = useText();
+
   return (
-    <aside aria-label="일정 저장함" className="schedule-inbox-panel">
+    <aside aria-label={translate('일정 저장함', 'Schedule inbox')} className="schedule-inbox-panel">
       <header className="schedule-inbox-panel-header">
-        <span className="schedule-inbox-panel-title">일정 저장함</span>
+        <span className="schedule-inbox-panel-title">{translate('일정 저장함', 'Schedule inbox')}</span>
         <div className="preview-panel-actions">
           <span className="preview-action-btn">
             <X size={16} />

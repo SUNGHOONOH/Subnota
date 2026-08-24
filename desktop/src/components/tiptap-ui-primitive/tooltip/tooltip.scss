@@ -29,7 +29,7 @@
   font-size: 0.75rem;
   font-weight: var(--legacy-weight-bold, 800);
   color: var(--tt-tooltip-text);
-  box-shadow: var(--legacy-shadow-float, 0 2px 4px rgba(20, 20, 19, 0.18));
+  box-shadow: var(--app-shadow-tooltip, 0 2px 4px rgba(20, 20, 19, 0.18));
   text-align: center;
 
   &::after {

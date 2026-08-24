@@ -18,6 +18,7 @@ import {
   Redo,
   Undo,
 } from './icons';
+import { useText } from '../lib/i18n';
 
 export interface MemoRow {
   id: string;
@@ -27,19 +28,21 @@ export interface MemoRow {
 
 type NavTab = 'memo' | 'calendar' | 'inbox' | 'topics';
 
-const NAV_ITEMS: { id: NavTab; label: string; Icon: typeof NotebookText }[] = [
-  { id: 'memo', label: '메모', Icon: NotebookText },
-  { id: 'calendar', label: '캘린더', Icon: CalendarDays },
-  { id: 'inbox', label: '링크', Icon: AppWindow },
-  { id: 'topics', label: 'Topics', Icon: Topics },
+const NAV_ITEMS: { id: NavTab; label: string; english: string; Icon: typeof NotebookText }[] = [
+  { id: 'memo', label: '메모', english: 'Memo', Icon: NotebookText },
+  { id: 'calendar', label: '캘린더', english: 'Calendar', Icon: CalendarDays },
+  { id: 'inbox', label: '링크', english: 'Links', Icon: AppWindow },
+  { id: 'topics', label: 'Topics', english: 'Topics', Icon: Topics },
 ];
 
 export function NavRail({ active }: { active: NavTab }) {
+  const text = useText();
+
   return (
     <aside className="nav-rail">
-      {NAV_ITEMS.map(({ id, label, Icon }) => (
+      {NAV_ITEMS.map(({ id, label, english, Icon }) => (
         <span
-          aria-label={label}
+          aria-label={text(label, english)}
           className={id === active ? 'nav-item active' : 'nav-item'}
           key={id}
           role="img"
@@ -47,7 +50,7 @@ export function NavRail({ active }: { active: NavTab }) {
           <Icon size={22} />
         </span>
       ))}
-      <span aria-label="새 탭" className="nav-item" role="img">
+      <span aria-label={text('새 탭', 'New tab')} className="nav-item" role="img">
         <Plus size={22} />
       </span>
       <span aria-hidden="true" className="nav-divider" />
@@ -61,7 +64,7 @@ export function NavRail({ active }: { active: NavTab }) {
       </div>
       <div className="nav-spacer" />
       <span aria-hidden="true" className="nav-divider" />
-      <span aria-label="설정" className="nav-item" role="img">
+      <span aria-label={text('설정', 'Settings')} className="nav-item" role="img">
         <Settings size={22} />
       </span>
     </aside>
@@ -77,17 +80,19 @@ export function SessionRail({
   activeId: string;
   sectionLabel?: string;
 }) {
+  const text = useText();
+
   return (
     <div className="session-rail-inner">
       <div className="session-header">
-        <h2>메모</h2>
+        <h2>{text('메모', 'Memo')}</h2>
         <span>{memos.length}</span>
       </div>
       <div className="new-memo-row">
-        <Plus size={14} />새 메모
+        <Plus size={14} />{text('새 메모', 'New memo')}
       </div>
       <div className="session-list">
-        <h3>{sectionLabel}</h3>
+        <h3>{text(sectionLabel, sectionLabel === '오늘' ? 'Today' : sectionLabel)}</h3>
         {memos.map((memo) => (
           <div
             className={memo.id === activeId ? 'memo-row active' : 'memo-row'}

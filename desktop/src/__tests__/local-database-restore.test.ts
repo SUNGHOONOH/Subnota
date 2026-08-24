@@ -133,6 +133,10 @@ beforeEach(() => {
   fs.rmSync(path.join(temporaryDirectory, 'local-storage.json'), {
     force: true,
   });
+  fs.rmSync(path.join(temporaryDirectory, 'Data'), {
+    force: true,
+    recursive: true,
+  });
 });
 
 afterEach(() => {

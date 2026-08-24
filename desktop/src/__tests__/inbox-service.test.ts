@@ -344,8 +344,8 @@ describe('Inbox optimistic mutation guards', () => {
 
     expect(hydration).toContain("item.local_sync_status === 'pending_delete'");
     expect(deleteHandler).toContain('await tombstoneWrite');
-    const serverDeleteIndex = discard.indexOf(
-      'await deleteInboxSessionByClientId(currentSession, clientId)',
+    const serverDeleteIndex = discard.search(
+      /const deleted = await deleteInboxSessionByClientId\(\s*currentSession,\s*clientId,?\s*\)/,
     );
     expect(serverDeleteIndex).toBeGreaterThanOrEqual(0);
     expect(serverDeleteIndex).toBeLessThan(

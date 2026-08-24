@@ -51,7 +51,28 @@
   --hero-low: #cfdff3;
 
   --shadow-panel: 0 2px 6px rgba(92, 77, 60, 0.06);
-  --shadow-frame: 0 1px 2px rgba(44, 37, 32, 0.05), 0 18px 44px rgba(44, 37, 32, 0.08);
+  --shadow-sm: var(--shadow-panel);
+  --shadow-page-frame:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.06),
+    0 24px 60px rgba(0, 0, 0, 0.14);
+  --shadow-page-piece:
+    0 1px 2px rgba(44, 37, 32, 0.04),
+    0 10px 30px rgba(44, 37, 32, 0.1);
+  --shadow-page-feature-piece:
+    0 1px 2px rgba(44, 37, 32, 0.04),
+    0 12px 30px rgba(44, 37, 32, 0.08);
+  --shadow-page-glass:
+    0 6px 18px rgba(26, 52, 96, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --shadow-page-glass-ink:
+    0 6px 18px rgba(26, 52, 96, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --shadow-page-float: 0 4px 14px rgba(38, 66, 112, 0.07);
+  --shadow-page-menu:
+    0 12px 30px rgba(44, 37, 32, 0.08),
+    0 4px 12px rgba(44, 37, 32, 0.04);
+  --shadow-frame: var(--shadow-page-frame);
 
   --press-scale: 0.96;
   --radius: 12px;
@@ -181,6 +202,10 @@ button:focus-visible {
   padding-left: 22px;
 }
 
+.mobile-header-actions {
+  display: none;
+}
+
 .nav-links > a,
 .nav-menu-trigger {
   /* 헤더 바 자체가 이미 흰 유리라 흰 알약을 또 얹으면 묻힌다 — 아주 옅은
@@ -220,9 +245,7 @@ button:focus-visible {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(20, 20, 19, 0.07);
   border-radius: 18px;
-  box-shadow:
-    0 12px 30px rgba(44, 37, 32, 0.08),
-    0 4px 12px rgba(44, 37, 32, 0.04);
+  box-shadow: var(--shadow-page-menu);
   display: grid;
   gap: 2px;
   left: 50%;
@@ -391,7 +414,7 @@ button:focus-visible {
   opacity: 0.5;
 }
 
-.lang-switch button[aria-current='true'] {
+.lang-switch button[aria-pressed='true'] {
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 1px 2px rgba(20, 20, 19, 0.12);
   color: var(--ink);
@@ -412,6 +435,15 @@ section[id] {
 
 main {
   padding-top: 64px;
+}
+
+.home-main {
+  padding-top: 0;
+}
+
+.home-main .hero {
+  min-height: calc(clamp(600px, 86vh, 820px) + 64px);
+  padding-top: 164px;
 }
 
 /* ===== Hero =====
@@ -461,6 +493,10 @@ main {
   text-wrap: balance;
 }
 
+.hero-mobile-title-break {
+  display: none;
+}
+
 .wordmark-text {
   font-family: var(--font-wordmark);
   font-weight: 700;
@@ -488,8 +524,7 @@ main {
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 6px 18px rgba(26, 52, 96, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow-page-glass);
   color: #223c68;
 }
 
@@ -500,8 +535,7 @@ main {
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 6px 18px rgba(26, 52, 96, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: var(--shadow-page-glass-ink);
   color: #ffffff;
 }
 
@@ -554,9 +588,12 @@ main {
   border-radius: var(--radius-sm);
   color: #ffffff;
   display: inline-flex;
-  gap: 10px;
-  height: 48px;
-  padding: 10px 18px;
+  flex: 0 0 140px;
+  gap: 8px;
+  height: 52px;
+  justify-content: center;
+  min-width: 140px;
+  padding: 9px 12px;
   transition: background-color 200ms ease, border-color 200ms ease,
     transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
@@ -591,7 +628,7 @@ main {
 }
 
 .download-btn-copy span {
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.4px;
   opacity: 0.55;
@@ -599,7 +636,7 @@ main {
 }
 
 .download-btn-copy strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.1px;
 }
@@ -610,6 +647,8 @@ main {
   color: var(--muted);
   font-size: 13px;
   margin-top: 16px;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 .hero .hero-note {
@@ -658,7 +697,7 @@ main {
   background: #ffffff;
   border: 1px solid #d7e2f4;
   border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(38, 66, 112, 0.07);
+  box-shadow: var(--shadow-page-float);
   color: #5c7ba6;
   font-size: 12.5px;
   font-weight: 500;
@@ -690,6 +729,7 @@ main {
   line-height: 1.62;
   margin-top: 30px;
   max-width: 30ch;
+  text-wrap: pretty;
   word-break: keep-all;
 }
 
@@ -706,6 +746,7 @@ main {
   break-inside: avoid;
   line-height: 1.75;
   margin-bottom: 18px;
+  text-wrap: pretty;
 }
 
 /* 마지막 한 줄은 결론이 아니라 첨언이다. 본문보다 작게, 살짝 눕혀서, 여백에
@@ -720,6 +761,7 @@ main {
   position: relative;
   transform: rotate(-1.2deg);
   transform-origin: left center;
+  text-wrap: pretty;
   word-break: keep-all;
 }
 
@@ -812,21 +854,18 @@ main {
    새로 만들지 않고 제품의 문법을 빌린다. */
 .chapter-chip {
   align-items: center;
-  /* 흰 바탕에서는 앱이 쓰는 두 로브 중 흰 로브가 그대로 사라진다. 표면에
-     아주 얕은 기울기를 줘서 솟은 느낌을 표면 자체가 내게 하고, 어두운
-     로브와 헤어라인만 남긴다 — 종이 사이드바 위의 원본과 같은 뜻, 다른 계산. */
-  background: linear-gradient(145deg, #ffffff 0%, #f2f0ec 100%);
-  border-radius: 7px;
+  background: rgba(var(--app-color-brand-rgb), 0.07);
+  border: 1px solid transparent;
+  border-radius: 999px;
   box-shadow:
-    0 0 0 1px rgba(40, 34, 26, 0.05),
-    -2px -2px 6px rgba(255, 255, 255, 0.9),
-    3px 4px 10px rgba(40, 34, 26, 0.09);
-  color: var(--ink);
+    0 1px 2px rgba(var(--app-color-brand-rgb), 0.1),
+    0 4px 10px rgba(var(--app-color-brand-rgb), 0.08);
+  color: var(--app-color-brand-700);
   display: inline-flex;
-  font-size: 11px;
+  font-size: var(--app-font-xs);
   font-weight: 600;
   gap: 6px;
-  height: 26px;
+  height: var(--app-size-tab-height);
   margin-bottom: 18px;
   padding: 0 11px;
 }
@@ -852,6 +891,8 @@ main {
   font-size: clamp(15px, 1.35vw, 17px);
   line-height: 1.68;
   margin-top: 14px;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 /* 손글씨 주석이 여기에 얹힌다. */
@@ -903,8 +944,38 @@ main {
 
 @media (max-width: 640px) {
   .chapter-top {
-    flex-direction: column;
-    gap: 16px;
+    column-gap: 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0;
+  }
+
+  .chapter-head {
+    display: contents;
+  }
+
+  .chapter-chip {
+    align-self: start;
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    margin-bottom: 0;
+  }
+
+  .chapter-top .more-link {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .chapter-head h2 {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 18px;
+  }
+
+  .chapter-lead {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 }
 
@@ -946,6 +1017,7 @@ main {
   line-height: 1.16;
   max-width: 20ch;
   text-wrap: balance;
+  word-break: keep-all;
 }
 
 .detail-lead {
@@ -954,6 +1026,8 @@ main {
   line-height: 1.68;
   margin-top: 18px;
   max-width: 56ch;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 .detail-section {
@@ -975,6 +1049,8 @@ main {
   letter-spacing: -0.024em;
   line-height: 1.25;
   max-width: 24ch;
+  text-wrap: balance;
+  word-break: keep-all;
 }
 
 .detail-section > p {
@@ -982,6 +1058,8 @@ main {
   line-height: 1.7;
   margin-top: 12px;
   max-width: 62ch;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 /* 추가 기능은 대표 흐름보다 시각적으로 커지지 않는다. 실제 UI 장면을 쓰되
@@ -1041,14 +1119,17 @@ main {
   font-weight: 600;
   letter-spacing: -0.028em;
   line-height: 1.2;
-  max-width: 20ch;
+  max-width: none;
   text-wrap: balance;
+  word-break: keep-all;
 }
 
 .download-cta > p {
   color: var(--ink-soft);
   margin-top: 14px;
-  max-width: 52ch;
+  max-width: 44ch;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 /* ===== 푸터 ===== */
@@ -1108,42 +1189,204 @@ main {
 }
 
 @media (max-width: 640px) {
-  /* 기능으로 가는 길은 남긴다 — 없애면 모바일 방문자에게 상세 페이지 진입점이
-     푸터뿐이다. About 은 히어로 바로 아래라 스크롤로 닿으므로 이쪽을 접는다. */
-  .nav-links > a {
+  .hero-mobile-title-break {
+    display: block;
+  }
+
+  .site-header {
+    gap: 12px;
+    padding-inline: max(16px, env(safe-area-inset-left))
+      max(16px, env(safe-area-inset-right));
+  }
+
+  .site-header .brand {
+    gap: 0;
+  }
+
+  .site-header .brand > span {
     display: none;
   }
 
-  .nav-links {
-    padding-left: 6px;
+  .nav-links,
+  .site-header > .lang-switch,
+  .desktop-header-cta {
+    display: none;
   }
 
-  .nav-menu-trigger {
-    font-size: 14px;
-    padding: 7px 8px;
+  .mobile-header-actions {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
   }
 
-  /* 헤더 왼쪽에 붙어 있어 그대로 펼치면 화면 밖으로 나간다. */
-  .nav-menu-dropdown {
-    left: -12px;
-    width: min(288px, calc(100vw - 32px));
-  }
-
-  .header-cta {
+  .mobile-header-cta {
     padding: 10px 13px;
   }
 
-  /* 좁아지면 자리를 내준다. 기능으로 가는 길과 CTA 가 먼저다. */
-  .lang-switch {
-    display: none;
+  .mobile-menu {
+    position: static;
+  }
+
+  .mobile-menu-trigger {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(20, 20, 19, 0.07);
+    border-radius: var(--radius-sm);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    color: var(--ink-soft);
+    display: inline-flex;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    transition: background-color 140ms ease, border-color 140ms ease,
+      transform 100ms ease;
+    width: 44px;
+  }
+
+  .mobile-menu-trigger:hover,
+  .mobile-menu-trigger[aria-expanded='true'] {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(20, 20, 19, 0.13);
+    color: var(--ink);
+  }
+
+  .mobile-menu-trigger:active {
+    transform: scale(var(--press-scale));
+  }
+
+  .mobile-menu-dropdown {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(20, 20, 19, 0.07);
+    border-radius: 18px;
+    box-shadow: var(--shadow-page-menu);
+    display: grid;
+    gap: 2px;
+    max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
+    opacity: 0;
+    overflow-y: auto;
+    padding: 14px;
+    pointer-events: none;
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right));
+    top: calc(69px + env(safe-area-inset-top));
+    transform: translateY(-4px);
+    transition:
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 200ms;
+    visibility: hidden;
+    width: min(360px, calc(100vw - 32px));
+    z-index: 100;
+  }
+
+  .mobile-menu-dropdown.forced {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    visibility: visible;
+  }
+
+  .mobile-menu-dropdown .nav-menu-heading {
+    margin-top: 6px;
+    padding-left: 10px;
+  }
+
+  .mobile-menu-about {
+    align-items: center;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    font-size: 15px;
+    font-weight: 600;
+    min-height: 44px;
+    padding: 9px 10px 12px;
+  }
+
+  .mobile-menu-language {
+    justify-self: start;
+    margin-top: 8px;
+  }
+
+  .mobile-menu-downloads {
+    border-top: 1px solid var(--line-soft);
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .mobile-menu-downloads .hero-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .mobile-menu-downloads .download-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
   }
 
   .hero-actions {
+    flex-wrap: nowrap;
+    gap: 8px;
     width: 100%;
   }
 
   .download-btn {
-    flex: 1 1 auto;
+    flex: 0 0 106px;
+    gap: 2px;
+    min-width: 0;
+    padding-inline: 3px;
+    width: 106px;
+  }
+
+  .download-btn svg {
+    height: 16px;
+    width: 16px;
+  }
+
+  .download-btn-copy strong {
+    font-size: 12px;
+    letter-spacing: -0.4px;
+  }
+
+  .download-btn-copy span {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .download-cta > h2 {
+    font-size: 22px;
+  }
+
+  .download-cta > p {
+    font-size: 14px;
+  }
+
+  .download-btn {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 1px;
+    height: 64px;
+    width: auto;
+    padding: 6px 4px;
+  }
+
+  .download-btn-copy {
+    align-items: center;
+  }
+
+  .download-btn-copy span {
+    font-size: 8px;
+  }
+
+  .download-btn svg {
+    height: 16px;
+    width: 16px;
   }
 }
 
@@ -1166,15 +1409,11 @@ main {
   overflow: hidden;
 }
 
-.feature-card.wide {
-  grid-column: span 2;
-}
-
 /* 더보기 카드는 각 챕터의 무대 색을 이어받는다. 본문과 UI 조각은 흰 표면을
    유지해 읽기 부담은 늘리지 않고, 카드 바깥만 챕터의 색으로 구분한다. */
 .feature-grid.tone-blue {
   --feature-card-tint: #e3f0fd;
-  --feature-stage-tint: rgba(255, 255, 255, 0.48);
+  --feature-stage-tint: #d9eafb;
 }
 
 .feature-grid.tone-green {
@@ -1231,6 +1470,8 @@ main {
   font-weight: 600;
   letter-spacing: -0.018em;
   line-height: 1.35;
+  text-wrap: balance;
+  word-break: keep-all;
 }
 
 .feature-card-body p {
@@ -1238,6 +1479,8 @@ main {
   font-size: 15px;
   line-height: 1.7;
   margin-top: 9px;
+  text-wrap: pretty;
+  word-break: keep-all;
 }
 
 .feature-card-note {
@@ -1251,26 +1494,31 @@ main {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .feature-card.wide {
-    grid-column: span 1;
-  }
-
   .feature-card-stage {
     height: 230px;
   }
 }
 
-/* 카드 무대 위에 놓는 UI 조각들. 앱 화면을 그대로 떼어 온 것이라 안쪽
-   글자·컨트롤 크기는 앱 그대로다 — 조각을 확대·축소하지 않는 이유. */
+/* 카드 무대 위에 놓는 UI 조각들. 데스크톱에서는 실제 UI 크기를 유지하고,
+   좁은 카드에서는 조각 전체를 함께 축소해 안쪽 텍스트와 컨트롤이 무대 밖으로
+   넘치지 않게 한다. */
 .feature-piece {
   line-height: normal;
+  transform:
+    translate(
+      calc(var(--piece-x, 0px) * var(--feature-piece-scale, 1)),
+      calc(var(--piece-y, 0px) * var(--feature-piece-scale, 1))
+    )
+    rotate(var(--piece-rotate, 0deg))
+    scale(calc(var(--piece-scale, 1) * var(--feature-piece-scale, 1)));
+  transform-origin: center;
 }
 
 .feature-piece .piece-card {
   background: var(--paper-strong);
   border: 1px solid var(--line);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 12px 30px rgba(44, 37, 32, 0.08);
+  box-shadow: var(--shadow-page-feature-piece);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1281,110 +1529,71 @@ main {
   padding: 8px;
 }
 
-.feature-piece .split-mock-panel {
-  background: var(--paper-strong);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 12px 30px rgba(44, 37, 32, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  height: 224px;
-  overflow: hidden;
-  padding: 11px 13px 12px;
-}
-
-.feature-piece .mock-traffic-lights {
-  display: flex;
-  gap: 6px;
-}
-
-.feature-piece .mock-traffic-lights span {
-  border-radius: 50%;
-  height: 8px;
-  width: 8px;
-}
-
-.feature-piece .mock-traffic-lights span:nth-child(1) {
-  background: #ee6a5f;
-}
-
-.feature-piece .mock-traffic-lights span:nth-child(2) {
-  background: #f4bf4f;
-}
-
-.feature-piece .mock-traffic-lights span:nth-child(3) {
-  background: #61c554;
-}
-
-.feature-piece .split-mock-panel-tabs {
-  align-items: center;
-  border-bottom: 1px solid var(--line-soft);
-  display: flex;
-  gap: 4px;
-  padding-bottom: 7px;
-}
-
-.feature-piece .split-mock-panel-tabs span {
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 11px;
-  padding: 4px 8px;
-  white-space: nowrap;
-}
-
-.feature-piece .split-mock-panel-tabs span.active {
-  background: rgba(var(--app-color-brand-rgb), 0.08);
-  color: var(--app-color-brand-700);
-  font-weight: 600;
-}
-
-.feature-piece .split-mock-panel .cal-fragment {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  gap: 5px;
-  min-height: 0;
-  padding: 0;
-}
-
-.feature-piece .split-mock-panel .cal-fragment-head strong {
-  font-size: 14px;
-}
-
-.feature-piece .split-mock-panel .cal-fragment-badge {
-  font-size: 10px;
-  padding: 3px 7px;
-}
-
-.feature-piece .split-mock-panel .cal-col-head {
-  gap: 3px;
-  padding: 3px 0;
-}
-
-.feature-piece .split-mock-panel .cal-col-dow,
-.feature-piece .split-mock-panel .cal-col-date,
-.feature-piece .split-mock-panel .cal-hour-label {
-  font-size: 10px;
-}
-
-.feature-piece .split-mock-panel .cal-hour-label {
-  padding-right: 4px;
-}
-
 .preview-piece-large {
-  min-height: 190px;
+  height: 420px;
 }
 
 .preview-piece-large .preview-panel {
   height: 100%;
 }
 
+/* 미리보기 패널은 참고 창답게 길게 보여 주되, 카드 무대의 아래에서만
+   자연스럽게 잘리도록 위쪽과 양옆 여백을 고정한다. */
+.feature-card-preview .feature-card-stage {
+  align-items: flex-start;
+  height: 360px;
+}
+
+.feature-card-preview .feature-piece {
+  left: 50%;
+  margin-left: -220px;
+  top: 18px;
+}
+
+/* 미리보기 패널은 세로로 길게 보여 주므로 같은 행의 단축키 카드도
+   무대 높이를 맞춰 설명 영역의 시작선을 정렬한다. */
+.productivity-details > .feature-grid > .feature-card:nth-child(2) .feature-card-stage {
+  height: 360px;
+}
+
+@media (max-width: 820px) {
+  .feature-card-preview .feature-card-stage {
+    height: 320px;
+  }
+
+  .productivity-details > .feature-grid > .feature-card:nth-child(2) .feature-card-stage {
+    height: 320px;
+  }
+
+  .feature-card-preview .preview-piece-large {
+    height: 380px;
+  }
+}
+
+/* 모든 상세 페이지의 고정 UI 조각을 카드 폭에 맞춰 함께 줄인다. */
+@media (max-width: 1100px) {
+  .feature-piece {
+    --feature-piece-scale: 0.9;
+  }
+}
+
+@media (max-width: 820px) {
+  .feature-piece {
+    --feature-piece-scale: 0.78;
+  }
+}
+
+@media (max-width: 560px) {
+  .feature-piece {
+    --feature-piece-scale: 0.66;
+  }
+}
+
 .feature-piece .piece-rail {
   background: var(--app-color-chrome-bg);
   border: 1px solid var(--line);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 12px 30px rgba(44, 37, 32, 0.08);
+  box-shadow: var(--shadow-page-feature-piece);
   overflow: hidden;
   padding: 10px 8px;
 }
@@ -1469,4 +1678,252 @@ main {
 .feature-piece .piece-drop-preview {
   position: static;
   margin-top: 6px;
+}
+
+/* 일정 저장함은 주간 캘린더의 오른쪽에서 함께 열린다. 드롭 미리보기까지
+   같은 시간 격자 안에 둬야, 저장함에서 끌어 놓는 실제 방향이 읽힌다. */
+.feature-piece .calendar-schedule-flow {
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 196px;
+}
+
+.feature-piece .calendar-schedule-flow .cal-fragment,
+.feature-piece .calendar-schedule-flow .schedule-inbox-panel {
+  min-width: 0;
+}
+
+/* 양방향 카드는 캘린더와 원본 메모를 한 작업공간의 나란한 패널로 보여 준다.
+   3일 범위면 날짜 칸과 메모 본문 모두를 축약 없이 읽을 수 있다. */
+.feature-piece .calendar-preview-flow {
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.feature-piece .calendar-preview-flow .cal-fragment,
+.feature-piece .calendar-preview-flow .preview-panel {
+  min-width: 0;
+}
+
+/* 월간 기록은 달력 자체가 아니라, 메모와 완료 일정을 함께 쌓아 본 활동 밀도다. */
+.feature-piece .monthly-report-mock {
+  --report-activity-1: #edf3eb;
+  --report-activity-2: #d6e8d2;
+  --report-activity-3: #9fc99d;
+  --report-activity-4: #5d9c65;
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-page-feature-piece);
+  color: var(--app-color-text);
+  font-family: var(--app-font-ui);
+  padding: 14px 16px 15px;
+}
+
+.feature-piece .monthly-report-mock-header {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 24px 1fr 24px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.feature-piece .monthly-report-mock-header strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.feature-piece .monthly-report-mock-nav {
+  color: var(--app-color-text-soft);
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 16px;
+}
+
+.feature-piece .monthly-report-mock-heatmap {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(7, 25px);
+  justify-content: center;
+}
+
+.feature-piece .monthly-report-mock-weekday {
+  color: var(--app-color-text-soft);
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+
+.feature-piece .monthly-report-mock-cell {
+  aspect-ratio: 1;
+  background: transparent;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--app-color-border-soft);
+  width: 25px;
+}
+
+.feature-piece .monthly-report-mock-cell[data-level='1'] {
+  background: var(--report-activity-1);
+  box-shadow: none;
+}
+
+.feature-piece .monthly-report-mock-cell[data-level='2'] {
+  background: var(--report-activity-2);
+  box-shadow: none;
+}
+
+.feature-piece .monthly-report-mock-cell[data-level='3'] {
+  background: var(--report-activity-3);
+  box-shadow: none;
+}
+
+.feature-piece .monthly-report-mock-cell[data-level='4'] {
+  background: var(--report-activity-4);
+  box-shadow: none;
+}
+
+.feature-piece .monthly-report-mock-stats {
+  border-top: 1px solid var(--app-color-border-soft);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 10px;
+  padding-top: 9px;
+  text-align: center;
+}
+
+.feature-piece .monthly-report-mock-stats > div + div {
+  border-left: 1px solid var(--app-color-border-soft);
+}
+
+.feature-piece .monthly-report-mock-stats strong {
+  display: block;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.feature-piece .monthly-report-mock-stats strong span {
+  color: var(--app-color-text-soft);
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.feature-piece .monthly-report-mock-stats p {
+  color: var(--app-color-text-soft);
+  font-size: 10px;
+  margin: 6px 0 0;
+}
+
+/* 하루 할 일은 별도 카드 목록이 아니라 캘린더 우측 패널의 한 줄 목록이다.
+   완료 항목은 위치를 바꾸지 않고, 체크와 흐린 선으로만 상태를 남긴다. */
+.feature-piece .calendar-todo-mock {
+  background: var(--app-color-bg-surface);
+  border-left: 1px solid var(--app-color-border);
+  box-shadow: var(--shadow-page-feature-piece);
+  color: var(--app-color-text);
+  display: flex;
+  flex-direction: column;
+  min-height: 176px;
+  padding: 16px 14px;
+}
+
+.feature-piece .calendar-todo-mock-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.feature-piece .calendar-todo-mock-date {
+  font-family: var(--app-font-ui);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feature-piece .calendar-todo-mock-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feature-piece .calendar-todo-mock-item {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 4px;
+}
+
+.feature-piece .calendar-todo-mock-item.completed {
+  opacity: 0.55;
+}
+
+.feature-piece .calendar-todo-mock-check {
+  align-items: center;
+  background: transparent;
+  border: 1.5px solid var(--app-color-action-secondary-border);
+  border-radius: 5px;
+  color: var(--app-color-bg-canvas);
+  display: flex;
+  flex: 0 0 18px;
+  font-size: 12px;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
+.feature-piece .calendar-todo-mock-item.completed .calendar-todo-mock-check {
+  background: var(--app-color-muted);
+  border-color: var(--app-color-muted);
+}
+
+.feature-piece .calendar-todo-mock-title {
+  align-items: baseline;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.feature-piece .calendar-todo-mock-time {
+  color: var(--app-color-muted-soft);
+  flex: 0 0 auto;
+  font-family: var(--app-font-ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.feature-piece .calendar-todo-mock-text {
+  color: var(--app-color-text);
+  flex: 1;
+  font-family: var(--app-font-ui);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feature-piece .calendar-todo-mock-item.completed .calendar-todo-mock-text {
+  text-decoration: line-through;
+}
+
+/* 두 그래프는 같은 blue stage를 공유한다. 조각을 축소했을 때 무대색이
+   드러나도 별도 패널의 밑줄처럼 보이지 않도록 바탕·테두리·그림자를 겹치지 않는다. */
+.feature-piece .topic-graph-piece {
+  background: var(--feature-stage-tint);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.feature-piece .topic-graph-piece svg {
+  display: block;
 }

@@ -1248,7 +1248,7 @@ const MemoSplitWorkspace = ({
 
   const handleCloseAllEditors = useCallback(
     (pane: MemoSplitPaneState) => {
-      const nextEditor = createEditor('memo');
+      const nextEditor = createEditor('memo', { isViewPicker: true });
 
       onChangePane(pane.id, {
         ...mirrorEditorPatch(nextEditor),
@@ -1272,7 +1272,7 @@ const MemoSplitWorkspace = ({
           return;
         }
 
-        const nextEditor = createEditor('memo');
+        const nextEditor = createEditor('memo', { isViewPicker: true });
         onChangePane(pane.id, {
           ...mirrorEditorPatch(nextEditor),
           activeEditorId: nextEditor.id,
@@ -2984,23 +2984,14 @@ const MemoSplitWorkspace = ({
                       className="split-pane-menu-dropdown"
                       ref={setMenuDropdownEl}
                     >
-                      <div className="split-menu-title-row">{t('스택 탭', 'Stack tabs')}</div>
-                      <button
-                        className="split-menu-item split-menu-item-muted"
-                        disabled
-                        type="button"
-                      >
-                        {language === 'en'
-                          ? `${editors.length} tab bookmarks...`
-                          : `${editors.length}개의 탭 북마크...`}
-                      </button>
-                      <div className="split-menu-separator" />
                       <button
                         className="split-menu-item"
                         onClick={() => handleCloseAllEditors(pane)}
                         type="button"
                       >
-                        {t('모두 닫기', 'Close all')}
+                        {language === 'en'
+                          ? `Close all ${editors.length} tabs`
+                          : `${editors.length}개의 탭 모두 닫기`}
                       </button>
                       <div className="split-menu-separator" />
                       {MENU_VIEWS.map((view) => {

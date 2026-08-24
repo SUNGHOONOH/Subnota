@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import { EMBEDDING_MODEL_ID } from './local-embedding';
+import { getDataDirectory, getStorageRoot } from './app-storage';
 
 const RECORD_TYPES = new Set([
   'memo',
@@ -48,23 +49,45 @@ export const configureLocalDatabaseMaintenanceHooks = (
 };
 
 const getStorageConfigPath = () =>
-  path.join(app.getPath('userData'), STORAGE_CONFIG_FILE);
+  path.join(getDataDirectory(), STORAGE_CONFIG_FILE);
+
+const getLegacyStorageConfigPath = () =>
+  path.join(getStorageRoot(), STORAGE_CONFIG_FILE);
+
+const readStorageConfig = () => {
+  for (const configPath of [getStorageConfigPath(), getLegacyStorageConfigPath()]) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+        directory?: string;
+      };
+    } catch {
+      // Try the next layout location.
+    }
+  }
+  return {};
+};
 
 const getDatabasePath = () => {
-  try {
-    const value = JSON.parse(
-      fs.readFileSync(getStorageConfigPath(), 'utf8'),
-    ) as { directory?: string };
-    if (value.directory && path.isAbsolute(value.directory)) {
-      return path.join(value.directory, 'subnota-local.sqlite3');
-    }
-  } catch {
-    // Use the default application data directory.
+  const value = readStorageConfig();
+  if (value.directory && path.isAbsolute(value.directory)) {
+    return path.join(value.directory, 'subnota-local.sqlite3');
   }
-  return path.join(app.getPath('userData'), 'subnota-local.sqlite3');
+
+  const organizedPath = path.join(
+    getDataDirectory(),
+    'subnota-local.sqlite3',
+  );
+  const legacyPath = path.join(
+    getStorageRoot(),
+    'subnota-local.sqlite3',
+  );
+  return fs.existsSync(organizedPath) || !fs.existsSync(legacyPath)
+    ? organizedPath
+    : legacyPath;
 };
 
 const saveStorageDirectory = (directory: string) => {
+  fs.mkdirSync(getDataDirectory(), { recursive: true });
   fs.writeFileSync(
     getStorageConfigPath(),
     JSON.stringify({ directory }, null, 2),

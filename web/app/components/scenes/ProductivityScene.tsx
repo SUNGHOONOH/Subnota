@@ -6,40 +6,43 @@
 import { AppShell } from '../../subnota-ui/AppShell';
 import { MemoPane, NoteHeader, PaneTabs } from '../../subnota-ui/EditorPane';
 import { AppWindow, CalendarDays, NotebookText, Topics } from '../../subnota-ui/icons';
+import { useText } from '../../lib/i18n';
 import { SceneShowcase } from '../Scene';
 
-const MEMO_TABS = [{ id: 't1', label: '주간 회고' }];
-const NEW_TAB_TABS = [{ id: 'new', label: '새 탭' }];
-const NEW_TAB_ITEMS = [
-  { Icon: NotebookText, label: '노트' },
-  { Icon: AppWindow, label: '링크 저장함' },
-  { Icon: CalendarDays, label: '캘린더' },
-  { Icon: Topics, label: 'Topics' },
-];
-
 export default function ProductivityScene() {
+  const text = useText();
+  const memoTabs = [{ id: 't1', label: text('주간 회고', 'Weekly review') }];
+  const newTabTabs = [{ id: 'new', label: text('새 탭', 'New tab') }];
+  const newTabItems = [
+    { Icon: NotebookText, label: text('노트', 'Memo') },
+    { Icon: AppWindow, label: text('링크 저장함', 'Saved links') },
+    { Icon: CalendarDays, label: text('캘린더', 'Calendar') },
+    { Icon: Topics, label: 'Topics' },
+  ];
+
   return (
-    <SceneShowcase
-      label="메모와 캘린더를 한 창의 두 패널로 나눠 함께 보는 화면"
-      tint="clay"
-    >
+    <div className="productivity-scene">
+      <SceneShowcase
+        label={text('메모와 캘린더를 한 창의 두 패널로 나눠 함께 보는 화면', 'Memo and calendar side by side in one window')}
+        tint="clay"
+      >
       <AppShell collapsed>
-        <MemoPane activeTabId="t1" tabs={MEMO_TABS}>
-          <NoteHeader title="주간 회고" />
+        <MemoPane activeTabId="t1" tabs={memoTabs}>
+          <NoteHeader title={text('주간 회고', 'Weekly review')} />
           <div className="simple-editor-content">
-            <p>이번 주에 놓친 것 세 가지.</p>
-            <p>하나, 회의 준비를 전날로 못 옮겼다.</p>
-            <p>둘, 저장만 하고 다시 안 읽은 링크가 늘었다.</p>
+            <p>{text('이번 주에 놓친 것 세 가지.', 'Three things I missed this week.')}</p>
+            <p>{text('하나, 회의 준비를 전날로 못 옮겼다.', 'One, I did not move meeting prep to the day before.')}</p>
+            <p>{text('둘, 저장만 하고 다시 안 읽은 링크가 늘었다.', 'Two, the links I saved but never revisited kept growing.')}</p>
           </div>
         </MemoPane>
 
         <div className="split-pane wide">
-          <PaneTabs activeId="new" tabs={NEW_TAB_TABS} />
+          <PaneTabs activeId="new" tabs={newTabTabs} />
           <div className="new-tab-picker-stage">
-            <section aria-label="새 탭에서 열기" className="new-tab-picker-panel">
-              <h2 className="new-tab-picker-title">새 탭에서 열기</h2>
+            <section aria-label={text('새 탭에서 열기', 'Open in a new tab')} className="new-tab-picker-panel">
+              <h2 className="new-tab-picker-title">{text('새 탭에서 열기', 'Open in a new tab')}</h2>
               <div className="new-tab-picker-list">
-                {NEW_TAB_ITEMS.map(({ Icon, label }) => (
+                {newTabItems.map(({ Icon, label }) => (
                   <div className="new-tab-picker-item" key={label}>
                     <Icon size={18} />
                     <span>{label}</span>
@@ -50,6 +53,7 @@ export default function ProductivityScene() {
           </div>
         </div>
       </AppShell>
-    </SceneShowcase>
+      </SceneShowcase>
+    </div>
   );
 }

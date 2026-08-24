@@ -3762,7 +3762,7 @@ const App = () => {
     const next = splitPanes.filter((pane) => pane.id !== id);
 
     if (next.length === 0) {
-      const nextEditor = createEditorHelper('memo');
+      const nextEditor = createEditorHelper('memo', { isViewPicker: true });
       const nextPane: MemoSplitPaneState = {
         id: createSplitPaneId(),
         activeEditorId: nextEditor.id,
@@ -3783,7 +3783,7 @@ const App = () => {
   };
 
   const handleCloseAllPanes = () => {
-    const nextEditor = createEditorHelper('memo');
+    const nextEditor = createEditorHelper('memo', { isViewPicker: true });
     const nextPane: MemoSplitPaneState = {
       id: createSplitPaneId(),
       activeEditorId: nextEditor.id,

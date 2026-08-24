@@ -74,8 +74,8 @@ describe('workspace shell layout', () => {
     expect(appSource).toContain('key="app-side-panel"');
     expect(appSource).toContain('const shouldReduceMotion = useReducedMotion();');
     expect(appSource).toContain("initial={shouldReduceMotion ? false : { x: '100%' }}");
-    expect(appSource).toContain(
-      "shouldReduceMotion || isSidePanelPushed ? undefined : { x: '100%' }",
+    expect(appSource).toMatch(
+      /exit=\{\s*shouldReduceMotion\s*\|\|\s*isSidePanelPushed\s*\n?\s*\?\s*undefined\s*\n?\s*:\s*\{ x: '100%' \}/,
     );
     expect(appSource).toContain(
       'duration: SIDEBAR_COLLAPSE_DURATION_MS / 1000',
@@ -124,15 +124,15 @@ describe('workspace shell layout', () => {
 
   it('places new-tab below topics and groups sidebar modes as a vertical segment', () => {
     const labels = [
-      'aria-label="메모"',
-      'aria-label="캘린더"',
-      'aria-label="링크"',
+      "aria-label={t('메모'",
+      "aria-label={t('캘린더'",
+      "aria-label={t('링크'",
       'aria-label="Topics"',
-      'aria-label="새 탭"',
-      '<VisuallyHidden>목록</VisuallyHidden>',
-      '<VisuallyHidden>폴더</VisuallyHidden>',
+      "aria-label={t('새 탭'",
+      "t('목록'",
+      "t('폴더'",
       'aria-label={updateActionLabel}',
-      'aria-label="설정"',
+      "aria-label={t('설정'",
     ];
     const positions = labels.map(label => appSource.indexOf(label));
 
@@ -142,7 +142,7 @@ describe('workspace shell layout', () => {
     expect(appSource).toContain("createEditorHelper('memo', { isViewPicker: true })");
     expect(appSource).toContain('editorsAfterNewTab(getAppPaneEditors(pane), nextEditor)');
     expect(appSource).toContain("root: 'nav-mode-segment nav-context-item'");
-    expect(appSource).toContain('aria-label="메모 보기 방식"');
+    expect(appSource).toContain("aria-label={t('메모 보기 방식', 'Memo view')}");
     expect(appSource).toContain('orientation="vertical"');
     expect(appSource).toContain('transitionDuration={200}');
     expect(appSource).toContain('withItemsBorders={false}');
@@ -154,7 +154,9 @@ describe('workspace shell layout', () => {
     // 제자리에서 솟아오르는 짧은 전환. 이동이 없어 0.2초까지 끌 이유가 없다.
     expect(appSource).toContain('duration: 0.14');
     expect(workspaceSource).toContain('const tabLabel = editor.isViewPicker');
-    expect(workspaceSource).toContain('const getMemoTabLabel = (content: string) =>');
+    expect(workspaceSource).toMatch(
+      /const getMemoTabLabel = \(content: string, language: 'en' \| 'ko'\) =>/,
+    );
     expect(workspaceSource).toContain(".find(Boolean);");
     expect(workspaceSource).toContain('title={tabLabel}');
     expect(workspaceSource).toContain('aria-label={tabLabel}');
@@ -183,7 +185,7 @@ describe('workspace shell layout', () => {
     expect(appSource).toContain('className="nav-item nav-utility nav-update-action"');
     expect(appSource).toContain('onClick={() => void startAvailableUpdate()}');
     expect(appSource).toContain('disabled={isUpdateWorking}');
-    expect(appSource).toContain('aria-label="설정"');
+    expect(appSource).toContain("aria-label={t('설정', 'Settings')}");
     expect(appSource).not.toContain('checkForAvailableUpdate(true)');
   });
 
@@ -204,7 +206,7 @@ describe('workspace shell layout', () => {
       /\.split-pane\s*\{[^}]*padding-top:\s*var\(--legacy-size-commandbar\)/,
     );
     expect(styles).toMatch(
-      /\.split-workspace-commandbar\.session-collapsed \+[\s\S]*?\.split-pane:first-child[\s\S]*?\.split-pane-header\s*\{[\s\S]*?padding-left:\s*var\(--legacy-size-commandbar-content\)/,
+      /\.split-workspace-commandbar\.session-collapsed\s*\+[\s\S]*?\.split-workspace-container\s*>\s*\.split-pane:first-child[\s\S]*?\.split-pane-header\s*\{[\s\S]*?padding-left:\s*var\(--legacy-size-commandbar-content\)/,
     );
     expect(styles).toMatch(
       /\.split-pane-titlebar-drag\s*\{[\s\S]*?-webkit-app-region:\s*drag/,

@@ -55,7 +55,7 @@ describe('Quick Subnota — 단축키는 표시만 한다', () => {
     expect(header).toContain('onClick={close}');
     // 단축키는 버튼 툴팁이 대신 알린다 — 상시 문구는 없앴다.
     expect(composer).not.toContain('Esc 닫기');
-    expect(header).toContain('닫기 · Esc');
+    expect(header).toMatch(/t\(\s*'닫기',\s*'Close'\s*\)\s*\+\s*' · Esc'/);
   });
 
   // 설정에서 바꾼 조합이 캡처 버튼 툴팁에 그대로 반영돼야 한다.
@@ -95,7 +95,8 @@ describe('Quick Subnota — 두 저장 버튼', () => {
 
   it('단축키는 각 버튼의 툴팁이 알려 준다', () => {
     expect(composer).toContain('formatAcceleratorLabel(shortcuts.capturePage, platform)');
-    expect(composer).toContain("`메모 저장 · ${platform === 'macos' ? '⌘↵' : 'Ctrl+Enter'}`");
+    expect(composer).toContain("t('메모 저장', 'Save memo')");
+    expect(composer).toContain("platform === 'macos' ? '⌘↵' : 'Ctrl+Enter'");
   });
 
   // 플랫폼 정책: Windows는 활성 브라우저 캡처를 아직 내보내지 않는다.
@@ -163,7 +164,7 @@ describe('Quick Subnota — 이름과 마크', () => {
     ].join('\n');
 
     expect(composer).toContain('>Quick Subnota<');
-    expect(main).toContain("label: '새 Quick Subnota'");
+    expect(main).toContain("mainT('새 Quick Subnota', 'New Quick Subnota')");
     expect(read('lib/shortcutSettings.ts')).toContain("'Quick Subnota 열기'");
     expect(userFacing).not.toContain(`Mini${' '}Subnota`);
   });

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import LegalDocument from '../components/LegalDocument';
+import { accountDeletionTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
   title: '계정 삭제 | Subnota',
@@ -8,7 +9,11 @@ export const metadata: Metadata = {
 
 export default function AccountDeletionPage() {
   return (
-    <LegalDocument effectiveDate="2026년 8월 13일" title="계정 및 데이터 삭제">
+    <LegalDocument
+      effectiveDate={{ en: 'August 13, 2026', ko: '2026년 8월 13일' }}
+      title={{ en: 'Account and Data Deletion', ko: '계정 및 데이터 삭제' }}
+      translations={accountDeletionTranslations}
+    >
       <p>
         Subnota 계정과 계정에 연결된 서버 데이터 및 기기 내 로컬 데이터를 삭제할
         수 있습니다. 삭제가 완료되면 계정과 콘텐츠를 복구할 수 없습니다.

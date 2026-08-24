@@ -8,7 +8,7 @@ import {
 } from '@mantine/core';
 import { desktopBrandColors, desktopColorTokens } from './colorTokens';
 
-// Subnota의 디자인 토큰(src/styles/_variables.scss의 --tt-* / --legacy-*)을
+// Subnota의 디자인 토큰(src/styles/_variables.scss의 --tt-* / --app-*)을
 // Mantine 테마에 매핑한다. 폰트/그림자는 기존 CSS 변수를 그대로 가리켜
 // 라이트/다크 전환과 향후 토큰 변경이 자동으로 따라오게 한다.
 
@@ -38,10 +38,10 @@ export const mantineTheme = createTheme({
     xl: '1rem', // 16px (legacy 스케일 밖 — Mantine 전용)
   },
 
-  // 그림자 — --tt-shadow-elevated-md (다크 모드 값까지 CSS 변수가 처리)
+  // 그림자 — 역할별 semantic token (다크 모드 값까지 CSS 변수가 처리)
   shadows: {
-    md: 'var(--tt-shadow-elevated-md)',
-    lg: 'var(--tt-shadow-elevated-md)',
+    md: 'var(--app-shadow-popover)',
+    lg: 'var(--app-shadow-modal)',
   },
 
   components: {

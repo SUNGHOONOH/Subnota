@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MantineProvider } from '@mantine/core';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import PreviewPanel, {
   type PreviewPanelState,
@@ -22,6 +22,14 @@ import type { MemoRow } from '../types';
 const CONTENT = '앞 문장입니다.\nSQLite WAL 모드 전환 후기\n뒤 문장입니다.';
 const CHUNK = 'SQLite WAL 모드 전환 후기';
 const START = CONTENT.indexOf(CHUNK);
+
+beforeAll(() => {
+  vi.stubGlobal('navigator', { language: 'ko-KR', languages: ['ko-KR'] });
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('findPreviewHighlight', () => {
   it('인덱스가 본문과 맞으면 그대로 쓴다', () => {
@@ -309,8 +317,8 @@ describe('사이드 패널 전환 부드러움', () => {
   });
 
   it('밀어낸 패널을 닫을 때는 그리드 전환만 사용한다', () => {
-    expect(appSource).toContain(
-      "shouldReduceMotion || isSidePanelPushed ? undefined : { x: '100%' }",
+    expect(appSource).toMatch(
+      /exit=\{\s*shouldReduceMotion\s*\|\|\s*isSidePanelPushed\s*\n?\s*\?\s*undefined\s*\n?\s*:\s*\{ x: '100%' \}/,
     );
   });
 });

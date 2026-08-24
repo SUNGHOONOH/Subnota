@@ -90,7 +90,7 @@ describe('클리핑 결과는 늘 보이는 자리에 남는다', () => {
   // 알림을 놓쳐도 "담은 줄 알았는데 없더라"가 생기면 안 된다.
   it('실패는 확인할 때까지 트레이 메뉴에 남는다', () => {
     expect(main).toContain('lastCaptureFailure');
-    expect(main).toContain('저장하지 못함 —');
+    expect(main).toContain("mainT('저장하지 못함', 'Could not save')");
     expect(main).toContain('click: acknowledgeCaptureFailure');
   });
 
@@ -124,7 +124,7 @@ describe('저장 결과 문구와 알림 설정', () => {
 
   // 알림을 놓쳤을 때 "담기긴 했나"를 확인할 자리.
   it('성공도 트레이 메뉴에서 확인할 수 있다', () => {
-    expect(main).toContain('링크가 저장되었습니다 —');
+    expect(main).toContain("mainT('링크가 저장되었습니다', 'Link saved')");
     expect(main).toContain('click: acknowledgeInboxSave');
     expect(main).toContain('setUnreadInbox(false);');
   });
@@ -132,8 +132,8 @@ describe('저장 결과 문구와 알림 설정', () => {
   // 오프라인 큐와 상세 페이지 재시도가 이미 있어 트레이에 또 두지 않는다.
   it('트레이에 재시도를 중복으로 두지 않는다', () => {
     const failureEntry = main.slice(
-      main.indexOf('저장하지 못함 —') - 200,
-      main.indexOf('저장하지 못함 —') + 100,
+      main.indexOf('click: acknowledgeCaptureFailure') - 200,
+      main.indexOf('click: acknowledgeCaptureFailure') + 300,
     );
     expect(failureEntry).toContain('acknowledgeCaptureFailure');
     expect(failureEntry).not.toContain('다시 시도');

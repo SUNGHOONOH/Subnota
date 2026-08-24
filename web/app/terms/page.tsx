@@ -1,16 +1,21 @@
 import type { Metadata } from 'next';
 import LegalDocument from '../components/LegalDocument';
+import { termsTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
   title: '서비스 이용약관 | Subnota',
   description: 'Subnota 서비스 이용약관입니다.',
 };
 
-const EFFECTIVE_DATE = '2026년 8월 13일';
+const EFFECTIVE_DATE = { en: 'August 13, 2026', ko: '2026년 8월 13일' };
 
 export default function TermsPage() {
   return (
-    <LegalDocument effectiveDate={EFFECTIVE_DATE} title="서비스 이용약관">
+    <LegalDocument
+      effectiveDate={EFFECTIVE_DATE}
+      title={{ en: 'Terms of Service', ko: '서비스 이용약관' }}
+      translations={termsTranslations}
+    >
       <p>
         이 약관은 오성훈(이하 “운영자”)이 제공하는 Subnota(이하 “서비스”)의 이용
         조건과 절차를 정합니다. 서비스 이용자는 이 약관과

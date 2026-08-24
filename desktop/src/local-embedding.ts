@@ -24,6 +24,10 @@ import {
   fileMatchesExpectedModel,
   freeDiskBytes,
 } from './local-embedding-download';
+import {
+  getLegacyModelCacheDirectory,
+  getModelCacheDirectory,
+} from './app-storage';
 
 const MODEL_REPO = 'Xenova/bge-m3';
 const MODEL_REVISION = '4de13258303883538bd53b696b452bf8099f0858';
@@ -50,7 +54,7 @@ export interface LocalEmbeddingStatus {
   error?: string;
 }
 
-const cacheDirectory = () => path.join(app.getPath('userData'), 'models');
+const cacheDirectory = getModelCacheDirectory;
 // Transformers.js의 FileCache는 main이 아닌 revision을 캐시 키 경로에 넣는다.
 // 전용 다운로더도 같은 위치에 써야 검증한 파일을 pipeline이 그대로 사용한다.
 const weightsPath = () =>
@@ -59,7 +63,7 @@ const partialWeightsPath = () => `${weightsPath()}.part`;
 // revision 고정 전 버전이 사용하던 캐시 위치. 파일 내용이 현재 pinned
 // revision과 일치할 때만 새 위치로 옮겨 재다운로드를 피한다.
 const legacyWeightsPath = () =>
-  path.join(cacheDirectory(), MODEL_REPO, MODEL_WEIGHTS);
+  path.join(getLegacyModelCacheDirectory(), MODEL_REPO, MODEL_WEIGHTS);
 
 let status: LocalEmbeddingStatus = {
   downloadedBytes: 0,
@@ -294,6 +298,10 @@ export const deleteModel = async (): Promise<LocalEmbeddingStatus> => {
   interactiveExtractorPromise = null;
   indexExtractorPromise = null;
   fs.rmSync(path.join(cacheDirectory(), MODEL_REPO), {
+    force: true,
+    recursive: true,
+  });
+  fs.rmSync(path.join(getLegacyModelCacheDirectory(), MODEL_REPO), {
     force: true,
     recursive: true,
   });

@@ -29,7 +29,9 @@ describe('링크 저장함 카드', () => {
 
   // 아이콘도 글자도 없는 오버레이라 이름이 없으면 "버튼"으로만 읽힌다.
   it('열기 버튼에 접근 가능한 이름이 있다', () => {
-    expect(inboxSource).toContain('자세히 보기`}');
+    expect(inboxSource).toMatch(
+      /aria-label=\{`\$\{[\s\S]*?t\(\s*'자세히 보기',\s*'View details'\s*\)/,
+    );
   });
 
   // Mantine은 첫 Card.Section에만 음수 margin을 걸어 썸네일을 카드 끝까지

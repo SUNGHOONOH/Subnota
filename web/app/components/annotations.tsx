@@ -61,6 +61,7 @@ function SketchArrow({
         </filter>
       </defs>
       <motion.path
+        animate={{ pathLength: 1 }}
         d={path}
         filter={`url(#${id})`}
         initial={{ pathLength: 0 }}
@@ -68,8 +69,6 @@ function SketchArrow({
         strokeLinecap="round"
         strokeWidth="2.6"
         transition={{ delay, duration: 0.7, ease: 'easeOut' }}
-        viewport={{ once: true, margin: '-100px' }}
-        whileInView={{ pathLength: 1 }}
       />
     </svg>
   );

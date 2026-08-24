@@ -1,6 +1,6 @@
 # Subnota database handoff
 
-Last verified: 2026-08-15 (Asia/Seoul)
+Last verified: 2026-08-24 (Asia/Seoul)
 
 This document describes the production Supabase database after the security and
 memo graph consistency migration. It is intended as the starting point for any
@@ -27,10 +27,10 @@ Google Secret Manager.
 
 ## Source of truth and migration workflow
 
-The production schema was verified from the live catalog on 2026-07-15. The
-canonical production migration history is the 30-row
+The production schema was verified from the live catalog on 2026-08-24. The
+canonical production migration history is the 34-row
 `supabase_migrations.schema_migrations` table, whose latest recorded version is
-`20260815071841_profile_time_zone`.
+`20260824075409_revoke_tombstone_trigger_execute`.
 
 The local SQL files are the reproducible source for future work, but their
 filenames do not exactly match every production history version. Several SQL
@@ -48,6 +48,7 @@ final edge migration:
 | `20260626000100_trees.sql` | `20260626062143_trees` | reflected in production |
 | `20260708000000_topic_cluster_inbox_items.sql` | `20260707181903_topic_cluster_inbox_items` + `20260707182219_topic_cluster_inbox_items_service_grant` | reflected in production |
 | `20260812113011_calendar_block_category_id.sql` | `20260812113112_calendar_block_category_id` | reflected in production |
+| `20260824075337_revoke_tombstone_trigger_execute.sql` | `20260824075409_revoke_tombstone_trigger_execute` | reflected in production |
 
 The production history is intentionally not duplicated with the local
 filenames. Do not mark these local aliases as new applied migrations and do not
@@ -245,7 +246,7 @@ because topic discovery intentionally ignores empty content.
 
 `daily-briefing` is intentionally not scheduled.
 
-## Security state after 2026-07-15
+## Security state after 2026-08-24
 
 - `match_memo_chunks` and `match_inbox_session_embeddings` are service-only,
   have empty `search_path`, and include ownership predicates.
@@ -261,10 +262,10 @@ because topic discovery intentionally ignores empty content.
 - The live schema reflects all current local feature migrations, but several
   local filenames are aliases of production's generated migration versions;
   see the mapping table above.
-- Supabase security advisor still reports the three tombstone trigger helpers as
-  publicly executable SECURITY DEFINER functions. They are trigger-only helpers
-  and not intended RPC endpoints, but their EXECUTE privileges should be
-  explicitly revoked in a future hardening migration.
+- The three tombstone trigger helpers remain `SECURITY DEFINER`, but direct
+  `EXECUTE` is revoked from `PUBLIC`, `anon`, and `authenticated` by production
+  migration `20260824075409`. An authenticated insert/delete smoke test verified
+  that the existing triggers still fire, and the transaction was rolled back.
 
 ## Known deferred work
 

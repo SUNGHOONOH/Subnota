@@ -1,13 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import LocalIndexProgress, {
   isEmptyLocalIndexCompletion,
   shouldShowLocalIndexProgress,
 } from '../features/search/LocalIndexProgress';
 import type { LocalMemoIndexProgress } from '../services/local/localMemoIndexer';
+
+beforeAll(() => {
+  vi.stubGlobal('navigator', { language: 'ko-KR', languages: ['ko-KR'] });
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 const progress = (
   patch: Partial<LocalMemoIndexProgress>,

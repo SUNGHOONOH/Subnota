@@ -73,7 +73,7 @@
 
 .cal-views > span.active {
   background: var(--app-color-bg-paper);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--app-shadow-control-active);
   color: var(--app-color-text-strong);
 }
 
@@ -412,7 +412,7 @@
 
 .inbox-filter > span.active {
   background: var(--app-color-bg-paper);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--app-shadow-control-active);
   color: var(--app-color-text-strong);
 }
 
@@ -455,6 +455,19 @@
    기다리는지 알려주지 않으면서 눈에만 띈다. */
 .inbox-thumbnail.empty {
   background: var(--app-color-skeleton);
+}
+
+.inbox-thumbnail-youtube {
+  align-items: center;
+  background: #f4f3ef;
+  display: flex;
+  justify-content: center;
+}
+
+.inbox-youtube-mark {
+  display: block;
+  height: 48px;
+  width: 68px;
 }
 
 .inbox-thumbnail img {
@@ -592,9 +605,7 @@
   background: var(--app-color-bg-paper);
   border: 1px solid var(--app-color-border-strong);
   border-radius: 16px;
-  box-shadow:
-    -8px 0 24px rgba(44, 37, 32, 0.1),
-    0 2px 8px rgba(44, 37, 32, 0.06);
+  box-shadow: var(--app-shadow-panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -623,6 +634,13 @@
   font-weight: var(--app-weight-semibold);
   gap: 6px;
   margin-top: 2px;
+}
+
+.preview-panel-youtube-mark {
+  align-self: center;
+  flex: 0 0 auto;
+  height: 9px;
+  width: 13px;
 }
 
 .preview-panel-similarity {
@@ -730,7 +748,7 @@
 }
 
 .schedule-approve-row.dragging {
-  box-shadow: 0 12px 28px rgba(44, 37, 32, 0.16);
+  box-shadow: var(--app-shadow-dragged);
 }
 
 /* ── Quick Subnota ── */
@@ -738,7 +756,7 @@
   background: var(--app-color-bg);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-panel);
-  box-shadow: 0 16px 38px rgba(44, 37, 32, 0.16);
+  box-shadow: var(--app-shadow-floating);
   color: var(--app-color-text);
   display: flex;
   flex-direction: column;
@@ -851,7 +869,7 @@
   background: var(--app-color-bg);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-panel);
-  box-shadow: 0 22px 60px rgba(44, 37, 32, 0.2);
+  box-shadow: var(--app-shadow-modal);
   color: var(--app-color-text);
   display: flex;
   flex-direction: column;
@@ -996,7 +1014,7 @@
   background: var(--app-color-bg-paper);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-panel);
-  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.04), 0 10px 28px rgba(44, 37, 32, 0.07);
+  box-shadow: var(--app-shadow-card);
   display: flex;
   flex-direction: column;
   gap: 8px;

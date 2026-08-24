@@ -48,12 +48,12 @@ describe('desktop control density', () => {
   });
 
   it('keeps calendar navigation compact and visually grouped', () => {
-    expect(calendarSource).toContain(
-      'aria-label="캘린더 보기" className="cal-views" role="group"',
+    expect(calendarSource).toMatch(
+      /aria-label=\{t\(\s*'캘린더 보기'[\s\S]*?className="cal-views"[\s\S]*?role="group"/,
     );
     expect(calendarSource).toContain('aria-pressed={view === key}');
-    expect(calendarSource).toContain(
-      'aria-label="캘린더 이동" className="cal-nav" role="group"',
+    expect(calendarSource).toMatch(
+      /aria-label=\{t\(\s*'캘린더 이동'[\s\S]*?className="cal-nav"[\s\S]*?role="group"/,
     );
     expect(styles).toMatch(
       /\.cal-nav\s*\{[^}]*background:\s*var\(--legacy-bg-pressed\)[^}]*gap:\s*0[^}]*padding:\s*2px/,

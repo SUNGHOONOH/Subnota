@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { LanguageProvider } from './lib/i18n';
 import MotionProvider from './motion-provider';
 import PostHogProvider from './posthog-provider';
 
@@ -11,6 +12,15 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
   description: DESCRIPTION,
+  icons: {
+    // Safari is more reliable with a raster fallback than with an SVG-only
+    // favicon, especially for localhost and pinned/favourite pages.
+    icon: [
+      { url: '/subnota-icon.png?v=2', type: 'image/png', sizes: '1024x1024' },
+      { url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' },
+    ],
+    apple: [{ url: '/subnota-icon.png?v=2', type: 'image/png', sizes: '1024x1024' }],
+  },
   metadataBase: new URL(SITE_URL),
   openGraph: {
     description: DESCRIPTION,
@@ -80,7 +90,9 @@ export default function RootLayout({
       </head>
       <body>
         <MotionProvider>
-          <PostHogProvider>{children}</PostHogProvider>
+          <LanguageProvider>
+            <PostHogProvider>{children}</PostHogProvider>
+          </LanguageProvider>
         </MotionProvider>
       </body>
     </html>

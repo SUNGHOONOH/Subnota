@@ -2,6 +2,7 @@
 
 import ReuseInboxScene from '../../components/scenes/ReuseInboxScene';
 import { INBOX_ITEMS } from '../../components/scenes/fixtures';
+import { useText } from '../../lib/i18n';
 import { AmbientGhost } from '../../subnota-ui/EditorPane';
 import { InboxCard } from '../../subnota-ui/Inbox';
 import { MiniComposer } from '../../subnota-ui/Mini';
@@ -9,31 +10,45 @@ import { PreviewPanel } from '../../subnota-ui/Panels';
 import { DetailCta, DetailHero, DetailSection, FeatureCard, FeatureGrid, Piece } from '../detail';
 
 export default function ReuseInboxPage() {
+  const text = useText();
+  const youtubeItem = {
+    ...INBOX_ITEMS[1],
+    excerpt: text(
+      INBOX_ITEMS[1].excerpt ?? '',
+      'A short record of a team that cut meeting time in half by preparing the day before.',
+    ),
+    keywords: ['Meetings', 'Prep', 'Team'],
+    summary: text(
+      INBOX_ITEMS[1].summary ?? '',
+      'A team record about cutting meeting time in half with one prep document.',
+    ),
+    title: text(INBOX_ITEMS[1].title, 'How 30 minutes before the meeting cuts it in half'),
+  };
+
   return (
     <>
       <DetailHero
-        chip="일단 줍고, 다시 쓰기"
-        lead="읽던 페이지에서 간편하게 주워 담습니다. 알아서 요약하고 정리해드릴게요. 귀찮은 일이니까요."
-        title="저장은 단축키 하나로 끝납니다"
+        chip={text('일단 줍고, 다시 쓰기', 'Collect and reuse')}
+        lead={text(
+          '읽던 페이지를 닫거나 다른 창으로 옮길 필요가 없습니다. Quick Subnota로 현재 페이지를 저장하면 링크가 먼저 담기고, 제목·요약·키워드는 뒤따라옵니다. 나중에 관련된 문장을 쓸 때는 저장한 링크도 메모처럼 다시 올라옵니다.',
+          'You do not need to close the page or move to another window. Save the page with Quick Subnota: the link is captured first, followed by its title, summary, and keywords. When you write something related later, the saved link surfaces again like a memo.',
+        )}
+        title={text('읽던 곳에서, 바로 담아 둡니다', 'Save it right where you are reading')}
       />
 
-      <DetailSection
-        body="브라우저를 떠나지 않고, 창을 하나 더 띄우지도 않고, 단축키 한 번이면 저장됩니다. 요약은 저장이 끝난 뒤에 조용히 따라붙습니다 — 기다릴 필요가 없다는 뜻입니다."
-        label="대표 흐름"
-        title="누르면 그걸로 끝"
-      >
+      <DetailSection>
         <ReuseInboxScene />
       </DetailSection>
 
       <section className="detail-section shell">
-        <p className="detail-section-label">이런 것도 함께 합니다</p>
-        <h2>아, 맞다. 그 링크도 필요할 때 알아서 꺼내 드릴게요</h2>
+        <p className="detail-section-label">{text('이런 것도 함께 합니다', 'Also included')}</p>
+        <h2>{text('아, 맞다. 그 링크도 필요할 때 알아서 꺼내 드릴게요', 'Oh, right. That link too, right when you need it')}</h2>
 
         <FeatureGrid tone="amber">
         <FeatureCard
-          body="브라우저를 떠나지 않고 단축키로 현재 페이지를 저장합니다. 저장한 링크는 로그인한 기기 안에 먼저 담기고, 제목과 요약과 키워드가 뒤따라옵니다."
-          note="현재 페이지 저장은 macOS에서 제공합니다."
-          title="브라우저에서 바로"
+          body={text('브라우저를 떠나지 않고 단축키로 현재 페이지를 저장합니다. 저장한 링크는 로그인한 기기 안에 먼저 담기고, 제목과 요약과 키워드가 뒤따라옵니다.', 'Save the current page with a shortcut without leaving the browser. The link lands on your signed-in device first, followed by its title, summary, and keywords.')}
+          note={text('현재 페이지 저장은 macOS에서 제공합니다.', 'Saving the current page is available on macOS.')}
+          title={text('브라우저에서 바로', 'Right from the browser')}
         >
           <Piece rotate={-1.5} width={380} y={-4}>
             <MiniComposer text="" />
@@ -41,61 +56,50 @@ export default function ReuseInboxPage() {
         </FeatureCard>
 
         <FeatureCard
-          body="영상은 길이와 썸네일이, 글은 본문 발췌가 카드 얼굴이 됩니다. 요약을 못 만들어도 저장은 성공입니다 — 나중에 다시 찾을 수만 있으면 됩니다."
-          title="영상과 글, 같은 카드로"
+          body={text('공개 YouTube 영상을 저장하면 길이와 함께 핵심을 짧게 정리합니다. 영상 요약을 만들지 못해도 링크와 공개 정보는 남아, 다시 이어 볼 수 있습니다.', 'Save a public YouTube video and we keep a short summary of the essentials with its duration. Even when a summary is not available, the link and public details remain so you can pick it up again.')}
+          title={text('YouTube 영상도, 핵심만 남깁니다', 'YouTube videos, reduced to the essentials')}
         >
-          <Piece rotate={-3} width={224} x={-124} y={16} z={1}>
-            <InboxCard item={INBOX_ITEMS[0]} />
-          </Piece>
-          <Piece rotate={2.5} width={224} x={112} y={-18} z={2}>
-            <InboxCard hovered item={INBOX_ITEMS[1]} />
+          <Piece rotate={-1} width={224} y={-4}>
+            <InboxCard hovered item={youtubeItem} />
           </Piece>
         </FeatureCard>
 
         <FeatureCard
-          body="카드를 누르면 요약 전문이 열립니다. 키워드는 어느 화면에서 보든 같은 중성 칩입니다 — 같은 데이터가 화면마다 다른 색이면 같은 것으로 보이지 않으니까요."
-          title="요약과 키워드"
+          body={text('카드를 누르면 요약 전문이 열립니다. 키워드는 어느 화면에서 보든 같은 중성 칩입니다 — 같은 데이터가 화면마다 다른 색이면 같은 것으로 보이지 않으니까요.', 'Open the full summary by selecting a card. Keywords use the same neutral chips everywhere — the same data should not look different just because the screen changed.')}
+          title={text('요약과 키워드', 'Summaries and keywords')}
         >
           <Piece rotate={-1} width={360} y={-6}>
             <PreviewPanel
               body={
-                '회의를 짧게 만드는 것보다, 회의 전에 무엇을 정리해 두는지가 더 큰 차이를 만든다.\n\n이 팀은 회의 전날 30분을 준비 문서에 쓰기로 했고, 그 결과 회의 시간이 절반으로 줄었다.'
+                text(
+                  '회의를 짧게 만드는 것보다, 회의 전에 무엇을 정리해 두는지가 더 큰 차이를 만든다.\n\n이 팀은 회의 전날 30분을 준비 문서에 쓰기로 했고, 그 결과 회의 시간이 절반으로 줄었다.',
+                  'What you prepare before a meeting matters more than trying to make the meeting shorter.\n\nThis team spent 30 minutes on a prep document the night before, and cut the meeting time in half.',
+                )
               }
-              highlight="회의 전날 30분을 준비 문서에 쓰기로 했고, 그 결과 회의 시간이 절반으로 줄었다."
+              highlight={text('회의 전날 30분을 준비 문서에 쓰기로 했고, 그 결과 회의 시간이 절반으로 줄었다.', 'This team spent 30 minutes on a prep document the night before, and cut the meeting time in half.')}
               metadata="YouTube · 14:22"
-              title="회의 전에 30분을 쓰면 회의가 절반이 된다"
+              title={text('회의 전에 30분을 쓰면 회의가 절반이 된다', 'How 30 minutes before the meeting cuts it in half')}
             />
           </Piece>
         </FeatureCard>
 
         <FeatureCard
-          body="저장해 두고 잊는 것이 정상입니다. 그래서 찾으러 오라고 하지 않고, 관련된 문장을 쓰는 순간 저장한 링크 쪽에서 먼저 올라옵니다 — 메모와 똑같은 자격으로."
-          title="잊어도 됩니다"
+          body={text('저장해 두고 잊는 것이 정상입니다. 그래서 찾으러 오라고 하지 않고, 관련된 문장을 쓰는 순간 저장한 링크 쪽에서 먼저 올라옵니다 — 메모와 똑같은 자격으로.', 'It is normal to save something and forget it. We do not ask you to go looking; when you write a related sentence, the saved link surfaces first — with the same standing as a memo.')}
+          title={text('잊어도 됩니다', 'It is okay to forget')}
         >
           <Piece rotate={-1.5} width={420}>
             <div className="piece-card">
-              <p className="piece-line">회의를 짧게 만드는 방법을 찾아보는 중이다.</p>
+              <p className="piece-line">{text('회의를 짧게 만드는 방법을 찾아보는 중이다.', 'I am looking for ways to make meetings shorter.')}</p>
               <AmbientGhost
                 hovered
-                meta="저장한 링크 ·"
-                text="회의 전에 30분을 쓰면 회의가 절반이 된다"
+                meta={text('저장한 링크 ·', 'Saved link ·')}
+                text={text('회의 전에 30분을 쓰면 회의가 절반이 된다', 'How 30 minutes before the meeting cuts it in half')}
               />
-              <p className="piece-line">준비 문서를 먼저 돌려 보자.</p>
+              <p className="piece-line">{text('준비 문서를 먼저 돌려 보자.', 'Let’s circulate the prep document first.')}</p>
             </div>
           </Piece>
         </FeatureCard>
 
-        <FeatureCard
-          body="같은 링크를 다시 저장하면 새 카드가 생기지 않고 원래 카드가 맨 위로 올라옵니다. 좋아요를 누른 카드는 마우스를 올리지 않아도 하트가 보입니다 — 상태는 동작과 달리 늘 보여야 하니까요."
-          title="중복 없이, 상태는 보이게"
-        >
-          <Piece rotate={-2} width={224} x={-70} y={14}>
-            <InboxCard item={{ ...INBOX_ITEMS[2], liked: true }} />
-          </Piece>
-          <Piece rotate={2} width={224} x={92} y={-14} z={2}>
-            <InboxCard item={{ ...INBOX_ITEMS[0], liked: true }} />
-          </Piece>
-        </FeatureCard>
         </FeatureGrid>
       </section>
 

@@ -20,6 +20,24 @@
   background: linear-gradient(135deg, #e3f0fd 0%, #b9d5f5 55%, #8fb6ea 100%);
 }
 
+/* 창은 가운데에 두고 좌·우·상단은 모두 보이게 한다. 하단만 무대
+   경계에 맞춰 잘리도록 배치한다. 내부 패널 비율은 고정 논리 무대가 유지한다. */
+.connected-memory-scene .showcase-window,
+.productivity-scene .showcase-window {
+  background: #fdf9f2;
+  border-radius: 12px 12px 0 0;
+  height: 80%;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  width: 90%;
+}
+
+/* 생산성 장면에서는 새 탭 선택 공간만 줄여 실제 작업 패널을 우선한다. */
+.productivity-scene .split-pane.wide {
+  flex: 0.7 1 0;
+}
+
 .showcase-green {
   background: linear-gradient(135deg, #e6f4ea 0%, #c0e2ca 55%, #95cca7 100%);
 }
@@ -38,10 +56,7 @@
 .showcase-window {
   background: var(--paper-strong);
   border-radius: 12px;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.05),
-    0 8px 24px rgba(0, 0, 0, 0.06),
-    0 24px 60px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-page-frame);
   display: flex;
   flex-direction: column;
   height: 80%;
@@ -154,6 +169,18 @@
   left: 40px;
   right: auto;
   top: 76px;
+}
+
+/* 현재 페이지 저장은 이 장면의 핵심 행동이다. 제품 UI는 그대로 두고,
+   무대 위 주석 층에서만 크레용 선을 살짝 둘러 시선을 안내한다. */
+.capture-save-ring {
+  height: 52px;
+  left: 187px;
+  pointer-events: none;
+  position: absolute;
+  top: 128px;
+  width: 124px;
+  z-index: 1;
 }
 
 /* Safari 목업 자체가 트래픽 라이트를 그린다. SceneShowcase의 앱용 라이트는
@@ -320,9 +347,7 @@
   background: var(--app-color-bg-paper);
   position: relative;
   border-radius: 12px;
-  box-shadow:
-    0 1px 2px rgba(44, 37, 32, 0.05),
-    0 10px 30px rgba(44, 37, 32, 0.1);
+  box-shadow: var(--shadow-page-piece);
   overflow: hidden;
 }
 

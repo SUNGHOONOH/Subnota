@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Inbox,
   NotebookText,
-  Search,
   Topics,
   X,
 } from '@/components/icons';
@@ -32,13 +31,13 @@ const KIND_LABELS: Record<GlobalSearchKind, { en: string; ko: string }> = {
   topic: { en: 'Topics', ko: 'Topics' },
 };
 
-const ResultIcon = ({ kind }: { kind: GlobalSearchKind }) => {
-  if (kind === 'topic') return <Topics size={17} />;
-  if (kind === 'inbox') return <Inbox size={17} />;
+const ResultIcon = ({ kind, size = 17 }: { kind: GlobalSearchKind; size?: number }) => {
+  if (kind === 'topic') return <Topics size={size} />;
+  if (kind === 'inbox') return <Inbox size={size} />;
   if (kind === 'calendar' || kind === 'schedule') {
-    return <CalendarDays size={17} />;
+    return <CalendarDays size={size} />;
   }
-  return <NotebookText size={17} />;
+  return <NotebookText size={size} />;
 };
 
 const formatRelativeDate = (timestamp: number, language: 'en' | 'ko') => {
@@ -155,7 +154,6 @@ const GlobalSearchOverlay = ({
             transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
           >
             <div className="global-search-input-row">
-              <Search size={18} />
               <input
                 aria-controls="global-search-results"
                 aria-label={t('전역 검색어', 'Global search query')}
@@ -169,9 +167,22 @@ const GlobalSearchOverlay = ({
                 ref={inputRef}
                 value={query}
               />
-              <button aria-label={t('검색 닫기', 'Close search')} onClick={onClose} type="button">
-                <X size={18} />
-              </button>
+              {query && (
+                <button
+                  aria-label={t('검색어 지우기', 'Clear search')}
+                  onClick={() => {
+                    setQuery('');
+                    setActiveIndex(0);
+                    setHoveredIndex(null);
+                    setKeyboardNavigating(false);
+                    window.requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                  title={t('검색어 지우기', 'Clear search')}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              )}
             </div>
 
             <div className="global-search-section-label">
@@ -192,35 +203,44 @@ const GlobalSearchOverlay = ({
                   tone="result"
                 />
               ) : (
-                results.map((item, index) => (
-                  <button
-                    aria-selected={index === focusedIndex}
-                    className={index === focusedIndex ? 'is-active' : undefined}
-                    key={item.key}
-                    onClick={() => chooseResult(item)}
-                    onMouseEnter={() => {
-                      setHoveredIndex(index);
-                      setKeyboardNavigating(false);
-                    }}
-                    role="option"
-                    type="button"
-                  >
-                    <span className="global-search-result-icon">
-                      <ResultIcon kind={item.kind} />
-                    </span>
-                    <span className="global-search-result-copy">
-                      <strong>{item.title}</strong>
-                      <span>{item.subtitle}</span>
-                    </span>
-                    <span className="global-search-result-meta">
-                      {formatRelativeDate(item.timestamp, language) || localize(
-                        language,
-                        KIND_LABELS[item.kind].ko,
-                        KIND_LABELS[item.kind].en,
-                      )}
-                    </span>
-                  </button>
-                ))
+                results.map((item, index) => {
+                  const resultDate = formatRelativeDate(item.timestamp, language);
+
+                  return (
+                    <button
+                      aria-selected={index === focusedIndex}
+                      className={index === focusedIndex ? 'is-active' : undefined}
+                      key={item.key}
+                      onClick={() => chooseResult(item)}
+                      onMouseEnter={() => {
+                        setHoveredIndex(index);
+                        setKeyboardNavigating(false);
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      <span className="global-search-result-copy">
+                        <strong>{item.title}</strong>
+                        <span>{item.subtitle}</span>
+                      </span>
+                      <span className="global-search-result-meta">
+                        <span className="global-search-result-kind">
+                          <ResultIcon kind={item.kind} size={10} />
+                          {localize(
+                            language,
+                            KIND_LABELS[item.kind].ko,
+                            KIND_LABELS[item.kind].en,
+                          )}
+                        </span>
+                        {resultDate && (
+                          <span className="global-search-result-date">
+                            {resultDate}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
               )}
             </div>
             <footer className="global-search-footer">

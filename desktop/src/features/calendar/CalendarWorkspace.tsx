@@ -114,15 +114,17 @@ const HOUR_MS = DEFAULT_CALENDAR_EVENT_DURATION_MS;
 // 15분(실제 8px)과 30분(18px)이 화면에서 똑같아 보였다.
 const EVENT_MIN_HEIGHT_PX = 13;
 // 공간은 제목이 먼저 가져간다. 시간은 남을 때만 붙는 정보다 — 제목을 잘라
-// 가며 보여 줄 값이 아니다. 높이에 따라 세 단계로 나뉜다.
+// 가며 보여 줄 값이 아니다. 45·60분 카드는 제목이 한 줄일 때만 시간을
+// 붙이고, 제목이 두 줄이면 제목을 우선한다.
 //
 //   ~24px   제목 한 줄            15·30분
-//   ~43px   제목 두 줄            45·60분
+//   ~43px   제목 두 줄 / 한 줄 + 시간 45·60분
 //   44px~   제목 두 줄 + 시간     90분 이상
 //
 // 두 줄은 2 + 13 × 2 = 28px를 쓰므로 45분(28px)에 꼭 맞고,
-// 시간까지는 2 + 26 + 11 = 39px가 필요해 44px를 경계로 둔다.
+// 제목 한 줄과 시간은 2 + 13 + 11 = 26px라 45분부터 가능하다.
 const EVENT_COMPACT_HEIGHT_PX = 24;
+const EVENT_SINGLE_LINE_TIME_HEIGHT_PX = 28;
 const EVENT_TIME_HEIGHT_PX = 44;
 // 리사이즈로 만들 수 있는 최소 길이. 0/역방향만 막는다.
 const MIN_EVENT_MINUTES = 5;
@@ -398,6 +400,9 @@ const CalendarWorkspace = ({
     useState<CalendarDropPreview | null>(null);
   const [calendarResizePreview, setCalendarResizePreview] =
     useState<CalendarResizePreview | null>(null);
+  const [singleLineTimedEventKeys, setSingleLineTimedEventKeys] = useState<
+    Set<string>
+  >(() => new Set());
 
   const monthGridRef = useRef<HTMLDivElement>(null);
   const timeGridRef = useRef<HTMLDivElement>(null);
@@ -445,6 +450,59 @@ const CalendarWorkspace = ({
     }
     timeGridRef.current.scrollTop = 7 * HOUR_HEIGHT;
   }, [view]);
+
+  useEffect(() => {
+    const grid = timeGridRef.current;
+    if (view !== 'week' || !grid) {
+      setSingleLineTimedEventKeys((previous) =>
+        previous.size ? new Set() : previous,
+      );
+      return undefined;
+    }
+
+    let frame = 0;
+    const measureTitles = () => {
+      frame = 0;
+      const next = new Set<string>();
+      grid
+        .querySelectorAll<HTMLElement>('strong[data-calendar-event-key]')
+        .forEach((title) => {
+          const eventKey = title.dataset.calendarEventKey;
+          const lineHeight = Number.parseFloat(
+            window.getComputedStyle(title).lineHeight,
+          );
+          if (
+            eventKey &&
+            Number.isFinite(lineHeight) &&
+            title.getBoundingClientRect().height <= lineHeight + 0.5
+          ) {
+            next.add(eventKey);
+          }
+        });
+
+      setSingleLineTimedEventKeys((previous) => {
+        if (
+          previous.size === next.size &&
+          Array.from(next).every((key) => previous.has(key))
+        ) {
+          return previous;
+        }
+        return next;
+      });
+    };
+    const scheduleMeasurement = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measureTitles);
+    };
+    const observer = new ResizeObserver(scheduleMeasurement);
+    observer.observe(grid);
+    scheduleMeasurement();
+
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, [blocks, view, weekDays]);
 
   useEffect(() => {
     if (!isMonthTodoOverlayOpen) return;
@@ -1531,9 +1589,14 @@ const CalendarWorkspace = ({
                       );
                       const isCompact =
                         isStacked || blockHeight <= EVENT_COMPACT_HEIGHT_PX;
-                      // 시간은 제목 두 줄을 다 쓰고도 자리가 남을 때만 보인다.
+                      const eventKey = `${block?.id ?? suggestion?.id}:${date.toISOString()}`;
+                      // 45·60분 카드는 실제 제목이 한 줄일 때만 시간을 붙인다.
+                      // 창 폭 변화로 줄바꿈이 생기면 ResizeObserver가 다시 판단한다.
                       const showsTime =
-                        !isStacked && blockHeight >= EVENT_TIME_HEIGHT_PX;
+                        !isStacked &&
+                        (blockHeight >= EVENT_TIME_HEIGHT_PX ||
+                          (blockHeight >= EVENT_SINGLE_LINE_TIME_HEIGHT_PX &&
+                            singleLineTimedEventKeys.has(eventKey)));
                       // 최저 높이에 붙은 초단기 일정만 기존의 좁은 리사이즈 핸들을 쓴다.
                       // 45분짜리 제목 한 줄 카드는 이동/리사이즈 hit area를 그대로 둔다.
                       const isResizeCompact =
@@ -1650,7 +1713,9 @@ const CalendarWorkspace = ({
                               resizeBlock(event, block, 'top')
                             }
                           />
-                          <strong>{block.title}</strong>
+                          <strong data-calendar-event-key={eventKey}>
+                            {block.title}
+                          </strong>
                           {overflowCount > 0 && (
                             <span className="cal-event-more">
                               {t(`+${overflowCount}개`, `+${overflowCount}`)}

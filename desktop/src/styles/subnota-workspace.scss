@@ -179,16 +179,36 @@
   --legacy-motion-page: 200ms ease;
   --legacy-press-scale: 0.96;
   --legacy-press-scale-soft: 0.985;
-  --legacy-shadow-button: 0 2px 4px rgba(139, 115, 85, 0.04);
-  --legacy-shadow-panel: 0 2px 6px rgba(92, 77, 60, 0.06);
-  --legacy-shadow-float: 0 2px 4px rgba(92, 77, 60, 0.06);
-  --legacy-shadow-row-active: 0 1px 3px rgba(20, 20, 19, 0.08);
-  --legacy-shadow-menu:
-    0 0 0 1px rgba(44, 37, 32, 0.08), 0 2px 4px rgba(92, 77, 60, 0.06);
-  --legacy-shadow-preview: 0 2px 6px rgba(92, 77, 60, 0.06);
-  --legacy-shadow-modal: 0 22px 60px rgba(44, 37, 32, 0.2);
-  --legacy-shadow-green: 0 3px 8px rgba(31, 45, 31, 0.18);
-  --legacy-shadow-paper-offset: 6px 6px 0 rgba(214, 200, 163, 0.4);
+  /* Semantic elevation. Each surface gets one role-specific shadow instead
+     of stacking a border ring and ambient shadow at every callsite. */
+  --app-shadow-control: 0 1px 2px rgba(20, 20, 19, 0.08);
+  --app-shadow-control-active: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --app-shadow-popover:
+    0 0 0 1px rgba(44, 37, 32, 0.08),
+    0 3px 10px rgba(92, 77, 60, 0.08);
+  --app-shadow-panel:
+    -8px 0 24px rgba(44, 37, 32, 0.1),
+    0 2px 8px rgba(44, 37, 32, 0.06);
+  --app-shadow-panel-pushed:
+    -8px 0 18px rgba(44, 37, 32, 0.05),
+    0 2px 10px rgba(44, 37, 32, 0.06);
+  --app-shadow-card:
+    0 1px 2px rgba(44, 37, 32, 0.04),
+    0 10px 28px rgba(44, 37, 32, 0.07);
+  --app-shadow-modal:
+    0 1px 2px rgba(44, 37, 32, 0.06),
+    0 22px 60px rgba(44, 37, 32, 0.2);
+  --app-shadow-sheet: var(--app-shadow-modal);
+  --app-shadow-tooltip: 0 8px 18px rgba(44, 37, 32, 0.18);
+  --app-shadow-dragged: 0 12px 28px rgba(44, 37, 32, 0.16);
+  --app-shadow-menu:
+    0 0 0 1px rgba(44, 37, 32, 0.08),
+    0 2px 4px rgba(92, 77, 60, 0.06),
+    0 12px 30px rgba(44, 37, 32, 0.14);
+  --app-shadow-floating:
+    0 1px 2px rgba(44, 37, 32, 0.06),
+    0 12px 30px rgba(44, 37, 32, 0.12);
+  --app-shadow-paper-offset: 6px 6px 0 rgba(214, 200, 163, 0.4);
   --tt-bg-color: var(--legacy-bg-app);
   --tt-border-color: rgba(44, 37, 32, 0.1);
   --tt-border-color-tint: rgba(44, 37, 32, 0.06);
@@ -336,14 +356,33 @@ html.dark {
   --legacy-date-blue-bg: #1a1f33;
   --legacy-date-blue-border: rgba(66, 87, 178, 0.45);
 
-  --legacy-shadow-button: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --legacy-shadow-panel: 0 2px 6px rgba(0, 0, 0, 0.35);
-  --legacy-shadow-float: 0 2px 4px rgba(0, 0, 0, 0.35);
-  --legacy-shadow-row-active: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --legacy-shadow-menu:
-    0 0 0 1px rgba(250, 249, 245, 0.08), 0 2px 8px rgba(0, 0, 0, 0.5);
-  --legacy-shadow-preview: 0 2px 6px rgba(0, 0, 0, 0.4);
-  --legacy-shadow-modal: 0 22px 60px rgba(0, 0, 0, 0.6);
+  --app-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --app-shadow-control-active: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --app-shadow-popover:
+    0 0 0 1px rgba(250, 249, 245, 0.08),
+    0 3px 12px rgba(0, 0, 0, 0.28);
+  --app-shadow-panel:
+    -8px 0 24px rgba(0, 0, 0, 0.24),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+  --app-shadow-panel-pushed:
+    -8px 0 18px rgba(0, 0, 0, 0.18),
+    0 2px 10px rgba(0, 0, 0, 0.16);
+  --app-shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+  --app-shadow-modal:
+    0 1px 2px rgba(0, 0, 0, 0.24),
+    0 22px 60px rgba(0, 0, 0, 0.36);
+  --app-shadow-sheet: var(--app-shadow-modal);
+  --app-shadow-tooltip: 0 8px 18px rgba(0, 0, 0, 0.32);
+  --app-shadow-dragged: 0 12px 28px rgba(0, 0, 0, 0.34);
+  --app-shadow-menu:
+    0 0 0 1px rgba(250, 249, 245, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.34);
+  --app-shadow-floating:
+    0 1px 2px rgba(0, 0, 0, 0.24),
+    0 12px 30px rgba(0, 0, 0, 0.36);
 
   --tt-border-color: rgba(250, 249, 245, 0.12);
   --tt-border-color-tint: rgba(250, 249, 245, 0.07);
@@ -568,8 +607,7 @@ html.dark .session-rail {
   border-radius: 20px;
   bottom: auto;
   box-shadow:
-    var(--legacy-shadow-menu),
-    0 12px 30px rgba(var(--legacy-ink-rgb), 0.14);
+    var(--app-shadow-menu);
   gap: 6px;
   left: 8px;
   opacity: 0;
@@ -841,9 +879,7 @@ html.dark .session-rail {
   border: 1px solid var(--legacy-border-strong);
   border-radius: 12px 0 0 12px;
   bottom: auto;
-  box-shadow:
-    -5px 0 14px rgba(var(--legacy-ink-rgb), 0.1),
-    0 2px 6px rgba(var(--legacy-ink-rgb), 0.06);
+  box-shadow: var(--app-shadow-panel-pushed);
   display: flex;
   height: 76px;
   justify-content: center;
@@ -928,9 +964,7 @@ html.dark .session-rail {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-border-strong);
   border-radius: 16px;
-  box-shadow:
-    -8px 0 24px rgba(var(--legacy-ink-rgb), 0.1),
-    0 2px 8px rgba(var(--legacy-ink-rgb), 0.06);
+  box-shadow: var(--app-shadow-panel);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -946,9 +980,7 @@ html.dark .session-rail {
    읽힌다. 오버레이에 그 줄이 없는 이유가 바로 왼쪽 그늘이다. */
 .app-shell.side-panel-push .preview-panel,
 .app-shell.side-panel-push .schedule-inbox-panel {
-  box-shadow:
-    -8px 0 18px rgba(var(--legacy-ink-rgb), 0.05),
-    0 2px 10px rgba(var(--legacy-ink-rgb), 0.06);
+  box-shadow: var(--app-shadow-panel-pushed);
 }
 
 .schedule-inbox-panel-header {
@@ -1354,7 +1386,7 @@ html.dark .session-rail {
 .icon-button:not(:disabled):hover,
 .secondary-button:not(:disabled):hover {
   background: var(--legacy-accent-soft);
-  box-shadow: var(--legacy-shadow-button);
+  box-shadow: var(--app-shadow-control);
 }
 
 .ghost-button:not(:disabled):active,
@@ -1826,8 +1858,8 @@ html.dark .session-rail {
   border: 1px solid var(--legacy-border-soft);
   /* 날짜 7칸과 시간 조작만 남긴 컴팩트 표면. 포털로 열릴 때도 같은 폭을 쓴다. */
   border-radius: 14px;
-  box-shadow: 0 18px 48px rgba(20, 20, 19, 0.18);
-  color: var(--legacy-ink);
+  box-shadow: var(--app-shadow-popover);
+  color: var(--app-color-text-strong);
   margin: 10px auto 0;
   padding: 10px;
   width: min(228px, calc(100% - 20px));
@@ -1866,7 +1898,7 @@ html.dark .session-rail {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-border-soft);
   border-radius: 999px;
-  box-shadow: 0 10px 28px rgba(20, 20, 19, 0.16);
+  box-shadow: var(--app-shadow-popover);
   display: inline-flex;
   gap: 4px;
   padding: 4px;
@@ -1877,7 +1909,7 @@ html.dark .session-rail {
   background: var(--app-color-action-secondary-bg);
   border: 1px solid var(--app-color-action-secondary-border);
   border-radius: 999px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -1897,7 +1929,7 @@ html.dark .session-rail {
 }
 
 .schedule-confirm-date svg {
-  color: var(--app-color-muted-icon);
+  color: var(--app-color-text-strong);
 }
 
 .schedule-confirm-submit {
@@ -1925,7 +1957,7 @@ html.dark .session-rail {
   background: transparent;
   border: 0;
   border-radius: 999px;
-  color: color-mix(in srgb, var(--legacy-ink) 45%, transparent);
+  color: color-mix(in srgb, var(--app-color-text-strong) 56%, transparent);
   cursor: pointer;
   display: flex;
   height: var(--control-size-compact);
@@ -1935,7 +1967,7 @@ html.dark .session-rail {
 
 .schedule-confirm-x:hover {
   background: var(--app-color-state-hover);
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
 }
 
 // 날짜 피커의 [등록] 커밋 버튼 (스케줄 등록 경로에서만 노출).
@@ -1974,7 +2006,7 @@ html.dark .session-rail {
 
 .date-schedule-title {
   align-items: center;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   display: flex;
   gap: 4px;
 }
@@ -1990,19 +2022,21 @@ html.dark .session-rail {
   background: transparent;
   border: 0;
   border-radius: 6px;
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   font: inherit;
   font-size: 12px;
   font-weight: var(--legacy-weight-heavy);
   height: 22px;
   outline: none;
+  opacity: 0.56;
   padding: 0 2px;
 }
 
 .date-schedule-year-select:hover,
 .date-schedule-year-select:focus-visible {
   background: var(--app-color-bg-hover);
-  color: var(--app-color-text);
+  color: var(--app-color-text-strong);
+  opacity: 1;
 }
 
 /* select는 텍스트를 받지 않으므로 :focus-visible이 마우스 클릭을 실제로
@@ -2022,7 +2056,7 @@ html.dark .session-rail {
   background: transparent;
   border: 0;
   border-radius: 999px;
-  color: var(--app-color-muted-icon);
+  color: var(--app-color-text-strong);
   height: 22px;
   width: 22px;
 
@@ -2037,7 +2071,7 @@ html.dark .session-rail {
 }
 
 .date-schedule-nav .date-schedule-close {
-  color: color-mix(in srgb, var(--legacy-ink) 45%, transparent);
+  color: color-mix(in srgb, var(--app-color-text-strong) 56%, transparent);
 }
 
 .date-schedule-weekdays,
@@ -2051,7 +2085,7 @@ html.dark .session-rail {
 }
 
 .date-schedule-weekdays span {
-  color: color-mix(in srgb, var(--legacy-ink) 45%, transparent);
+  color: color-mix(in srgb, var(--app-color-text-strong) 56%, transparent);
   font-size: 10px;
   font-weight: var(--legacy-weight-bold);
   letter-spacing: 0.04em;
@@ -2068,7 +2102,7 @@ html.dark .session-rail {
   background: transparent;
   border: 0;
   border-radius: 999px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   display: flex;
   font-size: 12px;
   font-weight: var(--legacy-weight-bold);
@@ -2119,7 +2153,7 @@ button.date-schedule-day:hover:not(.selected) {
   background: var(--app-color-action-secondary-bg);
   border: 1px solid var(--app-color-action-secondary-border);
   border-radius: 6px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   font-size: 12px;
   font-weight: var(--legacy-weight-heavy);
   height: 24px;
@@ -2135,7 +2169,7 @@ button.date-schedule-day:hover:not(.selected) {
 }
 
 .date-schedule-time-select:disabled {
-  color: color-mix(in srgb, var(--legacy-ink) 38%, transparent);
+  color: color-mix(in srgb, var(--app-color-text-strong) 42%, transparent);
   opacity: 1;
 }
 
@@ -2153,7 +2187,7 @@ button.date-schedule-day:hover:not(.selected) {
   border: 0;
   box-sizing: border-box;
   border-radius: 5px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   flex: 0 0 28px;
   font-size: 11px;
@@ -2172,7 +2206,7 @@ button.date-schedule-day:hover:not(.selected) {
 
 html.dark .date-schedule-popover {
   border-color: var(--legacy-border-strong);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--app-shadow-popover);
 }
 
 html.dark .date-schedule-meridiem button.active {
@@ -2311,7 +2345,7 @@ html.dark .date-schedule-meridiem button.active {
   border: 1px solid var(--app-color-border);
   border-radius: var(--legacy-radius-control);
   bottom: 18px;
-  box-shadow: var(--legacy-shadow-panel);
+  box-shadow: var(--app-shadow-floating);
   color: var(--app-color-text);
   display: grid;
   gap: 10px;
@@ -2439,43 +2473,44 @@ html.dark .date-schedule-meridiem button.active {
 
 .global-search-dialog {
   background: var(--legacy-bg-paper);
-  border: 1px solid rgba(var(--legacy-ink-rgb), 0.1);
+  border: 0;
   border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgba(var(--legacy-ink-rgb), 0.06),
-    0 18px 45px rgba(var(--legacy-ink-rgb), 0.16);
-  color: var(--legacy-ink);
+  box-shadow: var(--app-shadow-modal);
+  color: var(--app-color-text-strong);
   max-height: min(610px, calc(100vh - 112px));
   overflow: hidden;
-  width: min(680px, calc(100vw - 48px));
+  width: min(600px, calc(100vw - 48px));
 }
 
 .global-search-input-row {
   align-items: center;
-  border-bottom: 1px solid rgba(var(--legacy-ink-rgb), 0.08);
-  display: grid;
-  gap: 10px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-height: 60px;
-  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
 }
 
-.global-search-input-row > svg {
-  color: var(--app-color-muted-icon);
+.global-search-input-row:focus-within {
+  outline: none;
 }
 
 .global-search-input-row input {
   background: transparent;
   border: 0;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 400;
+  flex: 1;
   min-width: 0;
   outline: none;
 }
 
 .global-search-input-row input::placeholder {
-  color: var(--legacy-muted);
+  color: var(--app-color-text-strong);
+  opacity: 0.46;
 }
 
 .global-search-input-row button {
@@ -2483,25 +2518,29 @@ html.dark .date-schedule-meridiem button.active {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: var(--legacy-muted);
+  color: var(--app-color-text-strong);
   display: inline-flex;
-  height: var(--control-size-standard);
+  height: var(--control-size-compact);
   justify-content: center;
   padding: 0;
-  width: var(--control-size-standard);
+  width: var(--control-size-compact);
   transition-duration: 120ms;
   transition-property: background-color, color, transform;
   transition-timing-function: ease;
 
   svg {
-    height: var(--control-icon-standard);
-    width: var(--control-icon-standard);
+    height: var(--control-icon-compact);
+    width: var(--control-icon-compact);
   }
 }
 
 .global-search-input-row button:hover {
   background: var(--app-color-state-hover);
-  color: var(--app-color-text);
+  color: var(--app-color-text-strong);
+}
+
+.global-search-input-row button:focus-visible {
+  outline: none;
 }
 
 .global-search-input-row button:active {
@@ -2510,23 +2549,24 @@ html.dark .date-schedule-meridiem button.active {
 
 .global-search-section-label {
   align-items: center;
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   display: flex;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   gap: 6px;
-  padding: 11px 14px 5px;
+  padding: 4px 16px;
 }
 
 .global-search-section-label span {
-  color: var(--legacy-muted);
+  color: var(--app-color-text-strong);
   font-variant-numeric: tabular-nums;
+  opacity: 0.56;
 }
 
 .global-search-results {
   max-height: min(452px, calc(100vh - 226px));
   overflow-y: auto;
-  padding: 3px 8px 8px;
+  padding: 2px 8px 6px;
 }
 
 .global-search-results > button {
@@ -2534,12 +2574,12 @@ html.dark .date-schedule-meridiem button.active {
   background: transparent;
   border: 0;
   border-radius: 10px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   display: grid;
-  gap: 10px;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  min-height: 54px;
-  padding: 6px 10px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: 6px 8px;
   text-align: left;
   width: 100%;
 }
@@ -2548,23 +2588,6 @@ html.dark .date-schedule-meridiem button.active {
 .global-search-results > button.is-active {
   background: var(--app-color-state-hover);
   outline: none;
-}
-
-.global-search-result-icon {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: var(--legacy-accent);
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
-}
-
-.global-search-results > button.is-active .global-search-result-icon,
-.global-search-results > button:hover .global-search-result-icon {
-  color: var(--app-color-text);
 }
 
 .global-search-result-copy {
@@ -2581,18 +2604,47 @@ html.dark .date-schedule-meridiem button.active {
 }
 
 .global-search-result-copy strong {
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.global-search-result-copy span,
-.global-search-result-meta {
-  color: var(--legacy-muted);
+.global-search-result-copy span {
+  color: var(--app-color-text-strong);
   font-size: 11px;
+  opacity: 0.56;
 }
 
 .global-search-result-meta {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
   min-width: max-content;
+  text-align: right;
+}
+
+.global-search-result-kind {
+  align-items: center;
+  background: var(--app-color-bg-muted);
+  border-radius: 999px;
+  color: var(--app-color-text-strong);
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 600;
+  gap: 3px;
+  height: 16px;
+  line-height: 1;
+  padding: 0 5px;
+}
+
+.global-search-result-kind svg {
+  flex: none;
+}
+
+.global-search-result-date {
+  color: var(--app-color-text-strong);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.5;
 }
 
 /* 오버레이 안에서의 여백만 조정한다. 글자·정렬은 .empty-state가 갖는다. */
@@ -2601,13 +2653,14 @@ html.dark .date-schedule-meridiem button.active {
 }
 
 .global-search-footer {
-  border-top: 1px solid rgba(var(--legacy-ink-rgb), 0.08);
-  color: var(--legacy-muted);
+  border-top: 0;
+  color: var(--app-color-text-strong);
   display: flex;
-  font-size: 10px;
-  gap: 12px;
+  font-size: 9px;
+  gap: 10px;
   justify-content: flex-end;
-  padding: 7px 12px;
+  opacity: 0.56;
+  padding: 5px 10px;
 }
 
 @media (max-width: 640px) {
@@ -2625,7 +2678,7 @@ html.dark .date-schedule-meridiem button.active {
   }
 
   .global-search-results > button {
-    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2634,7 +2687,7 @@ html.dark .date-schedule-meridiem button.active {
   background: var(--legacy-bg-canvas);
   border: 1px solid var(--legacy-accent-border);
   border-radius: var(--legacy-radius-card);
-  box-shadow: var(--legacy-shadow-modal);
+  box-shadow: var(--app-shadow-modal);
   color: var(--legacy-ink);
   max-height: min(720px, calc(100vh - 48px));
   overflow: hidden;
@@ -2813,7 +2866,7 @@ html.dark .date-schedule-meridiem button.active {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-settings-border);
   border-radius: 14px;
-  box-shadow: 0 24px 64px rgba(20, 22, 28, 0.22);
+  box-shadow: var(--app-shadow-modal);
   color: var(--legacy-ink-strong);
   display: flex;
   height: min(620px, calc(100vh - 80px));
@@ -3240,7 +3293,7 @@ html.dark .date-schedule-meridiem button.active {
 .knowledge-graph-node-tooltip {
   background: var(--legacy-ink);
   border-radius: var(--legacy-radius-chip);
-  box-shadow: 0 8px 18px rgba(44, 37, 32, 0.18);
+  box-shadow: var(--app-shadow-tooltip);
   color: var(--legacy-bg-canvas);
   font-size: var(--legacy-font-size-xs);
   font-variant-numeric: tabular-nums;
@@ -3261,7 +3314,7 @@ html.dark .date-schedule-meridiem button.active {
   border: 1px solid rgba(var(--legacy-ink-rgb), 0.1);
   border-radius: 10px;
   bottom: 8px;
-  box-shadow: 0 2px 8px rgba(92, 77, 60, 0.12);
+  box-shadow: var(--app-shadow-popover);
   display: inline-flex;
   gap: 2px;
   left: 50%;
@@ -3479,9 +3532,7 @@ html.dark .date-schedule-meridiem button.active {
   border: 1px solid var(--legacy-border-strong);
   border-radius: var(--legacy-radius-panel);
   bottom: calc(clamp(180px, 24%, 220px) + 12px);
-  box-shadow:
-    -8px 0 24px rgba(var(--legacy-ink-rgb), 0.1),
-    0 2px 8px rgba(var(--legacy-ink-rgb), 0.06);
+  box-shadow: var(--app-shadow-panel);
   display: flex;
   min-height: 0;
   overflow: hidden;
@@ -3813,7 +3864,7 @@ html.dark .date-schedule-meridiem button.active {
 
 .cal-views button.active {
   background: var(--legacy-bg-paper);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--app-shadow-control-active);
   color: var(--legacy-ink-strong);
 }
 
@@ -4357,8 +4408,9 @@ html.dark .cal-schedule-drop-preview {
   }
 }
 
-/* 시간은 제목 두 줄을 다 쓰고도 남을 때만 붙는다(.roomy). 기본은 숨김이라
-   제목이 공간을 먼저 가져간다 — 시간은 잘라 가며 보여 줄 정보가 아니다. */
+/* 시간은 제목 한 줄 옆에 남는 두 번째 줄에만 붙는다(.roomy). 기본은 숨김이라
+   제목이 두 줄이면 제목이 공간을 먼저 가져간다 — 시간은 잘라 가며 보여 줄
+   정보가 아니다. */
 .cal-event > span:not(.cal-event-resize):not(.cal-suggestion-cta) {
   display: none;
 }
@@ -4621,8 +4673,8 @@ html.dark .cal-schedule-drop-preview {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-border-soft);
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(20, 22, 28, 0.22);
-  color: var(--legacy-ink);
+  box-shadow: var(--app-shadow-modal);
+  color: var(--app-color-text-strong);
   display: flex;
   flex-direction: column;
   gap: 13px;
@@ -4642,7 +4694,7 @@ html.dark .cal-schedule-drop-preview {
 
 .cal-modal.anchored {
   /* 위치는 인라인 스타일이 정한다(뷰포트 실측). 여기서는 모양만. */
-  box-shadow: 0 16px 44px rgba(20, 22, 28, 0.2);
+  box-shadow: var(--app-shadow-popover);
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 16px;
@@ -4702,7 +4754,8 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .cal-modal-title::placeholder {
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
+  opacity: 0.46;
 }
 
 /* 라벨 대신 아이콘. 배경을 나누지 않고 hairline으로만 끊는다 — 칸마다
@@ -4725,7 +4778,7 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .cal-modal-row-icon {
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   flex: none;
   margin-top: 3px;
 }
@@ -4733,7 +4786,7 @@ html.dark .cal-schedule-drop-preview {
 .cal-modal-row textarea {
   background: none;
   border: 0;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   flex: 1;
   font-family: inherit;
   font-size: 13px;
@@ -4746,7 +4799,8 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .cal-modal-row textarea::placeholder {
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
+  opacity: 0.46;
 }
 
 .cal-modal-row .date-schedule-field {
@@ -4760,6 +4814,7 @@ html.dark .cal-schedule-drop-preview {
   background: none;
   border: 0;
   border-radius: 0;
+  color: var(--app-color-text-strong);
   flex-direction: row-reverse;
   font-size: 13px;
   font-weight: 500;
@@ -4770,7 +4825,7 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .cal-modal-row .date-schedule-field-trigger svg {
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   height: 15px;
   width: 15px;
 }
@@ -4784,12 +4839,13 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .cal-modal-hint {
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   flex: 1;
   font-size: 11px;
   margin: 0;
   min-width: 0;
   overflow: hidden;
+  opacity: 0.56;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4798,16 +4854,18 @@ html.dark .cal-schedule-drop-preview {
 .cal-modal-delete-text {
   background: none;
   border: 0;
-  color: var(--app-color-muted);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   flex: none;
   font: inherit;
   font-size: 12px;
+  opacity: 0.56;
   padding: 2px 0;
 }
 
 .cal-modal-delete-text:hover {
   color: var(--app-color-danger);
+  opacity: 1;
 }
 
 .cal-modal-head {
@@ -4850,7 +4908,7 @@ html.dark .cal-schedule-drop-preview {
   background: var(--app-color-bg-toolbar);
   border: 1px solid var(--app-color-border);
   border-radius: 8px;
-  color: var(--app-color-text-soft);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   display: inline-flex;
   gap: 3px;
@@ -4879,8 +4937,8 @@ html.dark .cal-schedule-drop-preview {
   background: var(--app-color-bg-surface);
   border: 1px solid var(--app-color-border);
   border-radius: 10px;
-  box-shadow: 0 14px 30px rgba(35, 29, 24, 0.16);
-  color: var(--app-color-text);
+  box-shadow: var(--app-shadow-popover);
+  color: var(--app-color-text-strong);
   padding: 6px;
   position: absolute;
   right: 0;
@@ -4915,7 +4973,7 @@ html.dark .cal-schedule-drop-preview {
   background: transparent;
   border: 0;
   border-radius: 6px;
-  color: var(--app-color-muted-icon);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   display: inline-flex;
   height: 24px;
@@ -4931,7 +4989,7 @@ html.dark .cal-schedule-drop-preview {
 .cal-category-delete:hover,
 .cal-category-delete:focus-visible {
   background: var(--app-color-bg-hover);
-  color: var(--app-color-text);
+  color: var(--app-color-text-strong);
   outline: none;
 }
 
@@ -4944,7 +5002,7 @@ html.dark .cal-schedule-drop-preview {
   background: transparent;
   border: 0;
   border-radius: 7px;
-  color: var(--app-color-text);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   flex: 1;
   font-family: inherit;
@@ -4961,9 +5019,10 @@ html.dark .cal-schedule-drop-preview {
     white-space: nowrap;
   }
   b {
-    color: var(--app-color-text-soft);
+    color: var(--app-color-text-strong);
     font-size: 12px;
     margin-left: auto;
+    opacity: 0.56;
   }
 }
 
@@ -4987,10 +5046,11 @@ html.dark .cal-schedule-drop-preview {
   padding: 8px 5px 3px;
 
   p {
-    color: var(--app-color-text-soft);
+    color: var(--app-color-text-strong);
     font-size: 11px;
     line-height: 1.45;
     margin: 0 0 7px;
+    opacity: 0.56;
   }
   > div {
     display: flex;
@@ -5011,7 +5071,7 @@ html.dark .cal-schedule-drop-preview {
 }
 .cal-category-confirm-cancel {
   background: transparent;
-  color: var(--app-color-text-soft);
+  color: var(--app-color-text-strong);
 }
 .cal-category-confirm-delete {
   background: var(--app-color-danger-soft);
@@ -5033,7 +5093,7 @@ html.dark .cal-schedule-drop-preview {
   background: var(--app-color-bg-muted);
   border: 1px solid var(--app-color-border);
   border-radius: 7px;
-  color: var(--app-color-text);
+  color: var(--app-color-text-strong);
   font-family: inherit;
   font-size: 14px;
   line-height: 20px;
@@ -5202,7 +5262,7 @@ html.dark .cal-schedule-drop-preview {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: var(--app-color-muted-icon);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   display: inline-flex;
   height: var(--control-size-standard);
@@ -5213,7 +5273,7 @@ html.dark .cal-schedule-drop-preview {
 .cal-modal-close:hover,
 .cal-modal-close:focus-visible {
   background: var(--app-color-bg-hover);
-  color: var(--app-color-text-soft);
+  color: var(--app-color-text-strong);
   outline: none;
 }
 
@@ -5284,7 +5344,7 @@ html.dark .cal-schedule-drop-preview {
 .cal-btn.ghost {
   background: var(--app-color-action-secondary-bg);
   border: 1px solid var(--app-color-action-secondary-border);
-  color: var(--app-color-action-secondary-text);
+  color: var(--app-color-text-strong);
 }
 
 .cal-btn.ghost:hover {
@@ -6145,7 +6205,7 @@ html.dark .cal-schedule-drop-preview {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-settings-border);
   border-radius: 14px;
-  box-shadow: 0 22px 60px rgba(44, 37, 32, 0.2);
+  box-shadow: var(--app-shadow-sheet);
   max-height: min(720px, 88vh);
   max-width: 860px;
   overflow: auto;
@@ -6195,7 +6255,7 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .date-schedule-field-label {
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   display: block;
   font-size: 12px;
   font-weight: 700;
@@ -6207,7 +6267,7 @@ html.dark .cal-schedule-drop-preview {
   background: var(--app-color-action-secondary-bg);
   border: 1px solid var(--app-color-action-secondary-border);
   border-radius: 12px;
-  color: var(--legacy-ink);
+  color: var(--app-color-text-strong);
   cursor: pointer;
   display: flex;
   font-size: 14px;
@@ -6229,7 +6289,7 @@ html.dark .cal-schedule-drop-preview {
 }
 
 .date-schedule-field-trigger svg {
-  color: var(--app-color-muted-icon);
+  color: var(--app-color-text-strong);
   flex-shrink: 0;
 }
 
@@ -6941,6 +7001,43 @@ html:not([data-desktop-platform='macos']) .fatal-render-error::before {
   width: auto;
 }
 
+.inbox-list-header .inbox-search-input .mantine-Input-input {
+  background: var(--app-color-bg-muted);
+  border-color: var(--app-color-border);
+  color: var(--app-color-text-strong);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.inbox-list-header .inbox-search-input .mantine-Input-input::placeholder {
+  color: var(--app-color-text-strong);
+  opacity: 0.46;
+}
+
+.inbox-list-header .inbox-search-input .mantine-Input-input:focus {
+  background: var(--app-color-bg-paper);
+  border-color: var(--app-color-border-strong);
+  outline: 2px solid var(--app-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.inbox-list-header .inbox-search-input .mantine-Input-section {
+  color: var(--app-color-text-strong);
+}
+
+.inbox-list-header .inbox-search-clear {
+  color: var(--app-color-text-strong);
+}
+
+.inbox-list-header .inbox-search-clear:hover {
+  background: var(--app-color-state-hover);
+  color: var(--app-color-text-strong);
+}
+
+.inbox-list-header .inbox-search-clear:focus-visible {
+  outline: 2px solid var(--app-color-focus-ring);
+  outline-offset: 2px;
+}
+
 .inbox-list-header .inbox-filter {
   flex: 0 0 auto;
   margin-left: auto;
@@ -7365,7 +7462,7 @@ html:not([data-desktop-platform='macos']) .fatal-render-error::before {
   background: var(--legacy-bg-app);
   border: 1px solid var(--legacy-border-strong);
   border-radius: var(--legacy-radius-row);
-  box-shadow: var(--legacy-shadow-paper-offset);
+  box-shadow: var(--app-shadow-paper-offset);
   color: var(--legacy-ink);
   flex: 1;
   max-width: 860px;
@@ -8059,9 +8156,7 @@ html.dark .split-editor-tab:hover:not(.active) {
   background: rgba(var(--legacy-bg-paper-rgb), 0.92);
   border: 0;
   border-radius: var(--legacy-radius-menu);
-  box-shadow:
-    var(--legacy-shadow-menu),
-    0 18px 44px rgba(var(--legacy-ink-rgb), 0.18);
+  box-shadow: var(--app-shadow-popover);
   display: flex;
   flex-direction: column;
   min-width: 192px;
@@ -8456,9 +8551,7 @@ html.dark .split-editor-tab:hover:not(.active) {
   background: rgba(var(--legacy-bg-paper-rgb), 0.96);
   border: 0;
   border-radius: var(--legacy-radius-menu);
-  box-shadow:
-    var(--legacy-shadow-menu),
-    0 18px 44px rgba(var(--legacy-ink-rgb), 0.18);
+  box-shadow: var(--app-shadow-popover);
   display: flex;
   flex-direction: column;
   min-width: 168px;
@@ -8501,9 +8594,7 @@ html.dark .slash-command-menu {
   background: rgba(var(--legacy-bg-paper-rgb), 0.96);
   border: 0;
   border-radius: var(--legacy-radius-menu);
-  box-shadow:
-    var(--legacy-shadow-menu),
-    0 18px 44px rgba(var(--legacy-ink-rgb), 0.18);
+  box-shadow: var(--app-shadow-popover);
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -8982,7 +9073,7 @@ html.dark .selection-bubble-toolbar {
   background: rgba(247, 249, 255, 0.92);
   border: 1px solid rgba(93, 120, 230, 0.24);
   border-radius: var(--legacy-radius-card);
-  box-shadow: 0 8px 24px rgba(44, 37, 32, 0.08);
+  box-shadow: var(--app-shadow-floating);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -9503,7 +9594,7 @@ html.dark .selection-bubble-toolbar {
   /* 꽃밭 높이(600px)에 맞춰 늘어나므로 안쪽 리듬도 같이 키운다. 28/18로 두면
      넓은 상자 한가운데 작은 폼이 떠 있는 것처럼 보인다. */
   padding: 36px 36px;
-  box-shadow: 0 12px 24px rgba(20, 20, 19, 0.04);
+  box-shadow: var(--app-shadow-card);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -9911,9 +10002,7 @@ html.dark .selection-bubble-toolbar {
   border: 1px solid var(--app-color-border);
   border-radius: var(--legacy-radius-panel);
   bottom: 16px;
-  box-shadow:
-    var(--legacy-shadow-menu),
-    0 16px 34px rgba(44, 37, 32, 0.12);
+  box-shadow: var(--app-shadow-popover);
   color: var(--app-color-text);
   left: calc(var(--legacy-size-nav-rail) + 10px);
   padding: 14px;
