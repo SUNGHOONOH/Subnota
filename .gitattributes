@@ -1,0 +1,3 @@
+# Keep source-inspection tests and production builds independent of the
+# checkout platform's default line-ending conversion.
+* text=auto eol=lf

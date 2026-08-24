@@ -143,9 +143,7 @@ describe('local-embedding IPC', () => {
 
     expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledWith(
       expect.objectContaining({
-        targetPath:
-          '/tmp/subnota-test-userdata/Models/Embedding/Xenova/bge-m3/' +
-          '4de13258303883538bd53b696b452bf8099f0858/onnx/model_quantized.onnx',
+        targetPath: testWeightsPath,
       }),
     );
   });

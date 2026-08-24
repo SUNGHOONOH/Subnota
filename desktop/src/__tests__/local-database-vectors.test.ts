@@ -273,7 +273,12 @@ beforeAll(async () => {
 afterAll(async () => {
   electronState.appHandlers['before-quit']?.({ preventDefault: vi.fn() });
   await new Promise(resolve => setTimeout(resolve, 50));
-  fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  fs.rmSync(temporaryDirectory, {
+    force: true,
+    maxRetries: 5,
+    recursive: true,
+    retryDelay: 100,
+  });
 });
 
 describe('local memo vector SQLite store', () => {
