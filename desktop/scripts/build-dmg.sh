@@ -36,7 +36,7 @@ sh scripts/resign-local-mac-app.sh "$APP_PATH"
 
 # --- Build DMG ---
 echo "==> Building DMG for v${VERSION}..."
-node node_modules/@electron-forge/cli/dist/electron-forge.js make --skip-package --targets @electron-forge/maker-dmg
+node node_modules/@electron-forge/cli/dist/electron-forge.js make --skip-package --targets dmg
 
 # --- Find DMG ---
 DMG_PATH=$(find out/make -name "*.dmg" -maxdepth 3 | head -1)

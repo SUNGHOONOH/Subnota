@@ -41,8 +41,9 @@
 }
 
 .legal-brand-mark {
-  color: var(--brand-mark);
+  display: block;
   flex: none;
+  object-fit: contain;
   height: 28px;
   width: 28px;
 }

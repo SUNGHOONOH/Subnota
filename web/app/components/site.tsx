@@ -11,7 +11,7 @@ import {
   Inbox,
   Link as LinkIcon,
   List as MenuIcon,
-  SubnotaMark,
+  SubnotaGlassMark,
 } from '../subnota-ui/icons';
 import { useLanguage, useText } from '../lib/i18n';
 
@@ -63,7 +63,7 @@ export function Brand() {
 
   return (
     <Link aria-label={text('Subnota 홈', 'Subnota home')} className="brand" href="/">
-      <SubnotaMark size={26} />
+      <SubnotaGlassMark size={26} />
       <span>Subnota</span>
     </Link>
   );

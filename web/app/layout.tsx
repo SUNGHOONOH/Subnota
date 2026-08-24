@@ -16,10 +16,10 @@ export const metadata: Metadata = {
     // Safari is more reliable with a raster fallback than with an SVG-only
     // favicon, especially for localhost and pinned/favourite pages.
     icon: [
-      { url: '/subnota-icon.png?v=2', type: 'image/png', sizes: '1024x1024' },
-      { url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' },
+      { url: '/subnota-icon.png?v=3', type: 'image/png', sizes: '1024x1024' },
+      { url: '/favicon.ico?v=3', type: 'image/x-icon' },
     ],
-    apple: [{ url: '/subnota-icon.png?v=2', type: 'image/png', sizes: '1024x1024' }],
+    apple: [{ url: '/subnota-icon.png?v=3', type: 'image/png', sizes: '1024x1024' }],
   },
   metadataBase: new URL(SITE_URL),
   openGraph: {

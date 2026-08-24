@@ -186,6 +186,11 @@ button:focus-visible {
   flex: none;
 }
 
+.brand img {
+  flex: none;
+  object-fit: contain;
+}
+
 /* 마크 옆 글자는 워드마크다. 앱의 Quick Subnota·로그인과 같은 얼굴을 쓴다. */
 .brand span {
   font-family: var(--font-wordmark);

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 112 112" width="112" height="112">
-  <g fill="#4c71b7">
-    <path d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(49.7,47) rotate(-6) scale(1.04)"/>
-    <path fill="#0b6e4f" d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(52.8,48.9) rotate(68) scale(0.97)"/>
-    <path d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(51.7,52.5) rotate(145) scale(1.06)"/>
-    <path d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(48.5,52.6) rotate(210) scale(0.98)"/>
-    <path d="M0,-4 C-10,-11 -15,-30 -11,-41 C-8,-48 8,-48 11,-41 C15,-30 10,-11 0,-4 Z" transform="translate(47.2,48.9) rotate(292) scale(1.02)"/>
-  </g>
-</svg>

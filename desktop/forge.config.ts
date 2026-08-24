@@ -174,8 +174,8 @@ const config: ForgeConfig = {
         : {},
       ['darwin'],
     ),
-    // 설치 창. 배경 이미지의 화살표가 앱 아이콘(x:180)에서 Applications
-    // 별칭(x:480)을 가리키므로 좌표를 배경과 맞춰 둔다
+    // 설치 창. 배경의 꽃잎 궤적이 앱 아이콘(x:180)과 Applications 별칭(x:480)
+    // 사이의 빈 폭에 정확히 들어가므로 좌표를 배경과 맞춰 둔다
     // (배경은 scripts/generate-brand-assets.mjs 가 굽는다).
     new MakerDMG(
       {

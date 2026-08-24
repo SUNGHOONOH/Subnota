@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { SubnotaMark } from '../subnota-ui/icons';
+import { SubnotaGlassMark } from '../subnota-ui/icons';
 import { useLanguage } from '../lib/i18n';
 
 export interface LocalizedValue {
@@ -67,7 +67,7 @@ export default function LegalDocument({
       <div className="legal-page-shell">
         <header className="legal-page-header">
           <Link className="legal-brand" href="/">
-            <SubnotaMark className="legal-brand-mark" size={28} />
+            <SubnotaGlassMark className="legal-brand-mark" size={28} />
             <span>Subnota</span>
           </Link>
           <div className="legal-page-header-actions">

@@ -110,7 +110,8 @@ and automatic browser capture are separate capabilities.
 | `src/components/WorkspaceBootSkeleton.tsx` | Boot Phase B app-shell skeleton (command bar / rail / sidebar / tab bar / body). |
 | `src/features/inbox/InboxCardSkeleton.tsx` | Inbox card placeholders, only when there are no cards at all. |
 | `src/lib/bootPhase.ts` | Boot phases and the two rules that go with them: `resolveBootMarkVariant` (assemble only on the app's first window, and only when it is not a reload) and `resolveBootCloseDelayMs` (a cold start plays the motion to the end; the spinner never holds the screen). |
-| `scripts/generate-brand-assets.mjs` | Bakes `tray.png`(+@2x), `icon.ico`, the icns master PNG and the DMG background from the logo. Uses sharp, not `qlmanage` — Quick Look fills transparency with white, which is what made the menu-bar icon a white square. |
+| `resources/Subnota.icon` | Icon Composer source for the layered Liquid Glass app icon. `scripts/generate-icon.sh` renders its macOS default appearance into the legacy `.icns` used by Electron Forge and the DMG. |
+| `scripts/generate-brand-assets.mjs` | Bakes `tray.png`(+@2x), `icon.ico`, and the DMG background from the rendered Glass PNG. Uses sharp, not `qlmanage` — Quick Look fills transparency with white, which is what made the menu-bar icon a white square. |
 
 `src/App.tsx` caps split panes at two. A pane can host multiple editor/view tabs.
 Opening a source detail appends or focuses its source tab rather than replacing

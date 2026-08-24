@@ -141,3 +141,24 @@ export function SubnotaMark({
     </svg>
   );
 }
+
+/** Icon Composer 렌더에서 앱 아이콘 바탕만 투명화한 웹 UI용 Glass mark. */
+export function SubnotaGlassMark({
+  size = 24,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className={className}
+      draggable={false}
+      height={size}
+      src="/subnota-mark-glass.png"
+      width={size}
+    />
+  );
+}

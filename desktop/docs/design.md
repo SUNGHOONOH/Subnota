@@ -69,7 +69,7 @@ dashboard and not a generic cool-gray Electron shell.
 > surfaces, icon defaults, data, badges — is neutral. See the state table below.
 >
 > Any change to the brand values is one pass over `_color-tokens.scss`,
-> `lib/colorTokens.ts`, `resources/icon.svg`,
+> `lib/colorTokens.ts`, `resources/Subnota.icon`,
 > `scripts/generate-brand-assets.mjs`, `web/app/globals.css` and
 > `web/app/subnota-ui/tokens.css` together. The last two are the landing site's
 > copy of these tokens — it renders the real app UI, so it drifts visibly.

@@ -1,0 +1,45 @@
+{
+  "fill" : {
+    "solid" : "extended-gray:1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "01-petal-top.svg",
+          "name" : "01-petal-top"
+        },
+        {
+          "image-name" : "02-petal-right.svg",
+          "name" : "02-petal-right"
+        },
+        {
+          "image-name" : "03-petal-bottom-right.svg",
+          "name" : "03-petal-bottom-right"
+        },
+        {
+          "image-name" : "04-petal-bottom-left.svg",
+          "name" : "04-petal-bottom-left"
+        },
+        {
+          "image-name" : "05-petal-left.svg",
+          "name" : "05-petal-left"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
