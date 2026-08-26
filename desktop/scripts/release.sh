@@ -33,10 +33,10 @@ release_assets() {
 fully_released() {
   local assets
   assets=$(release_assets) || return 1
-  echo "$assets" | grep -qi '\.dmg$' \
-    && echo "$assets" | grep -qi '\.zip$' \
-    && echo "$assets" | grep -qx 'RELEASES.json' \
-    && echo "$assets" | grep -qx 'SHA256SUMS.txt'
+  printf '%s\n' "$assets" | grep -i '\.dmg$' >/dev/null \
+    && printf '%s\n' "$assets" | grep -i '\.zip$' >/dev/null \
+    && printf '%s\n' "$assets" | grep -x 'RELEASES.json' >/dev/null \
+    && printf '%s\n' "$assets" | grep -x 'SHA256SUMS.txt' >/dev/null
 }
 
 echo "==> Releasing ${TAG}"

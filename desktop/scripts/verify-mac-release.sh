@@ -21,7 +21,11 @@ ATS_ARBITRARY=$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllo
 }
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-codesign --display --verbose=4 "$APP_PATH" 2>&1 | grep -q 'runtime'
+CODESIGN_DETAILS=$(codesign --display --verbose=4 "$APP_PATH" 2>&1)
+[[ "$CODESIGN_DETAILS" == *runtime* ]] || {
+  echo 'Error: hardened runtime is not enabled.' >&2
+  exit 1
+}
 xcrun stapler validate "$APP_PATH"
 spctl --assess --type execute --verbose=2 "$APP_PATH"
 
