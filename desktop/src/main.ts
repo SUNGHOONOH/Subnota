@@ -116,6 +116,10 @@ if (started) {
   app.quit();
 }
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId?.('com.squirrel.subnota.Subnota');
+}
+
 // Electron must receive the custom sessionData path before it creates the
 // default session. This also migrates existing userData contents once.
 prepareAppStorage();

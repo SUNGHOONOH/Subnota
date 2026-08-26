@@ -1,5 +1,5 @@
-import { autoUpdater } from 'electron';
-import { getMacUpdateFeedUrl } from './release-channel';
+import { app, autoUpdater } from 'electron';
+import { getMacUpdateFeedUrl, getReleaseRepository } from './release-channel';
 
 export interface AutoUpdateDownloadedInfo {
   releaseName: string;
@@ -22,17 +22,22 @@ export function configureAutoUpdater({
   onError,
   onInstallRequested,
 }: ConfigureAutoUpdaterOptions): boolean {
-  if (process.platform !== 'darwin' || !isPackaged || configured) {
+  const isMac = process.platform === 'darwin';
+  const isWindows = process.platform === 'win32';
+  if ((!isMac && !isWindows) || !isPackaged || configured) {
     return configured;
   }
 
-  const feedUrl = getMacUpdateFeedUrl();
+  const repository = getReleaseRepository();
+  const feedUrl = isMac
+    ? getMacUpdateFeedUrl()
+    : repository &&
+      `https://update.electronjs.org/${repository}/win32-${process.arch}/${app.getVersion()}`;
   if (!feedUrl) return false;
 
-  autoUpdater.setFeedURL({
-    url: feedUrl,
-    serverType: 'json',
-  });
+  autoUpdater.setFeedURL(
+    isMac ? { url: feedUrl, serverType: 'json' } : { url: feedUrl },
+  );
 
   autoUpdater.on('update-downloaded', (_event, _releaseNotes, releaseName, _releaseDate, updateUrl) => {
     notifyRenderer('auto-update-downloaded', {

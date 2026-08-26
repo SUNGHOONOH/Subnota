@@ -10,17 +10,22 @@ const version = packageJson.version;
 const tag = `v${version}`;
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
-const releaseNote = args.filter((arg) => arg !== '--dry-run').join(' ').trim();
+const releaseNoteArgs = args.filter((arg) => arg !== '--dry-run').join(' ');
+const releaseNote = (process.env.RELEASE_NOTES ?? releaseNoteArgs).trim();
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const isWindows = process.platform === 'win32';
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     cwd: root,
-    shell: process.platform === 'win32',
+    shell: false,
     stdio: 'inherit',
     ...options,
   });
+  if (result.error) {
+    console.error(`Failed to run ${command}: ${result.error.message}`);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
@@ -30,7 +35,7 @@ const capture = (command, args) => {
   const result = spawnSync(command, args, {
     cwd: root,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
+    shell: false,
   });
   return result.status === 0 ? result.stdout.trim() : '';
 };
@@ -74,7 +79,7 @@ if (process.env.SKIP_TESTS === '1') {
   run(pnpm, ['test']);
 }
 
-run('node', ['scripts/build-exe.mjs'], {
+run(process.execPath, ['scripts/build-exe.mjs'], {
   env: {
     ...process.env,
     FORCE_WINDOWS_MAKE:

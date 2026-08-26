@@ -93,6 +93,12 @@ describe('Quick Subnota — 두 저장 버튼', () => {
     expect(head).not.toContain('capturePageEnabled');
   });
 
+  it('최근 링크를 숨기는 플랫폼에서는 최근 링크 안내도 숨긴다', () => {
+    expect(composer).toContain(
+      "aria-label={showsRecentCaptures ? t('최근 링크', 'Recent links') : undefined}",
+    );
+  });
+
   it('단축키는 각 버튼의 툴팁이 알려 준다', () => {
     expect(composer).toContain('formatAcceleratorLabel(shortcuts.capturePage, platform)');
     expect(composer).toContain("t('메모 저장', 'Save memo')");

@@ -274,7 +274,10 @@ const MiniComposer = () => {
         placeholder={t('떠오른 생각을 적어보세요…', 'Write down what is on your mind…')}
         value={text}
       />
-      <section className="mini-composer__recent" aria-label={t('최근 링크', 'Recent links')}>
+      <section
+        className="mini-composer__recent"
+        aria-label={showsRecentCaptures ? t('최근 링크', 'Recent links') : undefined}
+      >
         {/* 두 저장 동작은 최근 링크 머리글과 같은 줄, 오른쪽 끝에 선다.
             머리글은 최근 링크를 내보내지 않는 플랫폼에서 빠지지만 이 줄
             자체는 남는다 — 여기 버튼이 사라지면 저장할 방법이 없어진다. */}

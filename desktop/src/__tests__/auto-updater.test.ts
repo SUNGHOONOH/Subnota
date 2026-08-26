@@ -6,8 +6,10 @@ const mockOn = vi.fn();
 const mockQuitAndInstall = vi.fn();
 const mockSetFeedURL = vi.fn();
 const mockWebContentsSend = vi.fn();
+const mockGetVersion = vi.fn(() => '1.0.0');
 
 vi.mock('electron', () => ({
+  app: { getVersion: () => mockGetVersion() },
   autoUpdater: {
     checkForUpdates: () => mockCheckForUpdates(),
     getFeedURL: () => mockGetFeedURL(),
@@ -27,6 +29,7 @@ describe('auto updater', () => {
     vi.resetModules();
     vi.clearAllMocks();
     mockGetFeedURL.mockReturnValue('');
+    mockGetVersion.mockReturnValue('1.0.0');
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     originalReleaseRepo = process.env.SUBNOTA_RELEASE_REPO;
     originalMacFeedUrl = process.env.SUBNOTA_MAC_UPDATE_FEED_URL;
@@ -72,6 +75,21 @@ describe('auto updater', () => {
       serverType: 'json',
     });
     expect(mockOn).toHaveBeenCalledWith('update-downloaded', expect.any(Function));
+  });
+
+  it('configures the public Squirrel.Windows update feed for packaged Windows builds', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const { configureAutoUpdater } = await import('../auto-updater');
+
+    const result = configureAutoUpdater({
+      isPackaged: true,
+      notifyRenderer: mockWebContentsSend,
+    });
+
+    expect(result).toBe(true);
+    expect(mockSetFeedURL).toHaveBeenCalledWith({
+      url: `https://update.electronjs.org/SUNGHOONOH/memo_plan/win32-${process.arch}/1.0.0`,
+    });
   });
 
   it('does not configure native updates when no Subnota release feed is configured', async () => {
