@@ -76,7 +76,7 @@ if (isDryRun) {
 if (process.env.SKIP_TESTS === '1') {
   console.log('Skipping tests because SKIP_TESTS=1');
 } else {
-  run(pnpm, ['test']);
+  run(pnpm, ['test'], { shell: isWindows });
 }
 
 run(process.execPath, ['scripts/build-exe.mjs'], {

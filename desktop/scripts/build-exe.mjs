@@ -59,7 +59,7 @@ rmSync(join(root, 'out'), { force: true, recursive: true });
 
 const result = spawnSync(process.execPath, command, {
   cwd: root,
-  shell: process.platform === 'win32',
+  shell: false,
   stdio: 'inherit',
 });
 
