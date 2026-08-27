@@ -6,8 +6,9 @@ import PostHogProvider from './posthog-provider';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://subnota.com';
 
+const TITLE = 'Subnota(서브노타) | 잊어도 정리되는 메모 앱';
 const DESCRIPTION =
-  'Subnota는 메모 속 날짜를 캘린더로 잇고, 지금 쓰는 문장과 관련된 과거의 문장을 작성 중에 보여줍니다. 로그인 없이 먼저 적고, 정리는 나중에 따라옵니다.';
+  '필요한 순간이 오면 과거의 기록이 먼저 찾아옵니다. 문장 단위로 이어지는 메모, 자동으로 잡히는 일정.';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -26,18 +27,18 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     locale: 'ko_KR',
     siteName: 'Subnota',
-    title: '메모가 일정이 되고, 필요한 기억이 돌아옵니다',
+    title: TITLE,
     type: 'website',
     url: '/',
   },
   title: {
-    default: 'Subnota — 메모가 일정이 되고, 필요한 기억이 돌아옵니다',
+    default: TITLE,
     template: '%s · Subnota',
   },
   twitter: {
     card: 'summary_large_image',
     description: DESCRIPTION,
-    title: '메모가 일정이 되고, 필요한 기억이 돌아옵니다',
+    title: TITLE,
   },
 };
 
@@ -46,10 +47,19 @@ export const metadata: Metadata = {
 const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
+  alternateName: '서브노타',
   applicationCategory: 'ProductivityApplication',
   description: DESCRIPTION,
   name: 'Subnota',
   operatingSystem: 'macOS, Windows',
+  url: SITE_URL,
+};
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  alternateName: '서브노타',
+  name: 'Subnota',
   url: SITE_URL,
 };
 
@@ -84,7 +94,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <script
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([websiteSchema, softwareSchema]),
+          }}
           type="application/ld+json"
         />
       </head>

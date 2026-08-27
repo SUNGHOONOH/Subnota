@@ -3,7 +3,8 @@ import LegalDocument from '../components/LegalDocument';
 import { termsTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
-  title: '서비스 이용약관 | Subnota',
+  alternates: { canonical: '/terms' },
+  title: '서비스 이용약관',
   description: 'Subnota 서비스 이용약관입니다.',
 };
 

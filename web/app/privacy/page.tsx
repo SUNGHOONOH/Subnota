@@ -3,7 +3,8 @@ import LegalDocument from '../components/LegalDocument';
 import { privacyTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
-  title: '개인정보 처리방침 | Subnota',
+  alternates: { canonical: '/privacy' },
+  title: '개인정보 처리방침',
   description: 'Subnota의 개인정보 처리방침입니다.',
 };
 

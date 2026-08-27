@@ -3,7 +3,8 @@ import LegalDocument from '../components/LegalDocument';
 import { accountDeletionTranslations } from '../lib/legal-translations';
 
 export const metadata: Metadata = {
-  title: '계정 삭제 | Subnota',
+  alternates: { canonical: '/account-deletion' },
+  title: '계정 삭제',
   description: 'Subnota 계정과 데이터 삭제 방법입니다.',
 };
 

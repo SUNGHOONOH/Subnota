@@ -18,7 +18,7 @@ import { useLanguage, useText } from '../lib/i18n';
 export const CHAPTERS = [
   {
     Icon: LinkIcon,
-    blurb: '',
+    blurb: { en: 'Surfaces past notes related to your writing', ko: '쓰는 문장과 관련된 과거 메모 추천' },
     anchor: '/#connected-memory',
     href: '/features/connected-memory',
     id: 'connected-memory',
@@ -28,7 +28,7 @@ export const CHAPTERS = [
   },
   {
     Icon: CalendarDays,
-    blurb: '',
+    blurb: { en: 'Finds dates in your notes and turns them into events', ko: '본문 속 날짜를 찾아 일정으로 등록' },
     anchor: '/#memo-to-calendar',
     href: '/features/memo-to-calendar',
     id: 'memo-to-calendar',
@@ -38,7 +38,7 @@ export const CHAPTERS = [
   },
   {
     Icon: Inbox,
-    blurb: '',
+    blurb: { en: 'Save web pages with an AI summary', ko: '웹페이지 저장과 AI 요약' },
     anchor: '/#reuse-inbox',
     href: '/features/reuse-inbox',
     id: 'reuse-inbox',
@@ -48,7 +48,7 @@ export const CHAPTERS = [
   },
   {
     Icon: Columns2,
-    blurb: '',
+    blurb: { en: 'Notes, calendar, and links in one window', ko: '메모·캘린더·링크를 한 화면에' },
     anchor: '/#productivity',
     href: '/features/productivity',
     id: 'productivity',
@@ -168,7 +168,7 @@ export function SiteHeader() {
                 </span>
                 <span>
                   <strong>{text(chapter.tab.ko, chapter.tab.en)}</strong>
-                  {chapter.blurb && <span>{chapter.blurb}</span>}
+                  <span>{text(chapter.blurb.ko, chapter.blurb.en)}</span>
                 </span>
               </Link>
             ))}
