@@ -660,6 +660,15 @@ main {
   color: var(--brand-ink);
 }
 
+.download-support {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 8px;
+  text-wrap: pretty;
+  word-break: keep-all;
+}
+
 /* ===== About / Features 도입부 ===== */
 .section-label {
   color: var(--muted);

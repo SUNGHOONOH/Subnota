@@ -155,7 +155,7 @@ export function DetailCta() {
         <span className="wordmark-text">Subnota</span>
         {text('에 맡겨 보세요.', '.')}
       </p>
-      <DownloadRow />
+      <DownloadRow supportNote />
     </section>
   );
 }

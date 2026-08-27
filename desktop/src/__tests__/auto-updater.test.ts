@@ -34,7 +34,7 @@ describe('auto updater', () => {
     originalReleaseRepo = process.env.SUBNOTA_RELEASE_REPO;
     originalMacFeedUrl = process.env.SUBNOTA_MAC_UPDATE_FEED_URL;
     originalGitHubRepository = process.env.GITHUB_REPOSITORY;
-    process.env.SUBNOTA_RELEASE_REPO = 'SUNGHOONOH/memo_plan';
+    process.env.SUBNOTA_RELEASE_REPO = 'SUNGHOONOH/subnota-test';
     delete process.env.SUBNOTA_MAC_UPDATE_FEED_URL;
     delete process.env.GITHUB_REPOSITORY;
   });
@@ -71,7 +71,7 @@ describe('auto updater', () => {
 
     expect(result).toBe(true);
     expect(mockSetFeedURL).toHaveBeenCalledWith({
-      url: 'https://github.com/SUNGHOONOH/memo_plan/releases/latest/download/RELEASES.json',
+      url: 'https://github.com/SUNGHOONOH/subnota-test/releases/latest/download/RELEASES.json',
       serverType: 'json',
     });
     expect(mockOn).toHaveBeenCalledWith('update-downloaded', expect.any(Function));
@@ -88,7 +88,7 @@ describe('auto updater', () => {
 
     expect(result).toBe(true);
     expect(mockSetFeedURL).toHaveBeenCalledWith({
-      url: `https://update.electronjs.org/SUNGHOONOH/memo_plan/win32-${process.arch}/1.0.0`,
+      url: `https://update.electronjs.org/SUNGHOONOH/subnota-test/win32-${process.arch}/1.0.0`,
     });
   });
 

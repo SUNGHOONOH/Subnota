@@ -579,7 +579,7 @@ export function SimpleEditor({
   }, [editor, onAmbientDismiss])
 
   const handleSave = useCallback(async () => {
-    // PWA 환경에서는 자동 저장이 동작하므로 수동 저장 단축키는 무시
+    // Subnota는 자동 저장하므로 수동 저장 단축키는 안내만 한다.
     console.log("Saved automatically")
   }, [])
 

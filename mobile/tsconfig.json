@@ -7,5 +7,5 @@
     "types": ["jest"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/Pods", "dist", "pwa", "supabase/functions"]
+  "exclude": ["**/node_modules", "**/Pods", "dist", "supabase/functions"]
 }

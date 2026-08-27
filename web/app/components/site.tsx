@@ -317,7 +317,13 @@ function DownloadButton({
   );
 }
 
-export function DownloadRow({ note = true }: { note?: boolean }) {
+export function DownloadRow({
+  note = true,
+  supportNote = false,
+}: {
+  note?: boolean;
+  supportNote?: boolean;
+}) {
   const text = useText();
 
   return (
@@ -334,8 +340,16 @@ export function DownloadRow({ note = true }: { note?: boolean }) {
       {note && (
         <p className="hero-note">
           {text(
-            'macOS·Windows 앱을 준비하고 있습니다. iOS 앱은 그다음입니다.',
-            'The macOS and Windows apps are in preparation. iOS comes next.',
+            'iOS 앱을 준비하고 있습니다.',
+            'The iOS app is in development.',
+          )}
+        </p>
+      )}
+      {supportNote && (
+        <p className="download-support">
+          {text(
+            '지원 환경: Apple Silicon Mac · 64비트(x64) Windows PC',
+            'Supported on Apple Silicon Macs and 64-bit (x64) Windows PCs.',
           )}
         </p>
       )}

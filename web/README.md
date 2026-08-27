@@ -1,6 +1,6 @@
-# MemoApp Landing
+# Subnota Landing
 
-Next.js landing page for MemoApp.
+Next.js landing page for Subnota.
 
 ## Local Development
 
@@ -22,9 +22,8 @@ Set the Vercel project root directory to `web`.
 Configure platform download links in Vercel:
 
 ```text
-NEXT_PUBLIC_MACOS_DOWNLOAD_URL=
-NEXT_PUBLIC_WINDOWS_DOWNLOAD_URL=
-NEXT_PUBLIC_IOS_DOWNLOAD_URL=
+NEXT_PUBLIC_DOWNLOAD_MAC_URL=
+NEXT_PUBLIC_DOWNLOAD_WIN_URL=
 ```
 
-Use the official App Store and Microsoft Store badge assets if you replace the custom buttons with store badges.
+The iOS app is not yet available, so it does not need a download URL.

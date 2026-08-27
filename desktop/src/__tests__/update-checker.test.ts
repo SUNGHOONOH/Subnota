@@ -16,7 +16,7 @@ function makeRelease(version: string, assets: Array<{ name: string; browser_down
 }
 
 const RELEASE_ASSET_BASE =
-  'https://github.com/SUNGHOONOH/memo_plan/releases/download/v1.1.0';
+  'https://github.com/SUNGHOONOH/subnota-test/releases/download/v1.1.0';
 const DMG_ASSET = {
   name: 'Subnota.dmg',
   browser_download_url: `${RELEASE_ASSET_BASE}/Subnota.dmg`,
@@ -36,7 +36,7 @@ describe('checkForUpdate — platform-aware asset selection', () => {
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     originalReleaseRepo = process.env.SUBNOTA_RELEASE_REPO;
     originalGitHubRepository = process.env.GITHUB_REPOSITORY;
-    process.env.SUBNOTA_RELEASE_REPO = 'SUNGHOONOH/memo_plan';
+    process.env.SUBNOTA_RELEASE_REPO = 'SUNGHOONOH/subnota-test';
     delete process.env.GITHUB_REPOSITORY;
   });
 
