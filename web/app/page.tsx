@@ -301,7 +301,7 @@ export default function Home() {
             <span className="wordmark-text">Subnota</span>
             {text('에 맡겨 보세요.', '.')}
           </p>
-          <DownloadRow supportNote />
+          <DownloadRow />
         </section>
       </main>
 

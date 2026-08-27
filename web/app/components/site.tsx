@@ -246,7 +246,7 @@ export function SiteHeader() {
             ))}
             <LanguageSwitch className="mobile-menu-language" />
             <div className="mobile-menu-downloads">
-              <DownloadRow note={false} />
+              <DownloadRow />
             </div>
           </div>
         </div>
@@ -284,75 +284,60 @@ const WindowsGlyph = () => (
   </svg>
 );
 
-function DownloadButton({
-  glyph,
+function DownloadOption({
+  children,
   href,
-  platform,
 }: {
-  glyph: React.ReactNode;
+  children: React.ReactNode;
   href?: string;
-  platform: string;
 }) {
-  const text = useText();
-  const copy = (
-    <>
-      {glyph}
-      <span className="download-btn-copy">
-        <span>{href ? text('다운로드', 'Download for') : text('출시 예정', 'Coming soon')}</span>
-        <strong>{platform}</strong>
-      </span>
-    </>
-  );
-
-  /* 링크가 준비되기 전에는 눌리는 것처럼 보이게 두지 않는다 — 404로 보내는
-     버튼은 없는 버튼보다 나쁘다. */
   return href ? (
-    <a className="download-btn" href={href}>
-      {copy}
+    <a className="download-menu-option" href={href}>
+      {children}
     </a>
   ) : (
-    <span aria-disabled="true" className="download-btn" role="link">
-      {copy}
+    <span aria-disabled="true" className="download-menu-option" role="link">
+      {children}
     </span>
   );
 }
 
-export function DownloadRow({
-  note = true,
-  supportNote = false,
-}: {
-  note?: boolean;
-  supportNote?: boolean;
-}) {
+export function DownloadRow() {
   const text = useText();
 
   return (
     <>
       <div className="hero-actions">
-        <DownloadButton glyph={<AppleGlyph />} href={MAC_URL} platform="macOS" />
-        <DownloadButton
-          glyph={<WindowsGlyph />}
-          href={WINDOWS_URL}
-          platform="Windows"
-        />
-        <DownloadButton glyph={<AppleGlyph />} platform="iOS App Store" />
+        <details className="download-menu">
+          <summary className="download-menu-trigger">
+            <SubnotaGlassMark size={16} />
+            <span>{text('Subnota 다운로드', 'Download Subnota')}</span>
+          </summary>
+          <div className="download-menu-options">
+            <DownloadOption href={MAC_URL}>
+              <AppleGlyph />
+              <span className="download-menu-copy">
+                <strong>macOS</strong>
+                <span>Apple Silicon</span>
+              </span>
+            </DownloadOption>
+            <DownloadOption href={WINDOWS_URL}>
+              <WindowsGlyph />
+              <span className="download-menu-copy">
+                <strong>Windows</strong>
+                <span>64-bit (x64)</span>
+              </span>
+            </DownloadOption>
+            <DownloadOption>
+              <AppleGlyph />
+              <span className="download-menu-copy">
+                <strong>iOS App Store</strong>
+                <span>{text('출시 예정', 'Coming soon')}</span>
+              </span>
+            </DownloadOption>
+          </div>
+        </details>
       </div>
-      {note && (
-        <p className="hero-note">
-          {text(
-            'iOS 앱을 준비하고 있습니다.',
-            'The iOS app is in development.',
-          )}
-        </p>
-      )}
-      {supportNote && (
-        <p className="download-support">
-          {text(
-            '지원 환경: Apple Silicon Mac · 64비트(x64) Windows PC',
-            'Supported on Apple Silicon Macs and 64-bit (x64) Windows PCs.',
-          )}
-        </p>
-      )}
     </>
   );
 }

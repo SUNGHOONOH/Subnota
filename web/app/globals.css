@@ -584,89 +584,119 @@ main {
   margin-top: 28px;
 }
 
-/* OS 스토어 배지 형태. 링크가 아직 없어도 형태는 그대로 두고 상단 라벨만
-   "출시 예정"으로 바꾼다 — 404로 보내는 버튼은 없는 버튼보다 나쁘다. */
-.download-btn {
+.download-menu {
+  position: relative;
+  width: min(200px, calc(100vw - 32px));
+}
+
+.download-menu-trigger {
   align-items: center;
   background: rgba(18, 17, 15, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   color: #ffffff;
-  display: inline-flex;
-  flex: 0 0 140px;
-  gap: 8px;
-  height: 52px;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 7px;
+  height: 44px;
   justify-content: center;
-  min-width: 140px;
-  padding: 9px 12px;
+  list-style: none;
+  padding: 0 14px;
   transition: background-color 200ms ease, border-color 200ms ease,
     transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
+  width: 100%;
 }
 
-.download-btn:not([aria-disabled='true']):hover {
+.download-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.download-menu-trigger::after {
+  border-bottom: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  content: '';
+  height: 7px;
+  margin-left: auto;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 180ms ease;
+  width: 7px;
+}
+
+.download-menu[open] .download-menu-trigger {
   background: rgba(18, 17, 15, 0.98);
   border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
 }
 
-.download-btn:not([aria-disabled='true']):active {
+.download-menu[open] .download-menu-trigger::after {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.download-menu-trigger:active {
   transform: scale(var(--press-scale));
 }
 
-.download-btn[aria-disabled='true'] {
+.download-menu-options {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 16px 32px rgba(39, 52, 73, 0.16);
+  display: grid;
+  gap: 2px;
+  left: 50%;
+  min-width: 220px;
+  padding: 6px;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  z-index: 20;
+}
+
+.download-menu-option {
+  align-items: center;
+  border-radius: 11px;
+  color: var(--ink);
+  display: flex;
+  gap: 11px;
+  min-height: 50px;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.download-menu-option:not([aria-disabled='true']):hover {
+  background: #f4f6fa;
+}
+
+.download-menu-option[aria-disabled='true'] {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
-.download-btn svg {
+.download-menu-option svg {
   flex: none;
-  opacity: 0.9;
+  height: 18px;
+  width: 18px;
 }
 
-.download-btn-copy {
+.download-menu-copy {
   align-items: flex-start;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
-.download-btn-copy span {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.4px;
-  opacity: 0.55;
-  text-transform: uppercase;
-}
-
-.download-btn-copy strong {
+.download-menu-copy strong {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.1px;
 }
 
-/* 히어로 안내문은 그라디언트의 옅은 아래쪽 띠에 앉는다. 흰 글자로 두면
-   배경과 같이 밝아져 읽히지 않으므로 진한 잉크 블루로 뒤집는다. */
-.hero-note {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 16px;
-  text-wrap: pretty;
-  word-break: keep-all;
-}
-
-.hero .hero-note {
-  color: var(--brand-ink);
-}
-
-.download-support {
+.download-menu-copy > span {
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.5;
-  margin-top: 8px;
-  text-wrap: pretty;
-  word-break: keep-all;
+  margin-top: 2px;
 }
 
 /* ===== About / Features 도입부 ===== */
@@ -1331,16 +1361,12 @@ main {
   }
 
   .mobile-menu-downloads .hero-actions {
-    flex-wrap: nowrap;
-    gap: 6px;
     margin-top: 0;
     width: 100%;
   }
 
-  .mobile-menu-downloads .download-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    width: auto;
+  .mobile-menu-downloads .download-menu {
+    width: min(200px, 100%);
   }
 
   .hero-actions {
@@ -1349,27 +1375,6 @@ main {
     width: 100%;
   }
 
-  .download-btn {
-    flex: 0 0 106px;
-    gap: 2px;
-    min-width: 0;
-    padding-inline: 3px;
-    width: 106px;
-  }
-
-  .download-btn svg {
-    height: 16px;
-    width: 16px;
-  }
-
-  .download-btn-copy strong {
-    font-size: 12px;
-    letter-spacing: -0.4px;
-  }
-
-  .download-btn-copy span {
-    font-size: 8px;
-  }
 }
 
 @media (max-width: 360px) {
@@ -1381,27 +1386,6 @@ main {
     font-size: 14px;
   }
 
-  .download-btn {
-    flex: 1 1 0;
-    flex-direction: column;
-    gap: 1px;
-    height: 64px;
-    width: auto;
-    padding: 6px 4px;
-  }
-
-  .download-btn-copy {
-    align-items: center;
-  }
-
-  .download-btn-copy span {
-    font-size: 8px;
-  }
-
-  .download-btn svg {
-    height: 16px;
-    width: 16px;
-  }
 }
 
 /* ===== 상세 페이지 기능 카드 =====

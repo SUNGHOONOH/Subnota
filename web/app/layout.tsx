@@ -13,13 +13,13 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
   description: DESCRIPTION,
   icons: {
-    // Safari is more reliable with a raster fallback than with an SVG-only
-    // favicon, especially for localhost and pinned/favourite pages.
+    // Safari and Chrome both use this transparent raster mark in browser tabs.
     icon: [
-      { url: '/subnota-icon.png?v=3', type: 'image/png', sizes: '1024x1024' },
-      { url: '/favicon.ico?v=3', type: 'image/x-icon' },
+      { url: '/subnota-mark-glass.png?v=1', type: 'image/png', sizes: '1024x1024' },
     ],
-    apple: [{ url: '/subnota-icon.png?v=3', type: 'image/png', sizes: '1024x1024' }],
+    apple: [
+      { url: '/subnota-mark-glass.png?v=1', type: 'image/png', sizes: '1024x1024' },
+    ],
   },
   metadataBase: new URL(SITE_URL),
   openGraph: {
