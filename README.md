@@ -1,38 +1,58 @@
-# Subnota
+<p align="center">
+  <img src="web/public/subnota-mark-glass.png" width="72" alt="Subnota logo" />
+</p>
 
-Subnota is a premium, local-first memo workspace designed with a warm editorial aesthetic. It helps you capture thoughts quickly, organize them in a dynamic network, and connect them with your calendar schedule seamlessly.
+<h1 align="center">Subnota</h1>
 
-## Key Features
+<p align="center">
+  A local-first note app that reconnects past thoughts, finds schedules in your writing, and keeps saved links useful.
+</p>
 
-* **Local-First SQLite Engine**: The desktop applications use a dedicated background worker running Node's native `DatabaseSync` (SQLite) with WAL journaling enabled. Your data is yours, preserved offline instantly without waiting for network roundtrips.
-* **Warm Editorial Design**: Inspired by premium digital publications. Designed around a warm canvas background, sleek typography, micro-animations, and harmonized coral accents.
-* **Bidirectional Memo Network**: Automatically links and indexes notes using Kiwi Korean sentence chunking and Hugging Face embeddings, allowing you to traverse connected thoughts in an interactive graph.
-* **Integrated Calendar Blocks**: A unified calendar workspace that supports tracking schedule completion. Completed events procedurally feed a gamified tree growth event ledger, planting matured trees into a user's virtual forest.
-* **Unified Mini Subnota Composer**: A lightweight, floating capture panel with global shortcut support for rapidly writing quick thoughts and caching web links into your inbox.
+<p align="center">
+  <a href="https://subnota.com">Website</a> ·
+  <a href="https://subnota.com/#download">Download</a> ·
+  <a href="https://github.com/SUNGHOONOH/Subnota/releases">Releases</a>
+</p>
 
-## Project Structure & Platform Layout
+## Overview
 
-Subnota is structured as a monorepo containing the following components:
+Subnota is a local-first workspace for notes, schedules, and saved links.
 
-* **iOS Client (`mobile/`)**: A React Native app utilizing MMKV and a Tiptap WebView editor bridge. Renders three bottom navigation tabs: `노트` (Memos), `캘린더` (Calendar), and `수집함` (Inbox).
-* **Desktop Client (`desktop/`)**: A unified macOS/Windows Electron + React 19 + native Tiptap workspace. Platform-specific behavior is kept behind explicit policy branches while the shared UI, SQLite storage, backup/restore, directory selection, and pixel-tree gamification use one codebase.
-* **Enrichment Backend (`backend/`)**: A FastAPI Python service handling Kiwipiepy sentence tokenization, vector search (`pgvector`), automated schedule candidate extraction, and YouTube webpage clipping.
-* **Supabase database (`supabase/`)**: Coordinates optional user authentication, remote row-level security (RLS) data synchronization, and migration patches.
-* **Marketing Landing Page (`web/`)**: A premium Next.js landing page highlighting core features, interactive visual previews, and desktop mockups.
+It surfaces related passages while you write, detects dates in your notes, and
+lets you collect useful pages without breaking your workflow. Notes are stored
+locally first and can optionally sync across devices after signing in.
 
-## Developer Documentation
+The desktop app is available for macOS Apple Silicon and Windows x64.
+The iOS app is in development.
 
-Detailed setup instructions, dependency installations, testing scripts, and environment configurations are separated by component:
+## Highlights
 
-* 📱 **Mobile App Setup**: [mobile/README.md](mobile/README.md)
-* 🖥️ **macOS/Windows Desktop Setup**: [desktop/README.md](desktop/README.md)
-* ⚙️ **FastAPI Backend Setup**: [backend/README.md](backend/README.md)
-* 🗄️ **Supabase Migrations**: [supabase/README.md](supabase/README.md)
+- **Connected memory** — Surfaces relevant passages from past notes using an on-device embedding index.
+- **Memo to calendar** — Finds dates in your writing and turns them into calendar events.
+- **Collect and reuse** — Saves web pages, creates summaries, and connects sources with your notes.
+- **Local-first** — Stores notes, schedules, links, and vectors locally in SQLite.
+- **Focused workspace** — Combines tabs, split panes, previews, global search, and Quick Subnota.
 
----
+## Repository structure
 
-## Design System & Guideline Reference
+| Path | Purpose | Main technologies |
+| --- | --- | --- |
+| [`desktop/`](desktop/) | macOS and Windows desktop app | Electron, React, Tiptap, SQLite |
+| [`mobile/`](mobile/) | iOS app in development | React Native, MMKV, Tiptap |
+| [`web/`](web/) | Product website | Next.js, React |
+| [`backend/`](backend/) | Search, summaries, schedules, and topic enrichment | FastAPI, Kiwi, Hugging Face |
+| [`supabase/`](supabase/) | Authentication, sync schema, RLS, and vector data | PostgreSQL, pgvector |
 
-All desktop layout assets, components, SCSS styling tokens, and color palettes follow the specifications outlined in:
-* [macOS/Windows Design System Docs](desktop/docs/design.md)
-* [macOS/Windows Source Codemap](desktop/docs/CODEMAP.md)
+## Development
+
+Setup and verification instructions are maintained per application:
+
+- [Desktop development](desktop/README.md)
+- [Mobile development](mobile/README.md)
+- [Web development](web/README.md)
+- [Backend development](backend/README.md)
+- [Database migrations](supabase/README.md)
+
+For desktop architecture and interface rules, see
+[CODEMAP](desktop/docs/CODEMAP.md) and the
+[design system](desktop/docs/design.md).
