@@ -57,6 +57,14 @@ export const signInWithPassword = async (email: string, password: string) => {
   return data.session;
 };
 
+// With Supabase email-enumeration protection on, signing up with an email that
+// already has an account returns no error and no session — byte for byte the
+// shape of a brand-new signup waiting for its emailed code. The only signal is
+// an obfuscated user carrying zero identities. Without this check the app sends
+// the user to an OTP screen for a code that is never sent.
+const isExistingUserSignUp = (user: { identities?: unknown[] } | null) =>
+  Array.isArray(user?.identities) && user.identities.length === 0;
+
 export const signUpWithPassword = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -67,7 +75,10 @@ export const signUpWithPassword = async (email: string, password: string) => {
     throw error;
   }
 
-  return data.session;
+  return {
+    alreadyRegistered: isExistingUserSignUp(data.user),
+    session: data.session,
+  };
 };
 
 export const resendSignupOtp = async (email: string) => {
@@ -113,11 +124,8 @@ export const createProviderAuthUrl = async (provider: 'google' | 'kakao') => {
     throw error;
   }
 
-  if (!data.url) {
-    throw new Error('OAuth 로그인 URL을 만들지 못했습니다.');
-  }
-
-  return data.url;
+  // The caller localizes the missing-URL case; services carry no UI language.
+  return data.url ?? null;
 };
 
 export const exchangeOAuthCode = async (code: string) => {

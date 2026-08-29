@@ -199,13 +199,30 @@ const AuthScreen = ({
     setNotice(null);
 
     try {
-      const session = isSignUp
-        ? await signUpWithPassword(trimmedEmail, password)
-        : await signInWithPassword(trimmedEmail, password);
+      if (isSignUp) {
+        const { alreadyRegistered, session } = await signUpWithPassword(
+          trimmedEmail,
+          password,
+        );
+        if (alreadyRegistered) {
+          // Drop back to sign-in with the email kept: whichever way they first
+          // signed up (password or Google), the next step is on this screen.
+          setSignUp(false);
+          setPasswordConfirmation('');
+          setError(
+            t(
+              '이미 가입된 이메일입니다. 비밀번호로 로그인하거나, Google로 가입하셨다면 위의 Google 로그인을 사용해 주세요.',
+              'That email already has an account. Sign in with your password, or use Continue with Google if that is how you signed up.',
+            ),
+          );
+        } else if (!session) {
+          setView('signupOtp');
+        }
+        return;
+      }
 
-      if (!session && isSignUp) {
-        setView('signupOtp');
-      } else if (!session) {
+      const session = await signInWithPassword(trimmedEmail, password);
+      if (!session) {
         setError(t('메일 인증이 완료되지 않았습니다. 메일함(스팸함 포함)을 확인해 주세요.', 'Please confirm your email, including your spam folder.'));
       }
     } catch (caught) {
@@ -227,6 +244,9 @@ const AuthScreen = ({
 
     try {
       const authUrl = await createProviderAuthUrl(provider);
+      if (!authUrl) {
+        throw new Error(t('소셜 로그인 주소를 만들지 못했습니다.', 'Could not build the social sign-in URL.'));
+      }
       const code = await window.electronAPI?.startOAuth?.(authUrl);
       if (!code) {
         throw new Error(t('소셜 로그인이 취소되었습니다.', 'Social sign-in was cancelled.'));

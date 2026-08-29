@@ -1,7 +1,7 @@
 {
   "name": "subnota-desktop",
   "productName": "Subnota",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Subnota desktop app for macOS and Windows",
   "main": ".vite/build/main.js",
   "private": true,
