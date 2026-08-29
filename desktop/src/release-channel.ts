@@ -66,7 +66,7 @@ export function normalizeReleaseAssetUrl(
       url.hostname !== 'github.com' ||
       url.username ||
       url.password ||
-      !url.pathname.startsWith(expectedPrefix)
+      !url.pathname.toLowerCase().startsWith(expectedPrefix.toLowerCase())
     ) {
       return null;
     }

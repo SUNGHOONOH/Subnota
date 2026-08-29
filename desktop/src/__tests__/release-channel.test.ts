@@ -50,6 +50,14 @@ describe('release channel policy', () => {
     );
     expect(
       normalizeReleaseAssetUrl(
+        'https://github.com/SUNGHOONOH/Subnota/releases/download/v1.2.0/Subnota.dmg',
+        'SUNGHOONOH/subnota',
+      ),
+    ).toBe(
+      'https://github.com/SUNGHOONOH/Subnota/releases/download/v1.2.0/Subnota.dmg',
+    );
+    expect(
+      normalizeReleaseAssetUrl(
         'https://github.com/attacker/subnota/releases/download/v1.2.0/Subnota.dmg',
         'SUNGHOONOH/subnota',
       ),
