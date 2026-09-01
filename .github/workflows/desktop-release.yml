@@ -106,5 +106,8 @@ jobs:
       - name: Build and publish Windows installer
         env:
           GH_TOKEN: ${{ github.token }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_MEMO_BACKEND_URL: ${{ vars.VITE_MEMO_BACKEND_URL }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
         run: pnpm run release:windows

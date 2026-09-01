@@ -128,4 +128,17 @@ describe('로그인 화면 구성', () => {
       /\.auth-character-panel\s*\{[\s\S]*?\n\s{4}height:\s*600px/,
     );
   });
+
+  it('Windows의 작은 작업 영역에서는 폼을 자르지 않고 스크롤한다', () => {
+    expect(styles).toMatch(
+      /html\[data-desktop-platform='windows'\] \.desktop-auth-container\.two-col\s*\{[\s\S]*?overflow-y:\s*auto/,
+    );
+    expect(styles).toMatch(
+      /html\[data-desktop-platform='windows'\] \.desktop-auth-card\s*\{[\s\S]*?padding:\s*24px 28px/,
+    );
+  });
+
+  it('설정되지 않은 Apple 로그인은 사용자에게 노출하지 않는다', () => {
+    expect(screen).not.toContain("startOAuth('apple')");
+  });
 });

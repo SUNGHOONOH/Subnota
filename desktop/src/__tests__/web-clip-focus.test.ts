@@ -59,7 +59,8 @@ describe('웹 클리핑은 사용자의 작업 흐름을 건드리지 않는다'
 
   it('숨긴 창으로도 만들 수 있어야 한다', () => {
     expect(main).toContain('const createWindow = ({ show = true }');
-    expect(main).toContain('    show,\n');
+    expect(main).toContain('show: isWindows ? false : show');
+    expect(main).toContain('if (show) mainWindow.show();');
   });
 });
 

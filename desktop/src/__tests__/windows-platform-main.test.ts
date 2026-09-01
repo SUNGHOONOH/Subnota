@@ -7,8 +7,12 @@ const constructorOptions: Array<Record<string, unknown>> = [];
 const mockBuildFromTemplate = vi.fn((template: unknown) => ({ template }));
 const mockRegister = vi.fn(() => true);
 const mockSend = vi.fn();
+const mockSetContentSize = vi.fn();
 const mockSetContextMenu = vi.fn();
 const mockSetMaximumSize = vi.fn();
+const mockSetMinimumSize = vi.fn();
+const mockSetPosition = vi.fn();
+const mockShow = vi.fn();
 
 vi.mock('../platform/policy', () => ({
   COLD_START_ARG: '--subnota-cold-start',
@@ -57,10 +61,13 @@ vi.mock('electron', () => ({
     on() { return undefined; }
     restore() { return undefined; }
     setBounds() { return undefined; }
+    setContentSize(...args: unknown[]) { return mockSetContentSize(...args); }
     setMaximumSize(...args: unknown[]) { return mockSetMaximumSize(...args); }
-    setMinimumSize() { return undefined; }
-    show() { return undefined; }
-    getBounds() { return { height: 820, width: 860, x: 0, y: 0 }; }
+    setMinimumSize(...args: unknown[]) { return mockSetMinimumSize(...args); }
+    setPosition(...args: unknown[]) { return mockSetPosition(...args); }
+    show() { return mockShow(); }
+    getBounds() { return { height: 859, width: 876, x: 0, y: 0 }; }
+    getContentBounds() { return { height: 820, width: 860, x: 8, y: 31 }; }
     static fromWebContents() { return new this({}); }
     static getAllWindows() { return []; }
   },
@@ -139,6 +146,12 @@ describe('Windows desktop policy wiring', () => {
     expect(mockSetContextMenu).toHaveBeenCalled();
     expect(mockRegister).toHaveBeenCalledTimes(1);
     expect(constructorOptions[0]).not.toHaveProperty('titleBarStyle');
+    expect(constructorOptions[0]).toHaveProperty('autoHideMenuBar', true);
+    expect(constructorOptions[0]).toHaveProperty('useContentSize', true);
+    expect(constructorOptions[0]).toHaveProperty('show', false);
+    expect(mockSetContentSize).toHaveBeenCalledWith(860, 820);
+    expect(mockSetPosition).toHaveBeenCalledWith(282, 21);
+    expect(mockShow).toHaveBeenCalled();
   });
 
   it('does not route unreleased web clipper deep links into the inbox', () => {
@@ -160,7 +173,7 @@ describe('Windows desktop policy wiring', () => {
     expect(setAuthWindowMode).toBeTypeOf('function');
 
     setAuthWindowMode({ sender: {} }, true);
-    expect(mockSetMaximumSize).toHaveBeenLastCalledWith(1000, 720);
+    expect(mockSetMaximumSize).toHaveBeenLastCalledWith(960, 680);
 
     setAuthWindowMode({ sender: {} }, false);
     expect(mockSetMaximumSize).toHaveBeenLastCalledWith(

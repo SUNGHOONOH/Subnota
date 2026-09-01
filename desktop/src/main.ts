@@ -41,7 +41,12 @@ import {
   normalizeShortcutSettings,
 } from './lib/shortcutSettings';
 import {
+  AUTH_PREFERRED_SIZE,
   MAIN_MIN_SIZE,
+  WINDOWS_AUTH_PREFERRED_SIZE,
+  createMainWindowMinimumSize,
+  createPreferredAuthWindowBounds,
+  createPreferredMainContentBounds,
   createPreferredMainWindowBounds,
 } from './lib/windowBounds';
 import { COLD_START_ARG, DESKTOP_PLATFORM_FEATURES } from './platform/policy';
@@ -169,7 +174,6 @@ ipcMain.handle('active-workspace-owner:get', event => {
   return activeWorkspaceOwner;
 });
 
-const AUTH_WINDOW_SIZE = { height: 720, width: 1000 };
 // Electron's macOS bridge only applies a maximum when it receives a positive
 // value. Use the same practical "unbounded" value Electron uses internally
 // instead of 0, which can leave NSWindow's previous auth-size maximum behind.
@@ -484,13 +488,33 @@ const saveDesktopPreferences = (preferences: DesktopPreferences) => {
   );
 };
 
+const getLoginItemOptions = () =>
+  process.platform === 'win32' && app.isPackaged
+    ? {
+        path: path.resolve(
+          path.dirname(process.execPath),
+          '..',
+          path.basename(process.execPath),
+        ),
+      }
+    : {};
+
+const setLaunchAtLogin = (openAtLogin: boolean) => {
+  app.setLoginItemSettings?.({
+    ...getLoginItemOptions(),
+    openAtLogin,
+  });
+};
+
 ipcMain.handle('desktop-preferences:get', event => {
   assertTrustedIpcSender(event);
   const stored = readDesktopPreferences();
   return {
     closeBehavior: currentCloseBehavior,
     launchAtLogin:
-      app.getLoginItemSettings?.().openAtLogin || stored.launchAtLogin,
+      typeof app.getLoginItemSettings === 'function'
+        ? app.getLoginItemSettings(getLoginItemOptions()).openAtLogin
+        : stored.launchAtLogin,
   };
 });
 
@@ -503,7 +527,7 @@ ipcMain.handle(
       launchAtLogin: preferences.launchAtLogin === true,
     };
     currentCloseBehavior = normalized.closeBehavior;
-    app.setLoginItemSettings?.({ openAtLogin: normalized.launchAtLogin });
+    setLaunchAtLogin(normalized.launchAtLogin);
     saveDesktopPreferences(normalized);
     return normalized;
   },
@@ -594,6 +618,16 @@ app.on('web-contents-created', (_event, contents) => {
 
 const getPrimaryWorkArea = () => {
   const display = screen.getPrimaryDisplay();
+  return display.workArea ?? {
+    height: display.workAreaSize.height,
+    width: display.workAreaSize.width,
+    x: 0,
+    y: 0,
+  };
+};
+
+const getWorkAreaForBounds = (bounds: Electron.Rectangle) => {
+  const display = screen.getDisplayMatching?.(bounds) ?? screen.getPrimaryDisplay();
   return display.workArea ?? {
     height: display.workAreaSize.height,
     width: display.workAreaSize.width,
@@ -782,27 +816,29 @@ ipcMain.handle('set-auth-window-mode', (event, isAuthMode: boolean) => {
     }
 
     const bounds = window.getBounds();
-    const nextX = Math.round(
-      bounds.x + (bounds.width - AUTH_WINDOW_SIZE.width) / 2,
-    );
-    const nextY = Math.round(
-      bounds.y + (bounds.height - AUTH_WINDOW_SIZE.height) / 2,
+    const authBounds = createPreferredAuthWindowBounds(
+      getWorkAreaForBounds(bounds),
+      DESKTOP_PLATFORM_FEATURES.platform === 'windows'
+        ? WINDOWS_AUTH_PREFERRED_SIZE
+        : AUTH_PREFERRED_SIZE,
     );
 
-    window.setMinimumSize(AUTH_WINDOW_SIZE.width, AUTH_WINDOW_SIZE.height);
-    window.setMaximumSize(AUTH_WINDOW_SIZE.width, AUTH_WINDOW_SIZE.height);
-    window.setBounds({
-      height: AUTH_WINDOW_SIZE.height,
-      width: AUTH_WINDOW_SIZE.width,
-      x: nextX,
-      y: nextY,
-    }, true);
+    window.setMinimumSize(authBounds.width, authBounds.height);
+    window.setMaximumSize(authBounds.width, authBounds.height);
+    window.setBounds(authBounds, true);
     return true;
   }
 
   window.setMaximumSize(UNBOUNDED_WINDOW_SIZE, UNBOUNDED_WINDOW_SIZE);
-  window.setMinimumSize(MAIN_MIN_SIZE.width, MAIN_MIN_SIZE.height);
   const previousBounds = authWindowBounds.get(window.id);
+  const minimumWorkArea = getWorkAreaForBounds(
+    previousBounds ?? window.getBounds(),
+  );
+  const minimumSize =
+    DESKTOP_PLATFORM_FEATURES.platform === 'windows'
+      ? createMainWindowMinimumSize(minimumWorkArea)
+      : MAIN_MIN_SIZE;
+  window.setMinimumSize(minimumSize.width, minimumSize.height);
   if (previousBounds) {
     window.setBounds(previousBounds, true);
     authWindowBounds.delete(window.id);
@@ -966,22 +1002,27 @@ let hasCreatedMainWindow = false;
 // `show: false`는 백그라운드 저장(웹 클리핑)에서만 쓴다. 렌더러는 살려야
 // 하지만 사용자는 브라우저에 머물러 있어야 하는 경우다.
 const createWindow = ({ show = true }: { show?: boolean } = {}) => {
-  const bounds = createPreferredMainWindowBounds(getPrimaryWorkArea());
+  const workArea = getPrimaryWorkArea();
+  const isWindows = DESKTOP_PLATFORM_FEATURES.platform === 'windows';
+  const bounds = isWindows
+    ? createPreferredMainContentBounds(workArea, { height: 0, width: 0 })
+    : createPreferredMainWindowBounds(workArea);
   const isColdStart = !hasCreatedMainWindow;
   hasCreatedMainWindow = true;
 
   const mainWindow = new BrowserWindow({
     ...bounds,
-    minHeight: MAIN_MIN_SIZE.height,
-    minWidth: MAIN_MIN_SIZE.width,
-    show,
+    minHeight: isWindows ? 1 : MAIN_MIN_SIZE.height,
+    minWidth: isWindows ? 1 : MAIN_MIN_SIZE.width,
+    show: isWindows ? false : show,
     title: 'Subnota',
+    ...(isWindows ? { useContentSize: true } : {}),
     ...(DESKTOP_PLATFORM_FEATURES.platform === 'macos'
       ? {
           titleBarStyle: 'hiddenInset' as const,
           trafficLightPosition: { x: 16, y: 16 },
         }
-      : {}),
+      : { autoHideMenuBar: true }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -994,6 +1035,20 @@ const createWindow = ({ show = true }: { show?: boolean } = {}) => {
       ...(isColdStart ? { additionalArguments: [COLD_START_ARG] } : {}),
     },
   });
+
+  if (isWindows) {
+    const outerBounds = mainWindow.getBounds();
+    const contentBounds = mainWindow.getContentBounds();
+    const fittedBounds = createPreferredMainContentBounds(workArea, {
+      height: outerBounds.height - contentBounds.height,
+      width: outerBounds.width - contentBounds.width,
+    });
+    mainWindow.setContentSize(fittedBounds.width, fittedBounds.height);
+    mainWindow.setPosition(fittedBounds.x, fittedBounds.y);
+    const minimumSize = createMainWindowMinimumSize(workArea);
+    mainWindow.setMinimumSize(minimumSize.width, minimumSize.height);
+    if (show) mainWindow.show();
+  }
 
   attachCloseHandler(mainWindow, {
     shouldHideOnClose: () =>
@@ -1541,7 +1596,13 @@ app.on('ready', () => {
   currentUiLanguage = systemLocale.toLowerCase().startsWith('ko') ? 'ko' : 'en';
   const desktopPreferences = readDesktopPreferences();
   currentCloseBehavior = desktopPreferences.closeBehavior;
-  app.setLoginItemSettings?.({ openAtLogin: desktopPreferences.launchAtLogin });
+  // The OS login-item state is authoritative. Reapplying the last stored value
+  // here would silently undo a change made in Windows Startup Apps or macOS
+  // Login Items. The stored value remains only as a fallback for environments
+  // without the Electron API.
+  if (typeof app.getLoginItemSettings !== 'function') {
+    setLaunchAtLogin(desktopPreferences.launchAtLogin);
+  }
   registerRendererProtocol();
   session.defaultSession.setCodeCachePath?.(
     path.join(getRuntimeDirectory(), 'Code Cache'),

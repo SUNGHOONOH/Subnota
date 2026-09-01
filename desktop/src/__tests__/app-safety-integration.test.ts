@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const appSource = readFileSync(resolve(__dirname, '..', 'App.tsx'), 'utf8');
+const mainSource = readFileSync(resolve(__dirname, '..', 'main.ts'), 'utf8');
 const miniSource = readFileSync(
   resolve(__dirname, '..', 'features/mini/MiniComposer.tsx'),
   'utf8',
@@ -66,6 +67,31 @@ describe('App safety integrations', () => {
     );
     expect(pendingSync).toContain('recordActivityCompletion(currentSession, completion)');
     expect(pendingSync).toContain('recordDailyCompletion(currentSession, completion)');
+    expect(pendingSync).toContain(
+      'Pending memo sync failed; keeping it for retry.',
+    );
+    expect(pendingSync).toContain(
+      'Pending calendar sync failed; keeping it for retry.',
+    );
+  });
+
+  it('uses the OS login-item state instead of restoring a stale app preference', () => {
+    const preferences = mainSource.slice(
+      mainSource.indexOf('const readDesktopPreferences'),
+      mainSource.indexOf("ipcMain.handle('clipboard:write-text'"),
+    );
+    const startup = mainSource.slice(
+      mainSource.indexOf("app.on('ready'"),
+      mainSource.indexOf("app.on('window-all-closed'"),
+    );
+
+    expect(preferences).toContain(
+      "typeof app.getLoginItemSettings === 'function'",
+    );
+    expect(preferences).not.toContain('.openAtLogin ||');
+    expect(startup).toContain(
+      "if (typeof app.getLoginItemSettings !== 'function')",
+    );
   });
 
   it('closes a dedicated workspace gate only across an account owner change', () => {

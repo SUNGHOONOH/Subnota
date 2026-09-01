@@ -9876,6 +9876,58 @@ html.dark .selection-bubble-toolbar {
   text-decoration: underline;
 }
 
+/* Windows는 native title bar와 DPI 배율만큼 실제 콘텐츠 높이가 더 작다.
+   로그인 화면의 구조는 유지하되 밀도를 한 단계 낮추고, 작은 작업 영역에서는
+   폼 자체가 잘리는 대신 화면이 스크롤되게 한다. */
+html[data-desktop-platform='windows'] .desktop-auth-container.two-col {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 16px 32px;
+}
+
+html[data-desktop-platform='windows'] .desktop-auth-columns {
+  align-items: stretch;
+  min-height: 100%;
+  width: 100%;
+}
+
+html[data-desktop-platform='windows'] .desktop-auth-panel {
+  max-width: 400px;
+}
+
+html[data-desktop-platform='windows'] .desktop-auth-card {
+  gap: 14px;
+  min-height: 100%;
+  padding: 24px 28px;
+}
+
+html[data-desktop-platform='windows'] .desktop-auth-brand {
+  margin-bottom: 10px;
+}
+
+html[data-desktop-platform='windows'] .desktop-auth-header h2 {
+  font-size: 24px;
+}
+
+html[data-desktop-platform='windows'] .oauth-buttons-wrapper {
+  gap: 8px;
+}
+
+html[data-desktop-platform='windows'] .oauth-custom-btn {
+  height: 40px;
+}
+
+html[data-desktop-platform='windows'] .auth-minimal-form > * + * {
+  margin-top: 10px;
+}
+
+@media (min-width: 820px) {
+  html[data-desktop-platform='windows'] .auth-character-panel {
+    flex-basis: 480px;
+    min-height: 0;
+  }
+}
+
 // 나브레일 배지 — 캘린더 안에 새 월간 기록이 있음을 알린다.
 .nav-item.has-badge {
   position: relative;

@@ -409,6 +409,8 @@ const App = () => {
   const [appSettings, setAppSettings] = useState(loadAppSettings);
   const t = (korean: string, english: string) =>
     localize(appSettings.uiLanguage, korean, english);
+  const isWindowsDistribution =
+    window.electronAPI?.getPlatformFeatures?.().platform === 'windows';
   const [restoredWorkspace] = useState(() =>
     loadAppSettings().restoreWorkspace
       ? loadWorkspaceSession(getLocalWorkspaceOwner())
@@ -1184,10 +1186,15 @@ const App = () => {
       if (started) return;
       setUpdateState({
         message:
-          t(
-            '이 설치본에서는 자동 업데이트를 시작할 수 없습니다. 최신 DMG를 다시 설치해주세요.',
-            'Automatic updates are unavailable in this installation. Please install the latest DMG.',
-          ),
+          isWindowsDistribution
+            ? t(
+                '이 설치본에서는 자동 업데이트를 시작할 수 없습니다. 최신 Windows 설치 파일을 다시 설치해주세요.',
+                'Automatic updates are unavailable in this installation. Please install the latest Windows installer.',
+              )
+            : t(
+                '이 설치본에서는 자동 업데이트를 시작할 수 없습니다. 최신 DMG를 다시 설치해주세요.',
+                'Automatic updates are unavailable in this installation. Please install the latest DMG.',
+              ),
         status: 'error',
         update,
       });
@@ -1202,7 +1209,7 @@ const App = () => {
         update,
       });
     }
-  }, [updateState]);
+  }, [isWindowsDistribution, updateState]);
 
   useEffect(
     () => () => {
@@ -1833,39 +1840,45 @@ const App = () => {
       }
 
       for (const memo of await loadLocalMemos(ownerId)) {
-        if (memo.local_sync_status === 'pending_delete') {
-          await cancelMemoCloudSync(memo.id);
-          await archiveMemo(currentSession, memo.id);
-          await markLocalMemoDeleted(memo.id, 'synced', ownerId);
-          continue;
-        }
+        try {
+          if (memo.local_sync_status === 'pending_delete') {
+            await cancelMemoCloudSync(memo.id);
+            await archiveMemo(currentSession, memo.id);
+            await markLocalMemoDeleted(memo.id, 'synced', ownerId);
+            continue;
+          }
 
-        // A scheduled debounce sync means this memo is being edited right now and
-        // our DB snapshot may already be stale. Pushing it would cancel the fresher
-        // pending sync and write the stale server echo back over the local row
-        // (typed text silently reverts on restart). Let the debounce push instead.
-        if (
-          shouldDeferMemoSync(
-            memo.id,
-            pendingMemoIdsForOwner(
-              pendingLocalMemoWriteOwnersRef.current,
-              ownerId,
-            ),
-            memoSyncTimersRef.current,
-          )
-        ) {
-          continue;
-        }
+          // A scheduled debounce sync means this memo is being edited right now and
+          // our DB snapshot may already be stale. Pushing it would cancel the fresher
+          // pending sync and write the stale server echo back over the local row
+          // (typed text silently reverts on restart). Let the debounce push instead.
+          if (
+            shouldDeferMemoSync(
+              memo.id,
+              pendingMemoIdsForOwner(
+                pendingLocalMemoWriteOwnersRef.current,
+                ownerId,
+              ),
+              memoSyncTimersRef.current,
+            )
+          ) {
+            continue;
+          }
 
-        if (memo.local_sync_status && memo.local_sync_status !== 'synced') {
-          await syncMemoToCloudNow(currentSession, {
-            baseHash: memo.synced_content_hash ?? null,
-            category: getMemoCategory(memo.category),
-            content: memo.content,
-            contentUpdatedAt: memo.content_updated_at ?? memo.updated_at,
-            createdAt: memo.created_at,
-            id: memo.id,
-          });
+          if (memo.local_sync_status && memo.local_sync_status !== 'synced') {
+            await syncMemoToCloudNow(currentSession, {
+              baseHash: memo.synced_content_hash ?? null,
+              category: getMemoCategory(memo.category),
+              content: memo.content,
+              contentUpdatedAt: memo.content_updated_at ?? memo.updated_at,
+              createdAt: memo.created_at,
+              id: memo.id,
+            });
+          }
+        } catch (error) {
+          // One unreachable row must not starve calendar, inbox, or the remote
+          // refresh. Its pending/failed local record remains retryable.
+          console.warn('Pending memo sync failed; keeping it for retry.', error);
         }
       }
 
@@ -1912,7 +1925,14 @@ const App = () => {
                 await upsertLocalCalendarBlock(savedBlock, 'synced', ownerId);
               }
             },
-          ),
+          ).catch((error) => {
+            // Keep this row pending while allowing unrelated records and the
+            // rest of the workspace to finish syncing.
+            console.warn(
+              'Pending calendar sync failed; keeping it for retry.',
+              error,
+            );
+          }),
         ),
       );
 
