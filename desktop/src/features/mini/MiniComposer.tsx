@@ -110,6 +110,10 @@ const MiniComposer = () => {
   const platformFeatures = window.electronAPI?.getPlatformFeatures?.();
   const platform = platformFeatures?.platform ?? 'macos';
   const capturePageEnabled = platformFeatures?.captureShortcut !== false;
+  // 자동 조회가 되는 곳에서만 "현재" 페이지라고 말한다. Windows에서 그렇게
+  // 부르면 앱이 보고 있는 페이지를 안다는 거짓 약속이 된다.
+  const capturesCurrentPage =
+    platformFeatures?.nativeCurrentPageCapture !== false;
   const showsRecentCaptures =
     platformFeatures?.recentCapturesInTray !== false;
   const [text, setText] = useState(loadMiniDraft);
@@ -120,7 +124,12 @@ const MiniComposer = () => {
   // 캡처 창 안에서 전역 단축키를 재녹화하려면 등록을 잠시 내렸다 올려야 해서,
   // 그 왕복이 창의 절반과 버그 하나를 잡아먹고 있었다.
   const [shortcuts, setShortcuts] = useState(loadShortcutSettings);
+  // null이면 링크 모드가 아니다. 빈 문자열은 "칸은 떠 있고 아직 안 넣음".
+  // 클립보드로 미리 채우지 않는다 — 몇 시간 전에 복사한 것이 들어와 있으면
+  // 사용자가 확인을 멈추고 엉뚱한 링크를 저장하게 된다.
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -142,6 +151,15 @@ const MiniComposer = () => {
           setRecentInboxItems(items.slice(0, 2));
         })
       : undefined;
+    const removeModeListener = window.electronAPI?.onMiniMode?.(({ mode, status: modeStatus }) => {
+      setLinkUrl(mode === 'link' ? '' : null);
+      if (modeStatus) {
+        setStatus(language === 'en' ? englishMiniStatus(modeStatus) : modeStatus);
+      }
+      if (mode === 'link') {
+        requestAnimationFrame(() => linkInputRef.current?.focus());
+      }
+    });
     const removeStatusListener = window.electronAPI?.onMiniStatus?.((message) => {
       setStatus(language === 'en' ? englishMiniStatus(message) : message);
     });
@@ -151,6 +169,7 @@ const MiniComposer = () => {
       });
 
     return () => {
+      removeModeListener?.();
       removePrefillListener?.();
       removeRecentInboxListener?.();
       removeStatusListener?.();
@@ -167,6 +186,15 @@ const MiniComposer = () => {
   };
 
   const close = () => window.electronAPI?.closeMini?.();
+
+  // 링크 저장은 메인 창의 수집함 경로를 그대로 탄다. Mini는 넘기기만 한다.
+  const saveLink = () => {
+    const url = (linkUrl ?? '').trim();
+    if (!url) return;
+    window.electronAPI?.saveMiniLink?.(url);
+    setLinkUrl(null);
+    close();
+  };
 
   const save = async () => {
     // 저장 중 재진입은 같은 초안을 두 번 쓰게 만든다. 나머지 흐름은 그대로.
@@ -269,6 +297,46 @@ const MiniComposer = () => {
           </Tooltip>
         </div>
       </header>
+      {linkUrl !== null && (
+        <div className="mini-composer__link">
+          <input
+            ref={linkInputRef}
+            aria-label={t('저장할 링크', 'Link to save')}
+            className="mini-composer__link-input"
+            onChange={(event) => setLinkUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveLink();
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setLinkUrl(null);
+              }
+            }}
+            placeholder={t('링크 붙여넣기', 'Paste a link')}
+            type="url"
+            value={linkUrl}
+          />
+          <div className="mini-composer__link-actions">
+            <button
+              className="mini-composer__secondary"
+              onClick={() => setLinkUrl(null)}
+              type="button"
+            >
+              {t('취소', 'Cancel')}
+            </button>
+            <button
+              className="mini-composer__save"
+              disabled={linkUrl.trim().length === 0}
+              onClick={saveLink}
+              type="button"
+            >
+              {t('저장', 'Save')}
+            </button>
+          </div>
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         aria-label={t('빠른 메모 입력', 'Quick memo input')}
@@ -292,7 +360,7 @@ const MiniComposer = () => {
           <div className="mini-composer__actions">
             {capturePageEnabled && (
               <Tooltip
-                label={`${t('현재 페이지 저장', 'Save current page')} · ${formatAcceleratorLabel(shortcuts.capturePage, platform)}`}
+                label={`${capturesCurrentPage ? t('현재 페이지 저장', 'Save current page') : t('페이지 저장', 'Save a page')} · ${formatAcceleratorLabel(shortcuts.capturePage, platform)}`}
                 openDelay={400}
                 position="bottom"
               >
@@ -301,7 +369,9 @@ const MiniComposer = () => {
                   onClick={() => window.electronAPI?.captureCurrentPage?.()}
                   type="button"
                 >
-                  {t('현재 페이지 저장', 'Save current page')}
+                  {capturesCurrentPage
+                    ? t('현재 페이지 저장', 'Save current page')
+                    : t('페이지 저장', 'Save a page')}
                 </button>
               </Tooltip>
             )}

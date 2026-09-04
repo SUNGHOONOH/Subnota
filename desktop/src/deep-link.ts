@@ -11,6 +11,7 @@ import { normalizeWebUrl } from './lib/url-policy';
 export type SubnotaDeepLink =
   | { kind: 'auth'; code: string | null; error: string | null }
   | { kind: 'memo'; text: string }
+  | { kind: 'link' }
   | { kind: 'capture'; url: string; title: string };
 
 export const parseSubnotaUrl = (raw: string): SubnotaDeepLink | null => {
@@ -40,6 +41,12 @@ export const parseSubnotaUrl = (raw: string): SubnotaDeepLink | null => {
 
   if (action === 'memo') {
     return { kind: 'memo', text: url.searchParams.get('text') ?? '' };
+  }
+
+  // Windows 점프 리스트(작업 표시줄 우클릭)가 쓰는 동사. 붙여넣을 링크가 아직
+  // 없으니 파라미터도 없다 — Quick을 링크 입력 상태로 열기만 한다.
+  if (action === 'link') {
+    return { kind: 'link' };
   }
 
   if (action === 'capture') {

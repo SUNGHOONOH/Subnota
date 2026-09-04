@@ -106,9 +106,15 @@ describe('Quick Subnota — 두 저장 버튼', () => {
   });
 
   // 플랫폼 정책: Windows는 활성 브라우저 캡처를 아직 내보내지 않는다.
-  it('캡처를 내보내지 않는 플랫폼에서는 버튼도 없다', () => {
+  // 버튼은 양쪽 플랫폼에 있다. 자동 조회가 되는 곳에서만 "현재" 페이지라고
+  // 부른다 — Windows에서 그렇게 부르면 앱이 보고 있는 페이지를 안다는
+  // 거짓 약속이 된다.
+  it('자동 조회가 되는 플랫폼에서만 "현재" 페이지라고 말한다', () => {
     expect(composer).toContain('{capturePageEnabled && (');
-    expect(main).toContain('if (!DESKTOP_PLATFORM_FEATURES.captureShortcut) return;');
+    expect(composer).toContain(
+      "platformFeatures?.nativeCurrentPageCapture !== false",
+    );
+    expect(composer).toContain("t('페이지 저장', 'Save a page')");
   });
 
   it('저장 중 버튼이 눌린 것처럼 보이지 않는다', () => {
@@ -142,10 +148,20 @@ describe('Quick Subnota — 캡처 버튼의 최전면 앱 문제', () => {
   // 전역 단축키 경로는 브라우저가 최전면일 때 눌리므로 실시간 조회가 맞다.
   it('대비책은 버튼 경로에서만 쓴다', () => {
     expect(miniMain).toContain('config.allowRememberedApp && lastBrowserBundleId');
-    expect(main).toContain(
-      'void captureCurrentBrowserPage({ allowRememberedApp: true });',
+    expect(main).toContain('requestPageCapture({ allowRememberedApp: true });');
+    expect(main).toContain('onCapture: () => requestPageCapture(),');
+  });
+
+  // 자동 조회가 없는 플랫폼은 링크를 붙여넣을 칸으로 간다. 분기는 이 함수
+  // 안에만 있어야 한다 — 진입점마다 흩어지면 하나씩 어긋난다.
+  it('자동 조회가 없으면 링크 입력란으로 보낸다', () => {
+    const router = main.slice(
+      main.indexOf('const requestPageCapture'),
+      main.indexOf('const capturePageLabel'),
     );
-    expect(main).toContain('onCapture: () => void captureCurrentBrowserPage(),');
+
+    expect(router).toContain('!DESKTOP_PLATFORM_FEATURES.nativeCurrentPageCapture');
+    expect(router).toContain('showMiniForLink()');
   });
 
   it('버튼 IPC는 Mini 창에서 온 것만 받는다', () => {

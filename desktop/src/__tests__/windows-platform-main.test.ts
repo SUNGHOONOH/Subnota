@@ -30,6 +30,8 @@ vi.mock('../platform/policy', () => ({
   },
 }));
 
+const mockSetJumpList = vi.hoisted(() => vi.fn());
+
 vi.mock('electron', () => ({
   app: {
     getAppPath: () => '/app',
@@ -37,6 +39,7 @@ vi.mock('electron', () => ({
     quit: vi.fn(),
     requestSingleInstanceLock: vi.fn(() => true),
     setAsDefaultProtocolClient: vi.fn(),
+    setJumpList: mockSetJumpList,
     setLoginItemSettings: vi.fn(),
     on: (event: string, cb: (...args: unknown[]) => void) => {
       appHandlers[event] = cb;
@@ -137,12 +140,21 @@ beforeAll(async () => {
 });
 
 describe('Windows desktop policy wiring', () => {
-  it('keeps Quick Subnota in the notification area without capture UI', () => {
+  it('keeps Quick Subnota in the notification area with a paste-based capture', () => {
     const templates = JSON.stringify(mockBuildFromTemplate.mock.calls);
 
     expect(/새 Quick Subnota|New Quick Subnota/.test(templates)).toBe(true);
-    expect(templates).not.toContain('현재 페이지 저장');
-    expect(templates).not.toContain('최근 링크');
+    // Windows도 캡처 항목과 최근 링크를 갖는다. 다만 자동 조회가 없으므로
+    // "현재" 페이지라고 부르지 않는다.
+    expect(templates).toContain('Save a page');
+    expect(templates).not.toContain('Save current page');
+    expect(templates).toContain('Recent links');
+    // Windows 11은 새 트레이 아이콘을 오버플로에 숨긴다. 작업 표시줄
+    // 점프 리스트는 항상 보이므로 같은 항목을 여기에도 건다.
+    const jumpList = JSON.stringify(mockSetJumpList.mock.calls);
+    expect(jumpList).toContain('subnota://memo');
+    expect(jumpList).toContain('subnota://link');
+    expect(jumpList).toContain('Save a page');
     expect(mockSetContextMenu).toHaveBeenCalled();
     expect(mockRegister).toHaveBeenCalledTimes(1);
     expect(constructorOptions[0]).not.toHaveProperty('titleBarStyle');

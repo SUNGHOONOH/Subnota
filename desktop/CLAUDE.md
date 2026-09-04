@@ -41,16 +41,38 @@ else is shared and must look and behave the same.
 | Quick Subnota quick memo | Yes | Yes |
 | System surface | Menu bar | Notification-area tray |
 | Quick Subnota global shortcut | Yes | Yes |
-| Current browser page capture | AppleScript | Not released |
-| Capture global shortcut | Yes | Hidden/not registered |
-| Recent captures in tray/Mini | Yes | Hidden |
-| `subnota://capture` routing | Yes | Ignored |
+| Current browser page capture | AppleScript | Paste a link in Quick Subnota |
+| Capture global shortcut | Yes | Yes |
+| Recent captures in tray/Mini | Yes | Yes |
+| `subnota://capture` routing | Yes | Yes |
+| Taskbar jump list | — | Quick memo + Save a page |
 | Browser-extension clipper | Not released | Later release |
 | Installer | DMG + ZIP update feed | Squirrel Setup EXE |
 
 Windows policy does not disable the main Inbox. A user must still be able to
-paste a URL manually, save it locally, sync it, read it, and open it. Only the
-automatic active-browser capture surface is deferred.
+paste a URL manually, save it locally, sync it, read it, and open it.
+
+**Only the automatic frontmost-browser lookup is macOS-only.** A sandboxed or
+Windows process cannot read the active browser's URL: `NSWorkspace` returns no
+running applications under the App Sandbox, and on Windows the UI Automation
+route puts Chromium into accessibility mode (slowing the user's browser) while
+matching address-bar elements by localized name. So the capture entry point is
+shared and only the *source* of the URL branches, inside
+`requestPageCapture()` in `src/main.ts`:
+
+- `nativeCurrentPageCapture` (macOS) — AppleScript reads the frontmost browser
+  and saves immediately; the result is confirmed by a toast.
+- Otherwise — Quick Subnota opens with a link field. It is deliberately **not**
+  pre-filled from the clipboard: a URL copied hours ago looks right often
+  enough that users stop reading the field, and then save the wrong link.
+
+The button is called "현재 페이지 저장" only where the lookup exists. Elsewhere
+it is "페이지 저장" — naming the app's actual knowledge, not a promise.
+
+Windows 11 hides new notification-area icons behind the `⌃` overflow, so the
+tray cannot be the only entry point. The global shortcut is primary, the
+taskbar jump list is the always-visible fallback, and a one-time modal explains
+both the first time a window closes to the tray (`showTrayHintOnce`).
 
 ## Commands
 

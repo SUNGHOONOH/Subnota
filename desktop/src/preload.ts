@@ -42,6 +42,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('active-workspace-owner:set', ownerId),
   setUiLanguage: (language: 'en' | 'ko'): Promise<void> =>
     ipcRenderer.invoke('app:set-ui-language', language),
+  // Mini를 무엇을 하려고 열었는가. 'link'면 링크 입력란에 포커스를 둔다.
+  onMiniMode: (
+    callback: (payload: { mode: 'link' | 'memo'; status: string }) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: { mode: 'link' | 'memo'; status: string },
+    ) => callback(payload);
+    ipcRenderer.on('mini-mode', listener);
+    return () => ipcRenderer.removeListener('mini-mode', listener);
+  },
   onMiniPrefill: (callback: (text: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
     ipcRenderer.on('mini-prefill', listener);
@@ -124,8 +135,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   captureCurrentPage: () => {
     ipcRenderer.send('mini-capture-page');
   },
+  saveMiniLink: (url: string) => {
+    ipcRenderer.send('mini-save-link', url);
+  },
   showMainWindow: () => {
     ipcRenderer.send('open-main-window');
+  },
+  hideMainWindow: () => {
+    ipcRenderer.send('hide-main-window');
+  },
+  // Windows에서 창을 닫아 트레이로 내려가는 첫 순간에 한 번 온다.
+  onShowTrayHint: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('show-tray-hint', listener);
+    return () => ipcRenderer.removeListener('show-tray-hint', listener);
   },
   showClipNotification: async (
     kind: ClipNotificationKind,

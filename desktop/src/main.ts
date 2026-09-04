@@ -28,6 +28,7 @@ import {
   isMiniSubnotaWebContents,
   registerGlobalShortcuts,
   setupMiniSubnota,
+  showMiniForLink,
   showMiniForMemo,
   toggleMiniWindow,
   unregisterGlobalShortcuts,
@@ -183,6 +184,8 @@ const DESKTOP_PREFERENCES_FILE = 'desktop-preferences.json';
 type DesktopPreferences = {
   closeBehavior: 'quit' | 'tray';
   launchAtLogin: boolean;
+  // Windows에서 트레이 안내를 이미 봤는가. 한 번만 띄운다.
+  trayHintSeen: boolean;
 };
 let currentCloseBehavior: DesktopPreferences['closeBehavior'] = 'tray';
 let appIsQuitting = false;
@@ -473,9 +476,10 @@ const readDesktopPreferences = (): DesktopPreferences => {
     return {
       closeBehavior: value.closeBehavior === 'quit' ? 'quit' : 'tray',
       launchAtLogin: value.launchAtLogin === true,
+      trayHintSeen: value.trayHintSeen === true,
     };
   } catch {
-    return { closeBehavior: 'tray', launchAtLogin: false };
+    return { closeBehavior: 'tray', launchAtLogin: false, trayHintSeen: false };
   }
 };
 
@@ -525,6 +529,8 @@ ipcMain.handle(
     const normalized: DesktopPreferences = {
       closeBehavior: preferences.closeBehavior === 'quit' ? 'quit' : 'tray',
       launchAtLogin: preferences.launchAtLogin === true,
+      // 설정 화면은 이 값을 다루지 않는다. 기존 값을 지우지 않도록 넘겨받는다.
+      trayHintSeen: readDesktopPreferences().trayHintSeen,
     };
     currentCloseBehavior = normalized.closeBehavior;
     setLaunchAtLogin(normalized.launchAtLogin);
@@ -856,12 +862,20 @@ ipcMain.on('mini-saved', event => {
   broadcastToMainWindows('memos-updated');
 });
 
-// Mini의 "현재 페이지 저장" 버튼. 전역 단축키와 같은 동작이지만 Mini가 최전면일
-// 수 있어, 직전에 기억해 둔 브라우저를 대비책으로 쓰도록 허용한다.
+// Mini의 캡처 버튼. 전역 단축키와 같은 동작이지만 Mini가 최전면일 수 있어,
+// 직전에 기억해 둔 브라우저를 대비책으로 쓰도록 허용한다.
 ipcMain.on('mini-capture-page', event => {
   if (!isTrustedMiniIpcSender(event)) return;
-  if (!DESKTOP_PLATFORM_FEATURES.captureShortcut) return;
-  void captureCurrentBrowserPage({ allowRememberedApp: true });
+  requestPageCapture({ allowRememberedApp: true });
+});
+
+// Mini의 링크 입력란. Mini는 백엔드에 접근하지 않으므로, 웹 클리퍼 딥링크와
+// 똑같은 경로로 메인 창에 넘겨 저장·요약·토스트를 그대로 태운다.
+ipcMain.on('mini-save-link', (event, url: unknown) => {
+  if (!isTrustedMiniIpcSender(event)) return;
+  const normalized = normalizeWebUrl(typeof url === 'string' ? url : null);
+  if (!normalized) return;
+  deliverToMainWindow('inbox-capture', { title: '', url: normalized });
 });
 
 ipcMain.on('open-main-window', event => {
@@ -884,8 +898,30 @@ ipcMain.on('record-inbox-save', (event, item: unknown) => {
   recordInboxSave(item);
 });
 
+/**
+ * 캡처 단축키·Mini 버튼·트레이·앱 메뉴가 모두 여기로 온다.
+ *
+ * macOS는 최전면 브라우저를 조회해 바로 저장한다. Windows는 조회할 방법이
+ * 없으므로(policy.ts 주석 참고) 링크를 붙여넣을 칸을 띄운다. 사용자가 보는
+ * 진입점은 하나고, 분기는 이 함수 안에만 있다.
+ */
+const requestPageCapture = (config: { allowRememberedApp?: boolean } = {}) => {
+  if (!DESKTOP_PLATFORM_FEATURES.nativeCurrentPageCapture) {
+    showMiniForLink();
+    return;
+  }
+  void captureCurrentBrowserPage(config);
+};
+
+// 자동 조회가 되는 곳에서만 "현재" 페이지라고 말한다. Windows에서 그렇게
+// 부르면 앱이 보고 있는 페이지를 안다는 거짓 약속이 된다.
+const capturePageLabel = () =>
+  DESKTOP_PLATFORM_FEATURES.nativeCurrentPageCapture
+    ? mainT('현재 페이지 저장', 'Save current page')
+    : mainT('페이지 저장', 'Save a page');
+
 const shortcutHandlers: { onCapture: () => void; onToggleMemo: () => void } = {
-  onCapture: () => void captureCurrentBrowserPage(),
+  onCapture: () => requestPageCapture(),
   onToggleMemo: () => toggleMiniWindow(),
 };
 
@@ -1051,6 +1087,7 @@ const createWindow = ({ show = true }: { show?: boolean } = {}) => {
   }
 
   attachCloseHandler(mainWindow, {
+    interceptHide: () => showTrayHintOnce(mainWindow),
     shouldHideOnClose: () =>
       !appIsQuitting && currentCloseBehavior === 'tray',
   });
@@ -1192,6 +1229,8 @@ const handleDeepLink = (raw: string) => {
   }
   if (link.kind === 'memo') {
     showMiniForMemo(link.text);
+  } else if (link.kind === 'link') {
+    showMiniForLink();
   } else if (DESKTOP_PLATFORM_FEATURES.webClipperDeepLinks) {
     // 웹 클리퍼 딥링크. 브라우저에서 온 저장 요청이라 창을 앞으로 내지 않는다.
     deliverToMainWindow('inbox-capture', { title: link.title, url: link.url });
@@ -1217,10 +1256,8 @@ const installApplicationMenu = () => {
                 ? [
                     {
                       accelerator: shortcutSettings.capturePage,
-                      click: (): void => {
-                        void captureCurrentBrowserPage();
-                      },
-                      label: mainT('현재 페이지 저장', 'Save current page'),
+                      click: (): void => requestPageCapture(),
+                      label: capturePageLabel(),
                     },
                   ]
                 : []),
@@ -1447,29 +1484,6 @@ const buildTrayMenu = () => {
     return;
   }
 
-  if (!DESKTOP_PLATFORM_FEATURES.recentCapturesInTray) {
-    trayMenu = Menu.buildFromTemplate([
-      {
-        accelerator: shortcutSettings.toggleMini,
-        click: () => showMiniForMemo(),
-        label: mainT('새 Quick Subnota', 'New Quick Subnota'),
-      },
-      {
-        click: () => {
-          const mainWindow = getMainWindow() ?? createWindow();
-          mainWindow.show();
-          mainWindow.focus();
-        },
-        label: mainT('Subnota 열기', 'Open Subnota'),
-      },
-      { accelerator: 'CommandOrControl+,', click: openSettingsWindow, label: mainT('설정', 'Settings') },
-      { type: 'separator' },
-      { role: 'quit' },
-    ]);
-    tray.setContextMenu(trayMenu);
-    return;
-  }
-
   const recentEntries = recentInboxItems.length
     ? recentInboxItems.map((item) => ({
         click: () => {
@@ -1501,8 +1515,8 @@ const buildTrayMenu = () => {
       { accelerator: shortcutSettings.toggleMini, click: () => showMiniForMemo(), label: mainT('빠른 메모 작성', 'New quick memo') },
       {
         accelerator: shortcutSettings.capturePage,
-        click: () => void captureCurrentBrowserPage(),
-        label: mainT('현재 페이지 저장', 'Save current page'),
+        click: () => requestPageCapture(),
+        label: capturePageLabel(),
       },
       { type: 'separator' },
       { enabled: false, label: mainT('최근 링크', 'Recent links') },
@@ -1519,11 +1533,17 @@ const buildTrayMenu = () => {
       { accelerator: 'CommandOrControl+,', click: openSettingsWindow, label: mainT('설정', 'Settings') },
       { role: 'quit' },
     ]);
-  // NOTE: do NOT call tray.setContextMenu here. On macOS, attaching a context
-  // menu makes a LEFT-click (and one-finger tap) open the menu instead of
-  // firing the 'click' handler — which made a plain tap pop the menu (with
-  // "설정"). We only show the menu on right-click via popUpContextMenu, so
-  // left-click stays as "toggle Quick Subnota".
+  // NOTE: do NOT call tray.setContextMenu on macOS. Attaching a context menu
+  // makes a LEFT-click (and one-finger tap) open the menu instead of firing the
+  // 'click' handler — which made a plain tap pop the menu (with "설정"). We only
+  // show the menu on right-click via popUpContextMenu, so left-click stays as
+  // "toggle Quick Subnota".
+  //
+  // Windows는 반대다. 컨텍스트 메뉴를 붙여야 우클릭에서 메뉴가 나오고,
+  // 좌클릭은 'click' 핸들러가 그대로 받는다.
+  if (DESKTOP_PLATFORM_FEATURES.platform !== 'macos') {
+    tray.setContextMenu(trayMenu);
+  }
 };
 
 const recordInboxSave = (value: unknown) => {
@@ -1545,6 +1565,66 @@ const recordInboxSave = (value: unknown) => {
   buildTrayMenu();
   updateMiniRecentInbox(recentInboxItems);
   updateMiniStatus(getInboxSaveStatusMessage(item));
+};
+
+/**
+ * Windows 작업 표시줄 점프 리스트(아이콘 우클릭).
+ *
+ * Windows 11은 새 트레이 아이콘을 `⌃` 오버플로 안에 숨긴다. 사용자가 직접
+ * 꺼내 고정하기 전까지는 트레이가 진입점 노릇을 못 한다. 작업 표시줄 아이콘은
+ * 항상 보이므로, 여기 같은 항목을 걸어 두면 트레이를 못 찾아도 막히지 않는다.
+ *
+ * 항목은 실행 파일을 인자와 함께 다시 띄우고, 그 인자를 second-instance가
+ * 딥링크로 받아 처리한다.
+ */
+/**
+ * 창을 닫아 트레이로 내려가는 첫 순간에 딱 한 번 안내한다.
+ *
+ * Windows 11은 새 트레이 아이콘을 `⌃` 오버플로에 숨긴다. 그래서 창을 닫은
+ * 사용자는 앱이 사라진 것처럼 느끼고, 아이콘을 찾을 단서도 없다. 이 지점이
+ * "내 앱 어디 갔지?"가 실제로 생기는 자리라 여기서 알린다.
+ *
+ * 숨기기 **전에** 띄워야 한다. 창이 이미 숨겨졌으면 모달을 봐도 볼 수 없다.
+ * true를 돌려주면 이번 닫기는 숨기지 않고 안내만 남긴다.
+ */
+const showTrayHintOnce = (mainWindow: BrowserWindow) => {
+  if (DESKTOP_PLATFORM_FEATURES.platform !== 'windows') return false;
+  const preferences = readDesktopPreferences();
+  if (preferences.trayHintSeen) return false;
+  saveDesktopPreferences({ ...preferences, trayHintSeen: true });
+  mainWindow.webContents.send('show-tray-hint');
+  return true;
+};
+
+// 안내를 닫으면 원래 하려던 일(창 숨기기)을 마저 한다.
+ipcMain.on('hide-main-window', event => {
+  if (!isTrustedIpcSender(event)) return;
+  BrowserWindow.fromWebContents(event.sender)?.hide();
+});
+
+const installJumpList = () => {
+  if (DESKTOP_PLATFORM_FEATURES.platform !== 'windows') return;
+
+  // 기존 setLoginItemSettings와 같은 이유로 옵셔널 호출한다.
+  app.setJumpList?.([
+    {
+      items: [
+        {
+          args: 'subnota://memo',
+          program: process.execPath,
+          title: mainT('빠른 메모 작성', 'New quick memo'),
+          type: 'task',
+        },
+        {
+          args: 'subnota://link',
+          program: process.execPath,
+          title: capturePageLabel(),
+          type: 'task',
+        },
+      ],
+      type: 'tasks',
+    },
+  ]);
 };
 
 const installTrayItem = () => {
@@ -1615,6 +1695,7 @@ app.on('ready', () => {
   });
   installApplicationMenu();
   installTrayItem();
+  installJumpList();
 
   if (process.defaultApp && process.argv[1]) {
     app.setAsDefaultProtocolClient('subnota', process.execPath, [
@@ -1644,6 +1725,9 @@ app.on('ready', () => {
     },
     onCaptureError: (message) => {
       endCaptureIndicator(message);
+      // 실패했다고 Quick 창을 띄우지 않는다. 사용자는 브라우저를 보는 중이고,
+      // 아직 아무것도 복사하지 않아서 붙여넣기 칸을 띄워 봐야 할 일이 없다.
+      // 결과는 배경 전달과 메뉴바 표시로만 남긴다.
       deliverToMainWindow('inbox-capture', { error: message });
     },
     onCaptureStart: beginCaptureIndicator,

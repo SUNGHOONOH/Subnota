@@ -33,6 +33,7 @@ import AuthScreen from './features/auth/AuthScreen';
 import { decideAuthEvent } from './features/auth/authEventDecision';
 import GlobalSearchOverlay from './features/search/GlobalSearchOverlay';
 import EmbeddingModelGate from './features/search/EmbeddingModelGate';
+import TrayHintModal from './features/onboarding/TrayHintModal';
 import LocalIndexProgress, {
   isEmptyLocalIndexCompletion,
   shouldShowLocalIndexProgress,
@@ -456,6 +457,12 @@ const App = () => {
   // 재설정 단계에 바로 세운다.
   const [pendingResetEmail, setPendingResetEmail] = useState<string | null>(
     null,
+  );
+  // Windows에서 창을 닫아 트레이로 내려가는 첫 순간에 메인이 한 번 알려준다.
+  const [isTrayHintOpen, setTrayHintOpen] = useState(false);
+  useEffect(
+    () => window.electronAPI?.onShowTrayHint?.(() => setTrayHintOpen(true)),
+    [],
   );
   const [isBooting, setBooting] = useState(true);
   // 전체 화면 로딩은 "로컬 작업 공간이 붙었는가"만 기다린다. 서버 동기화는
@@ -5692,6 +5699,14 @@ const App = () => {
           progress={visibleLocalIndexProgress}
         />
       )}
+      <TrayHintModal
+        isOpen={isTrayHintOpen}
+        onClose={() => {
+          setTrayHintOpen(false);
+          // 안내 때문에 미뤄 둔 일을 마저 한다 — 사용자는 창을 닫으려던 것이다.
+          window.electronAPI?.hideMainWindow?.();
+        }}
+      />
       <EmbeddingModelGate
         isOpen={isEmbeddingGateOpen}
         onClose={() => setEmbeddingGateOpen(false)}

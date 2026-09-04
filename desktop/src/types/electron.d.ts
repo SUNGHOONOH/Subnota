@@ -36,6 +36,9 @@ interface ElectronAPI {
   setUiLanguage: (language: 'en' | 'ko') => Promise<void>;
   /** 앱을 켠 뒤 처음 만든 창인가. 창만 다시 연 경우는 false. */
   isColdStart?: boolean;
+  onMiniMode: (
+    callback: (payload: { mode: 'link' | 'memo'; status: string }) => void,
+  ) => () => void;
   onMiniPrefill: (callback: (text: string) => void) => () => void;
   onMiniRecentInbox: (
     callback: (items: Array<{ title: string; url: string; sourceLabel: string }>) => void,
@@ -48,6 +51,9 @@ interface ElectronAPI {
   closeMini: () => void;
   notifyMiniSaved: () => void;
   captureCurrentPage: () => void;
+  saveMiniLink: (url: string) => void;
+  hideMainWindow: () => void;
+  onShowTrayHint: (callback: () => void) => () => void;
   showMainWindow: () => void;
   showClipNotification: (
     kind: 'failed' | 'saved',

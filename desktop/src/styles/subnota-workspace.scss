@@ -10522,6 +10522,57 @@ html[data-desktop-platform='windows'] .auth-minimal-form > * + * {
   opacity: 0.45;
 }
 
+/* Windows 트레이 안내. 모델 관문과 같은 모달 언어를 쓴다 — 같은 자리에
+   같은 모양으로 뜨는 한 번짜리 안내라 별도 스타일을 만들 이유가 없다. */
+.tray-hint {
+  padding: 4px 2px 2px;
+}
+
+.tray-hint-title {
+  color: var(--legacy-ink);
+  font-size: 17px;
+  font-weight: var(--legacy-weight-black);
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+
+.tray-hint-body {
+  color: var(--app-color-muted-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+/* 단축키는 글자가 아니라 키캡으로 보여야 눈에 걸린다. */
+.tray-hint-key {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-border);
+  border-radius: 5px;
+  color: var(--app-color-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--legacy-weight-semibold);
+  padding: 2px 6px;
+}
+
+.tray-hint-cta {
+  background: var(--app-color-bg-paper);
+  border: 1px solid var(--app-color-action-primary-border);
+  border-radius: 10px;
+  color: var(--app-color-action-primary-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--legacy-weight-heavy);
+  height: 40px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.tray-hint-cta:hover {
+  background: var(--app-color-brand-50);
+}
+
 // 준비 완료 알림의 닫기, 실패 시 다시 시도. 둘 다 사용자가 직접 처리한다.
 .local-index-progress-action,
 .local-index-progress-close {

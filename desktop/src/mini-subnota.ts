@@ -287,7 +287,19 @@ const ensureMiniWindow = (config: MiniSubnotaOptions) => {
   return miniWindow;
 };
 
-export const showMiniForMemo = (prefill = '') => {
+export const showMiniForMemo = (prefill = '') => showMini('memo', prefill);
+
+/**
+ * 링크를 붙여넣을 칸에 포커스를 둔 채 Mini를 연다.
+ *
+ * Windows에는 최전면 브라우저를 조회할 방법이 없고, macOS도 조회가 실패할 수
+ * 있다. 그때 오류만 띄우면 막다른 길이라, 사용자가 직접 이어갈 자리를 준다.
+ * 클립보드를 미리 채우지는 않는다 — 몇 시간 전에 복사한 것이 들어와 있으면
+ * 사용자가 확인을 멈추고 엉뚱한 링크를 저장하게 된다.
+ */
+export const showMiniForLink = (status = '') => showMini('link', '', status);
+
+const showMini = (mode: 'link' | 'memo', prefill = '', status = '') => {
   if (!options) {
     return;
   }
@@ -299,6 +311,7 @@ export const showMiniForMemo = (prefill = '') => {
     if (window.isDestroyed()) {
       return;
     }
+    window.webContents.send('mini-mode', { mode, status });
     window.webContents.send('mini-prefill', prefill);
     window.webContents.send(
       'mini-recent-inbox',
