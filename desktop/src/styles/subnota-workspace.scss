@@ -2330,12 +2330,6 @@ html.dark .date-schedule-meridiem button.active {
   opacity: 0.7;
 }
 
-.network-inline-error {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
 /* 우하단 진행 토스트. 메모 목록 행과 같은 언어로 맞춘다 —
    흰 표면, 웜 헤어라인, 왼쪽 3px 코럴 바, 얕은 그림자. */
 .local-index-progress {
@@ -2443,10 +2437,6 @@ html.dark .date-schedule-meridiem button.active {
 .local-index-progress progress::-webkit-progress-value {
   background: var(--app-color-action-primary);
   transition: width var(--legacy-motion-fast);
-}
-
-.network-inline-error .form-error {
-  margin: 0;
 }
 
 .modal-backdrop {
@@ -5739,14 +5729,6 @@ html.dark .cal-schedule-drop-preview {
   height: 100%;
 }
 
-.network-immersive .network-inline-error {
-  left: 16px;
-  position: absolute;
-  right: 16px;
-  top: 64px;
-  z-index: 4;
-}
-
 .network-sentence-card {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -8946,17 +8928,6 @@ html.dark .selection-bubble-toolbar {
   transform: none;
 }
 
-.net-overlay-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  left: 16px;
-  max-width: min(320px, calc(100% - 32px));
-  position: absolute;
-  top: 16px;
-  z-index: 4;
-}
-
 .net-loading {
   inset: 0;
   margin: 0;
@@ -8965,32 +8936,12 @@ html.dark .selection-bubble-toolbar {
   display: grid;
 }
 
-.net-inline-error {
-  align-items: center;
-  background: rgba(247, 249, 255, 0.92);
-  border: 1px solid rgba(93, 120, 230, 0.24);
-  border-radius: var(--legacy-radius-card);
-  box-shadow: var(--app-shadow-floating);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 8px 10px;
-  pointer-events: auto;
-  width: fit-content;
-  max-width: 100%;
-}
-
-.net-inline-error .form-error {
-  color: #4f5fa8;
-  font-size: var(--legacy-font-size-sm);
-  font-weight: var(--legacy-weight-semibold);
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.net-inline-error .quick-date-chip {
+/* 빈 상태(.empty-state.canvas)는 그래프를 가리지 않으려고 클릭을 통과시킨다.
+   오류의 다시 시도 버튼만 되살린다. */
+.net-error-retry {
+  margin-top: 10px;
   min-height: var(--control-size-compact);
+  pointer-events: auto;
   white-space: nowrap;
 }
 

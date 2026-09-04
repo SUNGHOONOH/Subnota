@@ -409,6 +409,7 @@ const App = () => {
   const [appSettings, setAppSettings] = useState(loadAppSettings);
   const t = (korean: string, english: string) =>
     localize(appSettings.uiLanguage, korean, english);
+  const isMasDistribution = window.electronAPI?.isMasBuild === true;
   const isWindowsDistribution =
     window.electronAPI?.getPlatformFeatures?.().platform === 'windows';
   const [restoredWorkspace] = useState(() =>
@@ -1105,19 +1106,20 @@ const App = () => {
   }, []);
 
   const checkForAvailableUpdate = useCallback(async () => {
+    if (isMasDistribution) return null;
     const update = await window.electronAPI?.checkForUpdate?.();
     if (!update) return null;
 
     setUpdateState({ status: 'available', update });
     setUpdatePopoverOpen(false);
     return update;
-  }, []);
+  }, [isMasDistribution]);
 
   useEffect(() => {
-    if (appSettings.autoCheckUpdates) {
+    if (!isMasDistribution && appSettings.autoCheckUpdates) {
       void checkForAvailableUpdate().catch(() => undefined);
     }
-  }, [appSettings.autoCheckUpdates, checkForAvailableUpdate]);
+  }, [appSettings.autoCheckUpdates, checkForAvailableUpdate, isMasDistribution]);
 
   useEffect(() => {
     const unsubscribeDownloaded = window.electronAPI?.onUpdateDownloaded?.(
@@ -5732,6 +5734,12 @@ const App = () => {
         onAppSettingsChange={updateAppSettings}
         onBackup={() => window.electronAPI.backupLocalData()}
         onCheckUpdates={async () => {
+          if (isMasDistribution) {
+            return t(
+              'Mac App Store에서 업데이트를 관리합니다.',
+              'Updates are managed by the Mac App Store.',
+            );
+          }
           try {
             const update = await checkForAvailableUpdate();
             return update
@@ -5799,6 +5807,14 @@ const App = () => {
         }
         onDeleteAccount={handleDeleteAccount}
         onRestore={restoreLocalDataFromFile}
+        onRestoreFromDialog={async () => {
+          const restored = await window.electronAPI.restoreLocalDataFromDialog();
+          if (restored) {
+            const info = await window.electronAPI.getLocalStorageInfo();
+            setStorageInfo(info);
+          }
+          return restored;
+        }}
         onSaveShortcuts={applyShortcutSettings}
         onSaveAppShortcuts={applyAppShortcutSettings}
         onSignOut={() => {

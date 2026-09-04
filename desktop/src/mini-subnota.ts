@@ -11,6 +11,11 @@ import { normalizeWebUrl } from './lib/url-policy';
 
 const execFileAsync = promisify(execFile);
 
+// App Sandbox(MAS)에서는 다른 앱을 볼 수 없다. NSWorkspace의
+// runningApplications가 빈 배열을 돌려줘서 최전면 앱도, 활성화할 앱도 찾지
+// 못한다(실측: 샌드박스 밖 73개 → 안 0개). 그래서 조회를 시도조차 하지 않는다.
+const isMasBuild = process.platform === 'darwin' && process.mas === true;
+
 const MINI_WIDTH = 380;
 const MINI_HEIGHT = 320;
 const MINI_MARGIN = 16;
@@ -138,8 +143,11 @@ export const getMiniWindowType = (
  *
  * macOS에서 Mini는 NSPanel(`type: 'panel'`)이다. 앱이 백그라운드일 때는
  * 패널이 key window가 되지 못해, 창은 떴는데 타이핑은 직전 앱(에디터·터미널)에
- * 그대로 들어간다. 전역 단축키로 부르는 창이라 이 상황이 기본값이다.
- * `app.focus({ steal: true })`로 앱을 먼저 활성화해야 패널이 입력을 받는다.
+ * 그대로 들어간다. 전역 단축키로 부르는 창이라 이 상황이 기본값이라,
+ * `app.focus({ steal: true })`로 앱을 활성화해야 패널이 입력을 받는다.
+ *
+ * 순서가 중요하다: show()가 먼저다. 활성화가 앞서면 그 시점에 현재 Space에
+ * Subnota 창이 없어서 macOS가 메인 창이 있는 Space로 전환해 버린다.
  */
 const revealMiniWindow = (window: BrowserWindow) => {
   if (window.isVisible()) {
@@ -157,10 +165,13 @@ const revealMiniWindow = (window: BrowserWindow) => {
     if (window.isDestroyed()) {
       return;
     }
+    // 창을 **먼저** 띄운다. 활성화가 앞서면 그 순간 Subnota에는 현재 Space에
+    // 있는 창이 하나도 없어서, macOS가 메인 창이 있는 Space로 전환해 버린다.
+    // 위의 fullScreenAuxiliary 덕분에 show()는 지금 보고 있는 Space에 뜬다.
+    window.show();
     if (process.platform === 'darwin') {
       app.focus({ steal: true });
     }
-    window.show();
     window.focus();
   })().finally(() => {
     miniRevealPromise = null;
@@ -195,6 +206,22 @@ const buildMiniWindow = (config: MiniSubnotaOptions) => {
   // Float above normal windows and dismiss when focus is lost, mirroring the
   // legacy NSFloatingWindowLevel / hidesOnDeactivate panel behaviour.
   window.setAlwaysOnTop(true, 'floating');
+
+  // 전체 화면 앱은 자기만의 Space에 산다. 이 설정이 없으면 Quick을 부를 때
+  // macOS가 Subnota 창이 있는 Space로 **화면을 전환해** 버린다(전체 화면으로
+  // 유튜브를 보다 Quick을 누르면 데스크탑으로 튕겨 나갔다가, 닫으면 다시
+  // 전체 화면으로 돌아오는 증상). NSWindowCollectionBehavior의
+  // canJoinAllSpaces + fullScreenAuxiliary에 해당한다.
+  //
+  // skipTransformProcessType: Subnota는 Dock 아이콘과 메인 창을 가진 일반
+  // 앱이다. 전환을 허용하면 Electron이 앱의 activation policy를 잠시 바꾸면서
+  // Dock과 창을 깜빡이게 하는데, Space 전환보다 그쪽이 더 눈에 띈다.
+  if (process.platform === 'darwin') {
+    window.setVisibleOnAllWorkspaces(true, {
+      skipTransformProcessType: true,
+      visibleOnFullScreen: true,
+    });
+  }
   window.on('blur', () => {
     if (!window.isDestroyed()) {
       window.hide();
@@ -400,10 +427,24 @@ const captureMiniDismissalTarget = async (): Promise<MiniDismissalTarget> => {
     return decideMiniDismissalTarget(focusContext, appIsActive, null);
   }
 
+  // 샌드박스에서는 결과가 언제나 null이라, Mini를 열 때마다 실패가 확정된
+  // osascript를 띄우는 것이 전부다. 복귀는 app.hide()가 대신한다.
+  if (isMasBuild) {
+    return decideMiniDismissalTarget(focusContext, false, null);
+  }
+
   const bundleId = await getFrontmostApplicationBundleId();
   rememberFrontmostBrowser(bundleId);
   return decideMiniDismissalTarget(focusContext, false, bundleId);
 };
+
+// Mini 말고 화면에 남아 있는 Subnota 창이 있는가. 남의 앱 정보가 아니라 우리
+// 창 상태라 App Sandbox에서도 그대로 동작한다.
+const hasVisibleAppWindow = () =>
+  BrowserWindow.getAllWindows().some(
+    window =>
+      window !== miniWindow && !window.isDestroyed() && window.isVisible(),
+  );
 
 const restoreMiniFocus = async (target: MiniDismissalTarget) => {
   if (process.platform !== 'darwin') return;
@@ -420,7 +461,14 @@ const restoreMiniFocus = async (target: MiniDismissalTarget) => {
     // 이전 앱이 그 사이 종료됐거나 macOS가 활성화를 거절한 경우에는 Subnota를
     // 앞에 남기지 않는다. app.hide()는 모든 Subnota 창을 감추고 직전 앱으로
     // 돌아가게 하는 macOS의 안전한 폴백이다.
-    app.hide();
+    //
+    // 다만 **모든** 창을 감춘다. 이 분기는 "메인 창이 포커스가 아니었다"에서
+    // 오는 것이지 "메인 창이 없다"가 아니라서, 띄워 둔 창까지 사라진다.
+    // 보이는 창이 있으면 Mini만 닫고 창은 남긴다 — 직전 앱으로 못 돌아가는
+    // 것보다 열어 둔 창이 통째로 사라지는 쪽이 나쁘다.
+    if (!hasVisibleAppWindow()) {
+      app.hide();
+    }
   }
 };
 

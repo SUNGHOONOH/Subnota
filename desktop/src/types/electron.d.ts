@@ -1,4 +1,5 @@
 declare const __APP_VERSION__: string;
+declare const __SUBNOTA_NATIVE_PAGE_CAPTURE_ENABLED__: boolean;
 
 type LocalWriteFlushReason =
   | 'database-maintenance'
@@ -36,6 +37,7 @@ interface ElectronAPI {
   setUiLanguage: (language: 'en' | 'ko') => Promise<void>;
   /** 앱을 켠 뒤 처음 만든 창인가. 창만 다시 연 경우는 false. */
   isColdStart?: boolean;
+  isMasBuild?: boolean;
   onMiniPrefill: (callback: (text: string) => void) => () => void;
   onMiniRecentInbox: (
     callback: (items: Array<{ title: string; url: string; sourceLabel: string }>) => void,
@@ -263,6 +265,7 @@ interface ElectronAPI {
   openLocalStorage: () => Promise<void>;
   backupLocalData: () => Promise<string | null>;
   restoreLocalData: (filePath: string) => Promise<void>;
+  restoreLocalDataFromDialog: () => Promise<boolean>;
   exportJson: (name: string, value: unknown) => Promise<string | null>;
   exportMarkdown: (name: string, content: string) => Promise<string | null>;
   copyText: (text: string) => Promise<boolean>;

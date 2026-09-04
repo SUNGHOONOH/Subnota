@@ -765,16 +765,21 @@ ipcMain.handle('start-oauth', async (event, authUrl: string) => {
 
 ipcMain.handle('check-for-update', event => {
   assertTrustedIpcSender(event);
+  if (process.platform === 'darwin' && process.mas === true) return null;
   return checkForUpdate();
 });
 
 ipcMain.handle('download-update', event => {
   assertTrustedIpcSender(event);
+  if (process.platform === 'darwin' && process.mas === true) return false;
   return checkForNativeUpdate();
 });
 
 ipcMain.handle('install-update', async event => {
   assertTrustedIpcSender(event);
+  if (process.platform === 'darwin' && process.mas === true) {
+    throw new Error('Mac App Store updates are managed by the App Store.');
+  }
   if (!(await flushAllLocalWrites())) {
     releaseCancelledLocalWriteGuards();
     throw new Error('작업 내용을 저장하지 못해 업데이트를 중단했습니다.');
@@ -1499,11 +1504,17 @@ const buildTrayMenu = () => {
             ]
           : []),
       { accelerator: shortcutSettings.toggleMini, click: () => showMiniForMemo(), label: mainT('빠른 메모 작성', 'New quick memo') },
-      {
-        accelerator: shortcutSettings.capturePage,
-        click: () => void captureCurrentBrowserPage(),
-        label: mainT('현재 페이지 저장', 'Save current page'),
-      },
+      ...(DESKTOP_PLATFORM_FEATURES.nativeCurrentPageCapture
+        ? [
+            {
+              accelerator: shortcutSettings.capturePage,
+              click: (): void => {
+                void captureCurrentBrowserPage();
+              },
+              label: mainT('현재 페이지 저장', 'Save current page'),
+            },
+          ]
+        : []),
       { type: 'separator' },
       { enabled: false, label: mainT('최근 링크', 'Recent links') },
       ...recentEntries,

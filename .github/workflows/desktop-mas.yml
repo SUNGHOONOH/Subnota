@@ -1,0 +1,174 @@
+name: desktop-mas
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_app_store:
+        description: Validate and upload the PKG to App Store Connect
+        required: true
+        default: false
+        type: boolean
+      browser_capture_mode:
+        description: Keep the reviewed Apple Events exception or build the no-capture fallback
+        required: true
+        default: temporary-exception
+        type: choice
+        options:
+          - temporary-exception
+          - fallback
+      apple_events_feedback_id:
+        description: Required for upload when browser capture uses a temporary exception (FB12345678)
+        required: false
+        type: string
+      app_sandbox_usage_info_confirmed:
+        description: Confirm App Sandbox Usage Information was entered in App Store Connect
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-mas
+  cancel-in-progress: false
+
+jobs:
+  build-mas:
+    # arm64 runner keeps pnpm's optional native dependencies aligned with the
+    # first MAS target. Universal builds can be added after both slices pass.
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Select MAS browser capture policy
+        env:
+          BROWSER_CAPTURE_MODE: ${{ inputs.browser_capture_mode }}
+        run: |
+          set -euo pipefail
+          case "$BROWSER_CAPTURE_MODE" in
+            temporary-exception)
+              echo "SUBNOTA_MAS_BROWSER_CAPTURE=1" >> "$GITHUB_ENV"
+              ;;
+            fallback)
+              echo "SUBNOTA_MAS_BROWSER_CAPTURE=0" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unknown browser capture mode: $BROWSER_CAPTURE_MODE" >&2
+              exit 1
+              ;;
+          esac
+          echo "MAS_BROWSER_CAPTURE_MODE=$BROWSER_CAPTURE_MODE" >> "$GITHUB_ENV"
+
+      - name: Import MAS certificates and provisioning profile
+        env:
+          MAS_APP_CERTIFICATE_P12_BASE64: ${{ secrets.MAS_APP_CERTIFICATE_P12_BASE64 }}
+          MAS_APP_CERTIFICATE_PASSWORD: ${{ secrets.MAS_APP_CERTIFICATE_PASSWORD }}
+          MAS_INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.MAS_INSTALLER_CERTIFICATE_P12_BASE64 }}
+          MAS_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MAS_INSTALLER_CERTIFICATE_PASSWORD }}
+          MAS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAS_PROVISIONING_PROFILE_BASE64 }}
+          MAS_APP_SIGNING_IDENTITY: ${{ secrets.MAS_APP_SIGNING_IDENTITY }}
+          MAS_INSTALLER_SIGNING_IDENTITY: ${{ secrets.MAS_INSTALLER_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          for value in \
+            "$MAS_APP_CERTIFICATE_P12_BASE64" \
+            "$MAS_APP_CERTIFICATE_PASSWORD" \
+            "$MAS_INSTALLER_CERTIFICATE_P12_BASE64" \
+            "$MAS_INSTALLER_CERTIFICATE_PASSWORD" \
+            "$MAS_PROVISIONING_PROFILE_BASE64" \
+            "$MAS_APP_SIGNING_IDENTITY" \
+            "$MAS_INSTALLER_SIGNING_IDENTITY"; do
+            test -n "$value"
+          done
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/subnota-mas-build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$MAS_APP_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/mas-app.p12"
+          echo "$MAS_INSTALLER_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/mas-installer.p12"
+          security import "$RUNNER_TEMP/mas-app.p12" -P "$MAS_APP_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/mas-installer.p12" -P "$MAS_INSTALLER_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          echo "$MAS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/Subnota-MAS.provisionprofile"
+          echo "MAS_PROVISIONING_PROFILE=$RUNNER_TEMP/Subnota-MAS.provisionprofile" >> "$GITHUB_ENV"
+          echo "MAS_APP_SIGNING_IDENTITY=$MAS_APP_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "MAS_INSTALLER_SIGNING_IDENTITY=$MAS_INSTALLER_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "SUBNOTA_BUILD_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build and verify MAS PKG
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_MEMO_BACKEND_URL: ${{ vars.VITE_MEMO_BACKEND_URL }}
+          MAS_BUILD_NUMBER: ${{ github.run_number }}
+          MAS_ARCH: arm64
+        run: pnpm run release:mas
+
+      - name: Upload MAS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: subnota-mas-${{ inputs.browser_capture_mode }}-${{ github.run_number }}
+          path: |
+            desktop/out/make/*.pkg
+            desktop/out/make/MAS-SHA256SUM.txt
+            docs/mac-app-store-review.md
+          if-no-files-found: error
+
+      # App Store Connect API upload is deliberately opt-in. The first runs
+      # should be inspected as artifacts before enabling unattended submission.
+      - name: Validate and upload to App Store Connect
+        if: ${{ inputs.upload_to_app_store }}
+        working-directory: desktop
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_EVENTS_FEEDBACK_ID: ${{ inputs.apple_events_feedback_id }}
+          APP_SANDBOX_USAGE_INFO_CONFIRMED: ${{ inputs.app_sandbox_usage_info_confirmed }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_API_KEY_ID"
+          test -n "$APPLE_API_ISSUER"
+          test -n "$APPLE_API_PRIVATE_KEY"
+          if [ "$MAS_BROWSER_CAPTURE_MODE" = "temporary-exception" ]; then
+            [[ "$APPLE_EVENTS_FEEDBACK_ID" =~ ^FB[0-9]+$ ]]
+            [ "$APP_SANDBOX_USAGE_INFO_CONFIRMED" = "true" ]
+          fi
+          API_KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          API_KEY_PATH="$API_KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
+          mkdir -p "$API_KEY_DIR"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$API_KEY_PATH"
+          PKG_PATH="$(find out/make -maxdepth 3 -name '*.pkg' -type f | head -1)"
+          test -n "$PKG_PATH"
+          xcrun altool --validate-app -f "$PKG_PATH" -t macos --apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER"
+          xcrun altool --upload-app -f "$PKG_PATH" -t macos --apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER"
+          rm -f "$API_KEY_PATH"
+
+      - name: Remove temporary keychain
+        if: always()
+        working-directory: desktop
+        run: |
+          if [ -n "${SUBNOTA_BUILD_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SUBNOTA_BUILD_KEYCHAIN" || true
+          fi

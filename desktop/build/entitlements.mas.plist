@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- MAS builds use the App Sandbox. Keep this list intentionally narrow. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+
+	<!--
+		The current-page clipper sends Apple Events only to these browsers. This
+		temporary exception is deliberately scoped to known bundle identifiers.
+		The separate fallback entitlement file removes this capability entirely.
+	-->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.temporary-exception.apple-events</key>
+	<array>
+		<string>com.apple.Safari</string>
+		<string>com.google.Chrome</string>
+		<string>company.thebrowser.Browser</string>
+		<string>com.microsoft.edgemac</string>
+		<string>com.brave.Browser</string>
+	</array>
+</dict>
+</plist>

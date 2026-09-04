@@ -32,6 +32,9 @@ build/
 !desktop/build/
 desktop/build/*
 !desktop/build/entitlements.mac.plist
+!desktop/build/entitlements.mas.plist
+!desktop/build/entitlements.mas.child.plist
+!desktop/build/entitlements.mas.fallback.plist
 .idea
 .gradle
 local.properties
@@ -98,6 +101,10 @@ pwa/.vercel/
 
 # Local docs / working notes
 docs/
+!docs/
+docs/*
+!docs/checklist.md
+!docs/mac-app-store-review.md
 !desktop/docs/
 desktop/docs/*
 !desktop/docs/CODEMAP.md

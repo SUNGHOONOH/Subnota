@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 앱을 켠 뒤 처음 만든 창인가. 창만 다시 연 경우와 구분하려고 main이
   // 창 생성 시 인자로 넘겨 준다(COLD_START_ARG 주석 참고).
   isColdStart: process.argv.includes(COLD_START_ARG),
+  isMasBuild: process.platform === 'darwin' && process.mas === true,
   getPlatformFeatures: () => DESKTOP_PLATFORM_FEATURES,
   getActiveWorkspaceOwner: (): Promise<string | null> =>
     ipcRenderer.invoke('active-workspace-owner:get'),
@@ -516,6 +517,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('local-db:backup'),
   restoreLocalData: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('local-db:restore', filePath),
+  restoreLocalDataFromDialog: (): Promise<boolean> =>
+    ipcRenderer.invoke('local-db:restore-dialog'),
   exportJson: (name: string, value: unknown): Promise<string | null> =>
     ipcRenderer.invoke('local-db:export-json', name, value),
   exportMarkdown: (name: string, content: string): Promise<string | null> =>

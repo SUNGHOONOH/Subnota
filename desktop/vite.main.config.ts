@@ -1,7 +1,16 @@
 import { defineConfig } from 'vite';
 
+const nativePageCaptureEnabled =
+  process.env.SUBNOTA_MAS_BUILD !== '1' ||
+  process.env.SUBNOTA_MAS_BROWSER_CAPTURE !== '0';
+
 // https://vitejs.dev/config
 export default defineConfig({
+  define: {
+    __SUBNOTA_NATIVE_PAGE_CAPTURE_ENABLED__: JSON.stringify(
+      nativePageCaptureEnabled,
+    ),
+  },
   build: {
     rollupOptions: {
       // 번들하면 동작이 깨진다 — onnxruntime-node가 네이티브 바이너리 경로를

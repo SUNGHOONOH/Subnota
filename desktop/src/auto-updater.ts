@@ -22,6 +22,11 @@ export function configureAutoUpdater({
   onError,
   onInstallRequested,
 }: ConfigureAutoUpdaterOptions): boolean {
+  // Mac App Store apps are updated exclusively by the App Store. Electron's
+  // Squirrel feed must never be configured for a MAS build.
+  if (process.platform === 'darwin' && process.mas === true) {
+    return false;
+  }
   const isMac = process.platform === 'darwin';
   const isWindows = process.platform === 'win32';
   if ((!isMac && !isWindows) || !isPackaged || configured) {
@@ -69,6 +74,7 @@ export function configureAutoUpdater({
 }
 
 export function checkForNativeUpdate(): boolean {
+  if (process.platform === 'darwin' && process.mas === true) return false;
   if (!autoUpdater.getFeedURL()) return false;
   if (updateCheckStarted) return true;
   updateCheckStarted = true;
@@ -77,5 +83,6 @@ export function checkForNativeUpdate(): boolean {
 }
 
 export function installNativeUpdate(): void {
+  if (process.platform === 'darwin' && process.mas === true) return;
   autoUpdater.quitAndInstall();
 }

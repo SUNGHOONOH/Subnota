@@ -1120,6 +1120,36 @@ const MemoSplitWorkspace = ({
         return;
       }
 
+      // 붙을 것이 하나도 없으면 서버에 물어볼 이유가 없다. 백엔드는 콜드
+      // 스타트로 20초까지 걸릴 수 있고, 그동안 사용자는 "없음"을 기다린다.
+      const hasSearchableNeighbor =
+        inboxItems.length > 0 ||
+        memos.some(
+          (candidate) =>
+            candidate.id !== editor.memoId && candidate.content.trim().length > 0,
+        );
+      if (!hasSearchableNeighbor) {
+        upsertEditorById(
+          pane.id,
+          targetEditor,
+          {
+            networkErrorMessage: null,
+            networkIsLoading: false,
+            networkQueryChunk: {
+              end: queryText.length,
+              id: 'query-local-empty',
+              index: 0,
+              start: 0,
+              text: queryText,
+            },
+            networkResults: [],
+            view: 'network',
+          },
+          true,
+        );
+        return;
+      }
+
       await onBeforeNetworkSearch?.();
 
       const networkRequestId = `network-${Date.now()}-${Math.random()
@@ -1203,7 +1233,7 @@ const MemoSplitWorkspace = ({
         }
       }
     },
-    [memoById, onBeforeNetworkSearch, t, upsertEditorById],
+    [inboxItems, memoById, memos, onBeforeNetworkSearch, t, upsertEditorById],
   );
 
   const handleAddEditor = useCallback(
@@ -1939,24 +1969,30 @@ const MemoSplitWorkspace = ({
 
         return (
           <div className="split-network-search net-graph-view">
-            <div className="net-overlay-stack">
-              {editor.networkErrorMessage && (
-                <div className="network-inline-error net-inline-error">
-                  <p className="form-error">{editor.networkErrorMessage}</p>
-                  {isNetworkSearchRetryableMessage(
-                    editor.networkErrorMessage,
-                  ) && (
+            {/* 오류도 빈 화면과 같은 자리에 같은 모양으로 선다. 떠 있는 카드로
+                얹으면 그래프가 없는 화면에서 토스트처럼 읽혀 무엇이 잘못됐는지
+                묻히고, 빈 결과와 실패가 서로 다른 곳에 뜬다. 빈 상태에는
+                행동 버튼을 두지 않지만(EmptyState 주석) 오류는 예외다 —
+                여기서 사용자가 할 수 있는 일이 다시 시도뿐이다. */}
+            {editor.networkErrorMessage && (
+              <EmptyState
+                body={
+                  isNetworkSearchRetryableMessage(editor.networkErrorMessage) ? (
                     <button
-                      className="quick-date-chip"
+                      className="quick-date-chip net-error-retry"
                       onClick={() => void runEditorStateBSearch(pane, editor)}
                       type="button"
                     >
                       {t('다시 시도', 'Try again')}
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
+                  ) : undefined
+                }
+                className="net-empty-state"
+                size="canvas"
+                title={editor.networkErrorMessage}
+                tone="start"
+              />
+            )}
             {/* 결과 노드 수도 위치도 정해져 있지 않아 카드 스켈레톤을 쓸 수
                 없다. 대신 그래프 영역 한가운데에 중심 원 하나와 옅은 점 몇
                 개를 놓고, 문구는 1.2초가 지나야 CSS로 드러난다. 이미 그래프가

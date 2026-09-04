@@ -41,6 +41,15 @@ let databaseExclusiveOperation: DatabaseExclusiveOperation | null = null;
 let databaseMaintenanceFenceActive = false;
 let localDatabaseMaintenanceHooks: LocalDatabaseMaintenanceHooks | null = null;
 const STORAGE_CONFIG_FILE = 'local-storage.json';
+const isMasBuild = process.platform === 'darwin' && process.mas === true;
+let activeStorageBookmark: string | null = null;
+let stopAccessingStorageBookmark: (() => void) | null = null;
+
+const accessSecurityScopedBookmark = (bookmark?: string) => {
+  if (!isMasBuild || !bookmark) return null;
+  const stop = app.startAccessingSecurityScopedResource(bookmark);
+  return () => stop();
+};
 
 export const configureLocalDatabaseMaintenanceHooks = (
   hooks: LocalDatabaseMaintenanceHooks | null,
@@ -58,6 +67,7 @@ const readStorageConfig = () => {
   for (const configPath of [getStorageConfigPath(), getLegacyStorageConfigPath()]) {
     try {
       return JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+        bookmark?: string;
         directory?: string;
       };
     } catch {
@@ -67,9 +77,29 @@ const readStorageConfig = () => {
   return {};
 };
 
+const accessConfiguredStorageBookmark = () => {
+  if (!isMasBuild || !app.isReady()) return;
+  const config = readStorageConfig();
+  if (!config.bookmark || config.bookmark === activeStorageBookmark) return;
+  stopAccessingStorageBookmark?.();
+  try {
+    const stop = app.startAccessingSecurityScopedResource(config.bookmark);
+    stopAccessingStorageBookmark = () => stop();
+    activeStorageBookmark = config.bookmark;
+  } catch {
+    stopAccessingStorageBookmark = null;
+    activeStorageBookmark = null;
+  }
+};
+
 const getDatabasePath = () => {
+  accessConfiguredStorageBookmark();
   const value = readStorageConfig();
-  if (value.directory && path.isAbsolute(value.directory)) {
+  if (
+    value.directory &&
+    path.isAbsolute(value.directory) &&
+    (!isMasBuild || Boolean(value.bookmark))
+  ) {
     return path.join(value.directory, 'subnota-local.sqlite3');
   }
 
@@ -86,13 +116,15 @@ const getDatabasePath = () => {
     : legacyPath;
 };
 
-const saveStorageDirectory = (directory: string) => {
+const saveStorageDirectory = (directory: string, bookmark?: string) => {
   fs.mkdirSync(getDataDirectory(), { recursive: true });
   fs.writeFileSync(
     getStorageConfigPath(),
-    JSON.stringify({ directory }, null, 2),
+    JSON.stringify({ directory, ...(bookmark ? { bookmark } : {}) }, null, 2),
     'utf8',
   );
+  activeStorageBookmark = null;
+  accessConfiguredStorageBookmark();
 };
 
 const WORKER_SOURCE = String.raw`
@@ -1120,7 +1152,12 @@ const stopWorker = async () => {
   await activeWorker.terminate();
 };
 
-app.on('will-quit', () => stopWorker());
+app.on('will-quit', () => {
+  stopAccessingStorageBookmark?.();
+  stopAccessingStorageBookmark = null;
+  activeStorageBookmark = null;
+  void stopWorker();
+});
 
 const getStorageInfo = async () => {
   const databasePath = getDatabasePath();
@@ -1820,10 +1857,14 @@ ipcMain.handle('local-db:choose-storage', async event => {
   const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
   const result = await dialog.showOpenDialog(window, {
     properties: ['openDirectory', 'createDirectory'],
+    ...(isMasBuild ? { securityScopedBookmarks: true } : {}),
     title: 'Subnota 로컬 저장소 위치 선택',
   });
   const directory = result.filePaths[0];
   if (result.canceled || !directory) return null;
+  if (isMasBuild && !result.bookmarks?.[0]) {
+    throw new Error('선택한 저장소에 대한 Sandbox 권한을 얻지 못했습니다.');
+  }
 
   const currentPath = getDatabasePath();
   const nextPath = path.join(directory, 'subnota-local.sqlite3');
@@ -1842,7 +1883,7 @@ ipcMain.handle('local-db:choose-storage', async event => {
     if (fs.existsSync(currentPath)) {
       await fs.promises.copyFile(currentPath, nextPath);
     }
-    saveStorageDirectory(directory);
+    saveStorageDirectory(directory, result.bookmarks?.[0]);
     const info = await getStorageInfo();
     storageChanged = true;
     reloadDatabaseRenderers(event.sender);
@@ -1859,21 +1900,27 @@ ipcMain.handle('local-db:backup', async event => {
     defaultPath: `Subnota-${new Date().toISOString().slice(0, 10)}.sqlite3`,
     filters: [{ name: 'Subnota Backup', extensions: ['sqlite3'] }],
     title: 'Subnota 전체 백업',
+    ...(isMasBuild ? { securityScopedBookmarks: true } : {}),
   });
   if (result.canceled || !result.filePath) return null;
-  const finishMaintenance = await beginDatabaseMaintenance();
+  const stopAccessingBackup = accessSecurityScopedBookmark(result.bookmark);
   try {
-    await waitForPendingOperations();
-    if (worker) await postWorkerOperation('checkpoint', {});
-    // The maintenance fence prevents a renderer from appending new WAL frames
-    // between the checkpoint and this file copy. Without it, a successful
-    // backup can omit a queued edit or copy the database during auto-checkpoint.
-    await fs.promises.copyFile(getDatabasePath(), result.filePath);
-    return result.filePath;
+    const finishMaintenance = await beginDatabaseMaintenance();
+    try {
+      await waitForPendingOperations();
+      if (worker) await postWorkerOperation('checkpoint', {});
+      // The maintenance fence prevents a renderer from appending new WAL frames
+      // between the checkpoint and this file copy. Without it, a successful
+      // backup can omit a queued edit or copy the database during auto-checkpoint.
+      await fs.promises.copyFile(getDatabasePath(), result.filePath);
+      return result.filePath;
+    } finally {
+      // Backup keeps the active database and renderer alive, so always release
+      // the write guard explicitly instead of waiting for a reload.
+      finishMaintenance(true);
+    }
   } finally {
-    // Backup keeps the active database and renderer alive, so always release
-    // the write guard explicitly instead of waiting for a reload.
-    finishMaintenance(true);
+    stopAccessingBackup?.();
   }
 });
 
@@ -1903,6 +1950,52 @@ ipcMain.handle('local-db:restore', async (event, backupPath: unknown) => {
   }
 });
 
+ipcMain.handle('local-db:restore-dialog', async event => {
+  assertTrustedSender(event);
+  const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+  const result = await dialog.showOpenDialog(window, {
+    properties: ['openFile'],
+    filters: [{ name: 'Subnota Backup', extensions: ['sqlite3'] }],
+    title: 'Subnota 백업 복원',
+    ...(isMasBuild ? { securityScopedBookmarks: true } : {}),
+  });
+  const backupPath = result.filePaths[0];
+  if (result.canceled || !backupPath) return false;
+  const bookmark = result.bookmarks?.[0];
+  if (isMasBuild && !bookmark) {
+    throw new Error('선택한 백업 파일에 대한 Sandbox 권한을 얻지 못했습니다.');
+  }
+  let stop: (() => void) | null = null;
+  if (isMasBuild && bookmark) {
+    const release = app.startAccessingSecurityScopedResource(bookmark);
+    stop = () => release();
+  }
+  try {
+    const databasePath = getDatabasePath();
+    const canonicalPath = (filePath: string) =>
+      fs.promises.realpath(filePath).catch(() => path.resolve(filePath));
+    const [canonicalBackupPath, canonicalDatabasePath] = await Promise.all([
+      canonicalPath(backupPath),
+      canonicalPath(databasePath),
+    ]);
+    if (canonicalBackupPath === canonicalDatabasePath) {
+      throw new Error('현재 사용 중인 데이터베이스는 복원할 수 없습니다.');
+    }
+    const finishMaintenance = await beginDatabaseMaintenance();
+    let databaseReplaced = false;
+    try {
+      await replaceDatabaseFromBackup(backupPath);
+      databaseReplaced = true;
+      reloadDatabaseRenderers(event.sender);
+    } finally {
+      finishMaintenance(!databaseReplaced);
+    }
+    return true;
+  } finally {
+    stop?.();
+  }
+});
+
 ipcMain.handle(
   'local-db:export-json',
   async (event, name: unknown, value: unknown) => {
@@ -1915,13 +2008,19 @@ ipcMain.handle(
       defaultPath: `${name}-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }],
       title: 'JSON 데이터 내보내기',
+      ...(isMasBuild ? { securityScopedBookmarks: true } : {}),
     });
     if (result.canceled || !result.filePath) return null;
-    await fs.promises.writeFile(
-      result.filePath,
-      JSON.stringify(value, null, 2),
-      'utf8',
-    );
+    const stopAccessingExport = accessSecurityScopedBookmark(result.bookmark);
+    try {
+      await fs.promises.writeFile(
+        result.filePath,
+        JSON.stringify(value, null, 2),
+        'utf8',
+      );
+    } finally {
+      stopAccessingExport?.();
+    }
     return result.filePath;
   },
 );
@@ -1940,9 +2039,15 @@ ipcMain.handle(
       defaultPath: `${safeName}.md`,
       filters: [{ extensions: ['md'], name: 'Markdown' }],
       title: 'Markdown 내보내기',
+      ...(isMasBuild ? { securityScopedBookmarks: true } : {}),
     });
     if (result.canceled || !result.filePath) return null;
-    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    const stopAccessingExport = accessSecurityScopedBookmark(result.bookmark);
+    try {
+      await fs.promises.writeFile(result.filePath, content, 'utf8');
+    } finally {
+      stopAccessingExport?.();
+    }
     return result.filePath;
   },
 );

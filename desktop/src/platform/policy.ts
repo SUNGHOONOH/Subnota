@@ -23,10 +23,16 @@ export interface DesktopPlatformFeatures {
   webInbox: boolean;
 }
 
+const BUILD_NATIVE_PAGE_CAPTURE_ENABLED =
+  typeof __SUBNOTA_NATIVE_PAGE_CAPTURE_ENABLED__ === 'undefined' ||
+  __SUBNOTA_NATIVE_PAGE_CAPTURE_ENABLED__;
+
 export const getDesktopPlatformFeatures = (
   platform: NodeJS.Platform = process.platform,
+  nativePageCaptureEnabled = BUILD_NATIVE_PAGE_CAPTURE_ENABLED,
 ): DesktopPlatformFeatures => {
   const isMac = platform === 'darwin';
+  const supportsNativePageCapture = isMac && nativePageCaptureEnabled;
   const platformName = isMac
     ? 'macos'
     : platform === 'win32'
@@ -35,10 +41,10 @@ export const getDesktopPlatformFeatures = (
 
   return {
     browserExtensionClipper: false,
-    captureShortcut: isMac,
+    captureShortcut: supportsNativePageCapture,
     manualLinkCapture: true,
     miniSubnota: true,
-    nativeCurrentPageCapture: isMac,
+    nativeCurrentPageCapture: supportsNativePageCapture,
     platform: platformName,
     recentCapturesInTray: isMac,
     trayQuickMemo: true,

@@ -31,6 +31,24 @@ describe('Quick Subnota browser capture helpers', () => {
     expect(getBrowserCaptureScript('com.microsoft.edgemac')).toContain('Microsoft Edge');
     expect(getBrowserCaptureScript('com.brave.Browser')).toContain('Brave Browser');
     expect(getBrowserCaptureScript('com.unsupported.Browser')).toBeNull();
+    expect(getBrowserCaptureScript('com.apple.Safari\nmalicious')).toBeNull();
+    expect(getBrowserCaptureScript('com.apple.Safari"')).toBeNull();
+  });
+
+  it('limits every browser script to the current tab URL and title', () => {
+    const scripts = [
+      'com.apple.Safari',
+      'com.google.Chrome',
+      'company.thebrowser.Browser',
+      'com.microsoft.edgemac',
+      'com.brave.Browser',
+    ].map(bundleId => getBrowserCaptureScript(bundleId) ?? '');
+
+    for (const script of scripts) {
+      expect(script).toMatch(/URL/);
+      expect(script).toMatch(/name|title/);
+      expect(script).not.toMatch(/source|history|cookie|password|text of/i);
+    }
   });
 
   it('parses URL and title from osascript output', () => {
@@ -63,6 +81,25 @@ describe('Quick Subnota 포커스', () => {
     expect(reveal).toContain("app.focus({ steal: true })");
     // 활성화가 show 보다 뒤면 패널이 이미 뜬 뒤라 포커스를 못 가져온다.
     expect(reveal.indexOf('app.focus')).toBeLessThan(reveal.indexOf('window.show()'));
+  });
+
+  // 전체 화면 앱은 자기 Space에 산다. 이 두 가지가 없으면 Quick을 부를 때
+  // macOS가 Subnota 메인 창이 있는 Space로 화면을 전환해 버린다.
+  it('전체 화면 위에 뜨고, Space를 전환시키지 않는다', () => {
+    expect(source).toContain('setVisibleOnAllWorkspaces(true, {');
+    expect(source).toContain('visibleOnFullScreen: true');
+
+    // show()가 활성화보다 먼저여야 한다. 활성화가 앞서면 그 순간 현재 Space에
+    // Subnota 창이 없어 macOS가 다른 Space로 넘어간다.
+    const reveal = source.slice(
+      source.indexOf('const revealMiniWindow'),
+      source.indexOf('const buildMiniWindow'),
+    );
+    // 주석에도 같은 표현이 나오므로 세미콜론까지 붙여 실제 구문만 잡는다.
+    expect(reveal.indexOf('window.show();')).toBeGreaterThan(-1);
+    expect(reveal.indexOf('window.show();')).toBeLessThan(
+      reveal.indexOf('app.focus({ steal: true });'),
+    );
   });
 
   it('창을 드러내는 경로가 모두 같은 헬퍼를 쓴다', () => {
@@ -104,6 +141,44 @@ describe('Quick Subnota 포커스', () => {
 
     expect(dismiss).toContain('activateRunningApplication');
     expect(dismiss).toContain('app.hide()');
+  });
+
+  // App Sandbox에서는 NSWorkspace가 실행 중인 앱을 하나도 돌려주지 않는다
+  // (실측: 샌드박스 밖 73개 → 안 0개). 조회를 남겨 두면 Mini를 열 때마다
+  // 실패가 확정된 osascript를 띄우게 된다.
+  it('MAS에서는 최전면 앱 조회를 아예 건너뛴다', () => {
+    const capture = source.slice(
+      source.indexOf('const captureMiniDismissalTarget'),
+      source.indexOf('const hasVisibleAppWindow'),
+    );
+
+    expect(capture).toContain('if (isMasBuild) {');
+    expect(capture.indexOf('if (isMasBuild) {')).toBeLessThan(
+      capture.indexOf('await getFrontmostApplicationBundleId()'),
+    );
+    expect(source).toContain(
+      "const isMasBuild = process.platform === 'darwin' && process.mas === true;",
+    );
+  });
+
+  // app.hide()는 Subnota 창을 전부 감춘다. 이 분기는 "메인 창이 포커스가
+  // 아니었다"이지 "메인 창이 없다"가 아니라, 가드가 없으면 띄워 둔 창이
+  // 통째로 사라진다.
+  it('보이는 Subnota 창이 있으면 app.hide()로 전부 감추지 않는다', () => {
+    const dismiss = source.slice(
+      source.indexOf('const restoreMiniFocus'),
+      source.indexOf('let lastBrowserBundleId'),
+    );
+
+    expect(dismiss).toContain('if (!hasVisibleAppWindow()) {');
+    // 판정은 우리 창 상태만 본다 — 다른 앱을 조회하면 샌드박스에서 또 막힌다.
+    const helper = source.slice(
+      source.indexOf('const hasVisibleAppWindow'),
+      source.indexOf('const restoreMiniFocus'),
+    );
+    expect(helper).toContain('BrowserWindow.getAllWindows()');
+    expect(helper).toContain('window !== miniWindow');
+    expect(helper).not.toContain('osascript');
   });
 });
 

@@ -32,4 +32,19 @@ describe('desktop platform policy', () => {
       webInbox: true,
     });
   });
+
+  it('removes only native browser capture surfaces in the MAS review fallback', () => {
+    expect(getDesktopPlatformFeatures('darwin', false)).toEqual({
+      browserExtensionClipper: false,
+      captureShortcut: false,
+      manualLinkCapture: true,
+      miniSubnota: true,
+      nativeCurrentPageCapture: false,
+      platform: 'macos',
+      recentCapturesInTray: true,
+      trayQuickMemo: true,
+      webClipperDeepLinks: true,
+      webInbox: true,
+    });
+  });
 });

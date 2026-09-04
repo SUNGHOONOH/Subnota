@@ -5,6 +5,7 @@ import SubnotaMark from '../../components/SubnotaMark';
 
 import { createUuid } from '../../lib/contentHash';
 import { MINI_SUBNOTA_CATEGORY } from '../../lib/memoCategory';
+import { joinNoteContent } from '../../lib/noteTitle';
 import {
   loadShortcutSettings,
   saveShortcutSettings,
@@ -194,7 +195,10 @@ const MiniComposer = () => {
       await upsertLocalMemo(
         {
           category: MINI_SUBNOTA_CATEGORY,
-          content,
+          // 노트의 제목은 content 첫 줄이다. Mini는 제목 칸이 없는 한 장짜리
+          // 입력이라, 그대로 저장하면 쓴 것이 전부 제목으로 들어간다.
+          // 제목은 비우고 본문부터 시작한다.
+          content: joinNoteContent('', content),
           created_at: now,
           id: createUuid(),
         },

@@ -90,6 +90,7 @@ interface SettingsModalProps {
   onResetShortcuts: () => Promise<ShortcutSaveResult | void>;
   onResetAppShortcuts: () => Promise<AppShortcutSettings | void>;
   onRestore: (file: File) => Promise<void>;
+  onRestoreFromDialog: () => Promise<boolean>;
   onSaveShortcuts: (
     settings: ShortcutSettings,
   ) => Promise<ShortcutSaveResult | void>;
@@ -1546,6 +1547,7 @@ export default function SettingsModal(props: SettingsModalProps) {
     localize(props.appSettings.uiLanguage, korean, english);
   const deleteWord = props.appSettings.uiLanguage === 'en' ? 'DELETE' : '삭제';
   const platformFeatures = window.electronAPI?.getPlatformFeatures?.();
+  const isMasDistribution = window.electronAPI?.isMasBuild === true;
   const editableShortcuts = platformFeatures?.captureShortcut === false
     ? EDITABLE_SHORTCUTS.filter(item => item.field !== 'capturePage')
     : EDITABLE_SHORTCUTS;
@@ -1938,7 +1940,7 @@ export default function SettingsModal(props: SettingsModalProps) {
           </Section>
           {/* 알림·업데이트·연관 문장 검색은 시작과도 창과도 관계가 없다.
               한 묶음에 있으면 제목이 내용의 절반만 설명하게 된다. */}
-          <Section title={t('알림 및 업데이트', 'Notifications & updates')}>
+          {!isMasDistribution && <Section title={t('알림 및 업데이트', 'Notifications & updates')}>
             <Row
               action={
                 <Switch
@@ -1977,7 +1979,7 @@ export default function SettingsModal(props: SettingsModalProps) {
               description={t('새 버전이 있으면 알려줍니다.', 'Lets you know when a new version is available.')}
               label={t('업데이트 자동 확인', 'Check for updates automatically')}
             />
-          </Section>
+          </Section>}
           <Section title={t('메모 작성', 'Writing')}>
             <Row
               action={
@@ -2204,7 +2206,7 @@ export default function SettingsModal(props: SettingsModalProps) {
                   description={t('메모, 캘린더, Inbox가 포함된 SQLite 백업을 만듭니다.', 'Creates a SQLite backup with memos, calendar items, and Inbox data.')}
                   label={t('전체 데이터 백업', 'Back up all data')}
             />
-            <FileButton
+            {!isMasDistribution && <FileButton
               accept=".sqlite3"
               onChange={setRestoreFile}
             >
@@ -2219,7 +2221,29 @@ export default function SettingsModal(props: SettingsModalProps) {
                   label={t('백업 파일 복원', 'Restore backup file')}
                 />
               )}
-            </FileButton>
+            </FileButton>}
+            {isMasDistribution && (
+              <Row
+                action={
+                  <RowAction
+                    disabled={isWorking}
+                    onClick={() =>
+                      void run(
+                        async () => {
+                          const restored = await props.onRestoreFromDialog();
+                          return restored;
+                        },
+                        t('백업을 복원했습니다.', 'Backup restored.'),
+                      )
+                    }
+                  >
+                    {t('파일 선택', 'Choose file')}
+                  </RowAction>
+                }
+                description={t('Sandbox 권한이 적용된 파일 선택창을 엽니다.', 'Opens a file picker with the required sandbox permission.')}
+                label={t('백업 파일 복원', 'Restore backup file')}
+              />
+            )}
             {restoreFile && (
               <Box className="settings-reference-confirmation" role="alert">
                 <Text className="settings-reference-row-label">

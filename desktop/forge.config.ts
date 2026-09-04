@@ -1,6 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDMG } from '@electron-forge/maker-dmg';
+import { MakerPKG } from '@electron-forge/maker-pkg';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { PublisherGithub } from '@electron-forge/publisher-github';
 import { VitePlugin } from '@electron-forge/plugin-vite';
@@ -42,6 +43,17 @@ const macNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
       : undefined;
 const isMacBuild = process.platform === 'darwin';
 const isLocalMacBuild = process.env.SUBNOTA_LOCAL_BUILD === '1';
+const isMasBuild = process.env.SUBNOTA_MAS_BUILD === '1';
+const masBrowserCaptureEnabled =
+  !isMasBuild || process.env.SUBNOTA_MAS_BROWSER_CAPTURE !== '0';
+const targetArch = process.env.SUBNOTA_TARGET_ARCH ?? process.arch;
+const masProvisioningProfile = process.env.MAS_PROVISIONING_PROFILE;
+const masSigningIdentity =
+  process.env.MAS_APP_SIGNING_IDENTITY || process.env.APPLE_SIGNING_IDENTITY;
+const masInstallerIdentity = process.env.MAS_INSTALLER_SIGNING_IDENTITY;
+const masKeychain = process.env.SUBNOTA_BUILD_KEYCHAIN;
+const masSigningType =
+  process.env.MAS_SIGNING_TYPE === 'development' ? 'development' : 'distribution';
 
 // Forge의 Vite 플러그인은 기본적으로 `.vite` 말고 전부 제외한다 — Vite가 모든
 // 의존성을 번들한다고 보기 때문이다. 하지만 onnxruntime-node는 네이티브
@@ -82,7 +94,22 @@ const collectRuntimeModules = (): Set<string> => {
   return found;
 };
 
-const platformSlug = `${process.platform === 'win32' ? 'win32' : process.platform}-${process.arch}`;
+// Electron은 Contents/Resources에 빈 `.lproj` 폴더를 55개 넣는다. App Store는
+// 이 목록으로 "지원 언어"를 정하기 때문에, 두면 한/영 앱이 아랍어·히브리어까지
+// 지원하는 것처럼 표시된다. 우리가 실제로 번역을 갖는 것만 남긴다.
+const KEPT_LOCALIZATIONS = new Set(['en', 'ko']);
+
+const pruneUnusedLocalizations = (appBundlePath: string) => {
+  const resources = path.join(appBundlePath, 'Contents', 'Resources');
+  if (!fs.existsSync(resources)) return;
+  for (const entry of fs.readdirSync(resources)) {
+    if (!entry.endsWith('.lproj')) continue;
+    if (KEPT_LOCALIZATIONS.has(entry.slice(0, -'.lproj'.length))) continue;
+    fs.rmSync(path.join(resources, entry), { force: true, recursive: true });
+  }
+};
+
+const platformSlug = `${process.platform === 'win32' ? 'win32' : process.platform}-${targetArch}`;
 const runtimeModules = collectRuntimeModules();
 const runtimePrefixes = [...runtimeModules].map(m => `/node_modules/${m}`);
 
@@ -102,7 +129,7 @@ const shouldIgnore = (file: string): boolean => {
   const binRoot = '/node_modules/onnxruntime-node/bin/napi-v6/';
   if (file.startsWith(binRoot)) {
     const rest = file.slice(binRoot.length);
-    return rest.includes('/') && !rest.startsWith(`${process.platform}/${process.arch}`);
+    return rest.includes('/') && !rest.startsWith(`${process.platform}/${targetArch}`);
   }
   return false;
 };
@@ -116,17 +143,65 @@ const config: ForgeConfig = {
     },
     ignore: shouldIgnore,
     icon: './resources/icon',
+    // 서명 **전**에 지워야 한다. afterCopy는 앱을 복사한 직후라 아직 서명 전이고,
+    // buildPath는 `…/<App>.app/Contents/Resources/app` 이라 세 단계 위가 번들이다.
+    afterCopy: [
+      (buildPath: string, _v: string, platform: string, _a: string, done: (error?: Error) => void) => {
+        try {
+          if (platform === 'darwin' || platform === 'mas') {
+            pruneUnusedLocalizations(path.resolve(buildPath, '..', '..', '..'));
+          }
+          done();
+        } catch (error) {
+          done(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+    ],
     extraResource: isMacBuild
       // 메뉴바 아이콘은 Retina용 @2x 를 같은 폴더에 두면 Electron이 알아서
       // 고른다. 하나만 넣으면 고해상도 화면에서 뭉갠다.
-      ? ['./resources/tray.png', './resources/tray@2x.png']
+      ? [
+          './resources/tray.png',
+          './resources/tray@2x.png',
+          ...(masBrowserCaptureEnabled
+            ? ['./resources/en.lproj', './resources/ko.lproj']
+            : []),
+        ]
       : ['./resources/icon.ico'],
     ...(isMacBuild
       ? {
           appBundleId: 'com.sunghoonoh.subnota.macos',
           appCategoryType: 'public.app-category.productivity',
+          ...(isMasBuild && process.env.MAS_BUILD_NUMBER
+            ? { buildVersion: process.env.MAS_BUILD_NUMBER }
+            : {}),
           ...(isLocalMacBuild
             ? { osxSign: false as const }
+            : isMasBuild
+              ? {
+                  osxSign: {
+                    platform: 'mas' as const,
+                    type: masSigningType,
+                    ...(masSigningIdentity ? { identity: masSigningIdentity } : {}),
+                    ...(masKeychain ? { keychain: masKeychain } : {}),
+                    ...(masProvisioningProfile
+                      ? { provisioningProfile: masProvisioningProfile }
+                      : {}),
+                    optionsForFile: (filePath: string) => {
+                      if (filePath.endsWith('.app') && !filePath.includes('.app/')) {
+                        return {
+                          entitlements: masBrowserCaptureEnabled
+                            ? 'build/entitlements.mas.plist'
+                            : 'build/entitlements.mas.fallback.plist',
+                        };
+                      }
+                      if (filePath.includes('.app/')) {
+                        return { entitlements: 'build/entitlements.mas.child.plist' };
+                      }
+                      return null;
+                    },
+                  },
+                }
             : {
                 osxSign: {
                   ...(process.env.APPLE_SIGNING_IDENTITY
@@ -142,6 +217,10 @@ const config: ForgeConfig = {
                 ...(macNotarizeConfig ? { osxNotarize: macNotarizeConfig } : {}),
               }),
           extendInfo: {
+            NSHumanReadableCopyright: 'Copyright © 2026 SUNGHOON OH.',
+            // HTTPS만 쓰므로 수출 규정 면제 대상이다. 명시하지 않으면
+            // App Store Connect가 업로드할 때마다 이 질문을 반복한다.
+            ITSAppUsesNonExemptEncryption: false,
             // TODO(markdown-files): Reintroduce Markdown import/edit only with
             // an OS file picker and per-window scoped path authorization.
             CFBundleURLTypes: [
@@ -150,8 +229,12 @@ const config: ForgeConfig = {
                 CFBundleURLSchemes: ['subnota'],
               },
             ],
-            NSAppleEventsUsageDescription:
-              'Subnota가 현재 브라우저 페이지의 주소와 제목을 수집함에 저장하기 위해 사용합니다.',
+            ...(masBrowserCaptureEnabled
+              ? {
+                  NSAppleEventsUsageDescription:
+                    'Subnota reads only the title and URL of the active browser tab when you choose Save Current Page.',
+                }
+              : {}),
             NSAppTransportSecurity: {
               NSAllowsArbitraryLoads: false,
             },
@@ -167,47 +250,58 @@ const config: ForgeConfig = {
         }),
   },
   rebuildConfig: {},
-  makers: [
-    new MakerZIP(
-      releaseDownloadBaseUrl
-        ? { macUpdateManifestBaseUrl: releaseDownloadBaseUrl }
-        : {},
-      ['darwin'],
-    ),
-    // 설치 창. 배경의 꽃잎 궤적이 앱 아이콘(x:180)과 Applications 별칭(x:480)
-    // 사이의 빈 폭에 정확히 들어가므로 좌표를 배경과 맞춰 둔다
-    // (배경은 scripts/generate-brand-assets.mjs 가 굽는다).
-    new MakerDMG(
-      {
-        background: './resources/dmg-background.png',
-        format: 'ULFO',
-        icon: './resources/icon.icns',
-        iconSize: 110,
-        additionalDMGOptions: {
-          window: { size: { height: 400, width: 660 } },
-        },
-        contents: [
-          { path: '/Applications', type: 'link', x: 480, y: 262 },
+  makers: isMasBuild
+    ? [
+        new MakerPKG(
           {
-            path: `${process.cwd()}/out/Subnota-darwin-${process.arch}/Subnota.app`,
-            type: 'file',
-            x: 180,
-            y: 262,
+            ...(masInstallerIdentity ? { identity: masInstallerIdentity } : {}),
+            ...(masKeychain ? { keychain: masKeychain } : {}),
+            name: 'Subnota-MAS',
           },
-        ],
-      },
-      ['darwin'],
-    ),
-    new MakerSquirrel(
-      {
-        name: 'subnota',
-        setupIcon: './resources/icon.ico',
-      },
-      ['win32'],
-    ),
-  ],
+          ['mas'],
+        ),
+      ]
+    : [
+        new MakerZIP(
+          releaseDownloadBaseUrl
+            ? { macUpdateManifestBaseUrl: releaseDownloadBaseUrl }
+            : {},
+          ['darwin'],
+        ),
+        // 설치 창. 배경의 꽃잎 궤적이 앱 아이콘(x:180)과 Applications 별칭(x:480)
+        // 사이의 빈 폭에 정확히 들어가므로 좌표를 배경과 맞춰 둔다
+        // (배경은 scripts/generate-brand-assets.mjs 가 굽는다).
+        new MakerDMG(
+          {
+            background: './resources/dmg-background.png',
+            format: 'ULFO',
+            icon: './resources/icon.icns',
+            iconSize: 110,
+            additionalDMGOptions: {
+              window: { size: { height: 400, width: 660 } },
+            },
+            contents: [
+              { path: '/Applications', type: 'link', x: 480, y: 262 },
+              {
+                path: `${process.cwd()}/out/Subnota-darwin-${targetArch}/Subnota.app`,
+                type: 'file',
+                x: 180,
+                y: 262,
+              },
+            ],
+          },
+          ['darwin'],
+        ),
+        new MakerSquirrel(
+          {
+            name: 'subnota',
+            setupIcon: './resources/icon.ico',
+          },
+          ['win32'],
+        ),
+      ],
   publishers:
-    isMacBuild && releaseOwner && releaseName
+    !isMasBuild && isMacBuild && releaseOwner && releaseName
       ? [
           new PublisherGithub({
             repository: { owner: releaseOwner, name: releaseName },

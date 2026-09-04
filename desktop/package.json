@@ -20,6 +20,8 @@
     "build:exe": "node scripts/build-exe.mjs",
     "release": "node scripts/release-platform.mjs",
     "release:mac": "sh scripts/release.sh",
+    "release:mas": "sh scripts/release-mas.sh",
+    "release:mas:fallback": "SUBNOTA_MAS_BROWSER_CAPTURE=0 sh scripts/release-mas.sh",
     "release:windows": "node scripts/release-windows.mjs",
     "test": "vitest run"
   },
@@ -30,6 +32,7 @@
     "@base-ui/react": "^1.5.0",
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
+    "@electron-forge/maker-pkg": "7.11.2",
     "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@electron-forge/plugin-auto-unpack-natives": "7.11.2",
