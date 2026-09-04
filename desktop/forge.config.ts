@@ -119,7 +119,14 @@ const config: ForgeConfig = {
     extraResource: isMacBuild
       // 메뉴바 아이콘은 Retina용 @2x 를 같은 폴더에 두면 Electron이 알아서
       // 고른다. 하나만 넣으면 고해상도 화면에서 뭉갠다.
-      ? ['./resources/tray.png', './resources/tray@2x.png']
+      ? [
+          './resources/tray.png',
+          './resources/tray@2x.png',
+          // Automation 권한 대화상자 문구를 언어별로 보여준다. Info.plist의
+          // 값이 영어 기본값이고, ko.lproj가 한국어로 덮는다.
+          './resources/en.lproj',
+          './resources/ko.lproj',
+        ]
       : ['./resources/icon.ico'],
     ...(isMacBuild
       ? {
@@ -142,6 +149,7 @@ const config: ForgeConfig = {
                 ...(macNotarizeConfig ? { osxNotarize: macNotarizeConfig } : {}),
               }),
           extendInfo: {
+            NSHumanReadableCopyright: 'Copyright © 2026 SUNGHOON OH.',
             // TODO(markdown-files): Reintroduce Markdown import/edit only with
             // an OS file picker and per-window scoped path authorization.
             CFBundleURLTypes: [
@@ -150,8 +158,9 @@ const config: ForgeConfig = {
                 CFBundleURLSchemes: ['subnota'],
               },
             ],
+            // 기본값은 영어. 한국어는 resources/ko.lproj/InfoPlist.strings가 덮는다.
             NSAppleEventsUsageDescription:
-              'Subnota가 현재 브라우저 페이지의 주소와 제목을 수집함에 저장하기 위해 사용합니다.',
+              'Subnota reads only the title and URL of the active browser tab when you choose Save Current Page.',
             NSAppTransportSecurity: {
               NSAllowsArbitraryLoads: false,
             },
