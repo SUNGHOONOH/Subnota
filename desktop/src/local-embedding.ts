@@ -179,6 +179,44 @@ const ensureWeights = async (
   weightsVerified = true;
 };
 
+// Transformers.js는 중단된 다운로드의 임시 파일(`*.tmp.<pid>.<rand>`)을 지우지
+// 않는다. 그리고 revision을 고정하기 전 버전은 `<repo>/` 바로 아래에 받았으므로,
+// 고정 이후에는 같은 파일이 `<repo>/<revision>/`과 두 벌로 남는다. 지금 코드는
+// `<revision>/` 밖에는 아무것도 쓰지 않으니, 그 바깥은 전부 과거의 잔해다.
+//
+// 실측: 이 상태로 49MB(중단된 가중치) + 16MB(중복 tokenizer)가 방치돼 있었다.
+// deleteModel은 사용자가 [삭제]를 눌러야만 돌아서 여기까지 손이 닿지 않았다.
+export const pruneStaleModelCache = (repoRoot: string, keepRevision: string) => {
+  let removedBytes = 0;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(repoRoot);
+  } catch {
+    return 0; // 캐시가 아직 없으면 정리할 것도 없다.
+  }
+  for (const entry of entries) {
+    if (entry === keepRevision) continue;
+    const target = path.join(repoRoot, entry);
+    try {
+      removedBytes += directorySize(target);
+      fs.rmSync(target, { force: true, recursive: true });
+    } catch {
+      // 정리는 부가 작업이다. 실패해도 모델 로딩을 막지 않는다.
+    }
+  }
+  return removedBytes;
+};
+
+const directorySize = (target: string): number => {
+  const info = fs.statSync(target);
+  if (!info.isDirectory()) return info.size;
+  return fs
+    .readdirSync(target)
+    .reduce((total, entry) => total + directorySize(path.join(target, entry)), 0);
+};
+
+let prunedStaleCache = false;
+
 const loadExtractor = async (
   mode: 'index' | 'interactive',
   allowDownload = true,
@@ -196,6 +234,12 @@ const loadExtractor = async (
       setStatus({ downloadedBytes, totalBytes: totalBytes || MODEL_BYTES }),
     allowDownload,
   );
+  // 가중치가 제자리에 있다고 확인된 뒤에 한 번만. 이 시점 이후로 앱은
+  // `<revision>/` 밖에 쓰지 않으므로 진행 중인 다운로드와 부딪히지 않는다.
+  if (!prunedStaleCache) {
+    prunedStaleCache = true;
+    pruneStaleModelCache(path.join(cacheDirectory(), MODEL_REPO), MODEL_REVISION);
+  }
   // 가중치가 끝난 뒤 Transformers.js가 받는 tokenizer/config 파일의
   // 진행률은 570MB 가중치와 다른 작업이다. 그 값을 같은 바이트 카운터에
   // 쓰면 완료 직후 진행률이 0으로 되돌아간 것처럼 보인다.

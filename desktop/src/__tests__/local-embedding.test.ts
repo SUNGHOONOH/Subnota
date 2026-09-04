@@ -329,3 +329,42 @@ describe('local-embedding IPC', () => {
     expect(space.freeBytes === null || space.freeBytes >= 0).toBe(true);
   });
 });
+
+// 중단된 다운로드의 임시 파일과 revision 고정 이전 경로가 캐시에 그대로 쌓여
+// 있었다(실측 49MB + 16MB). 앱은 `<repo>/<revision>/` 밖에는 쓰지 않으므로
+// 그 바깥은 전부 잔해다.
+describe('pruneStaleModelCache', () => {
+  const repoRoot = path.join('/tmp', `subnota-prune-${process.pid}`);
+  const revision = '4de13258303883538bd53b696b452bf8099f0858';
+
+  beforeEach(() => {
+    fs.rmSync(repoRoot, { force: true, recursive: true });
+    fs.mkdirSync(path.join(repoRoot, revision, 'onnx'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, revision, 'onnx', 'model.onnx'), 'keep');
+    fs.writeFileSync(path.join(repoRoot, revision, 'tokenizer.json'), 'keep');
+    // revision 고정 이전 경로 + 중단된 다운로드 임시 파일
+    fs.mkdirSync(path.join(repoRoot, 'onnx'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'onnx', 'model.onnx.tmp.2170.s22kl9'), 'x'.repeat(40));
+    fs.writeFileSync(path.join(repoRoot, 'tokenizer.json'), 'y'.repeat(10));
+    fs.writeFileSync(path.join(repoRoot, '.DS_Store'), 'z');
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { force: true, recursive: true });
+  });
+
+  it('고정한 revision만 남기고 잔해를 지운다', async () => {
+    const { pruneStaleModelCache } = await import('../local-embedding');
+    const removed = pruneStaleModelCache(repoRoot, revision);
+
+    expect(fs.readdirSync(repoRoot)).toEqual([revision]);
+    expect(fs.existsSync(path.join(repoRoot, revision, 'onnx', 'model.onnx'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, revision, 'tokenizer.json'))).toBe(true);
+    expect(removed).toBe(51); // 40 + 10 + 1
+  });
+
+  it('캐시가 없어도 던지지 않는다', async () => {
+    const { pruneStaleModelCache } = await import('../local-embedding');
+    expect(pruneStaleModelCache('/tmp/subnota-prune-missing', revision)).toBe(0);
+  });
+});
