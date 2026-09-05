@@ -41,17 +41,45 @@ public final class MemoStore: Sendable {
     try store.delete(ownerId: ownerId, type: .memo, id: id)
   }
 
-  // Unlike LocalStore.iso8601 in Task 1, JSONEncoder/JSONDecoder are already
-  // Sendable on this SDK, so no nonisolated(unsafe) escape hatch is needed here.
+  // JSONEncoder/JSONDecoder are already Sendable on this SDK (unlike
+  // LocalStore.iso8601 in Task 1), so no nonisolated(unsafe) escape hatch is
+  // needed for them. But the plain `.iso8601` strategy drops fractional
+  // seconds, silently truncating createdAt/contentUpdatedAt on every
+  // save→load round-trip. Mirror LocalStore's ISO8601DateFormatter
+  // (.withInternetDateTime + .withFractionalSeconds) via a custom strategy so
+  // JSON payload precision matches the SQL updated_at column and the
+  // Electron app's toISOString() output.
+  //
+  // ISO8601DateFormatter itself predates Sendable, but it is only read
+  // (string/date) after setup here, never mutated again, so concurrent use
+  // is safe despite nonisolated(unsafe).
+  private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+
   private static let encoder: JSONEncoder = {
     let e = JSONEncoder()
-    e.dateEncodingStrategy = .iso8601
+    e.dateEncodingStrategy = .custom { date, encoder in
+      var container = encoder.singleValueContainer()
+      try container.encode(iso8601.string(from: date))
+    }
     return e
   }()
 
   private static let decoder: JSONDecoder = {
     let d = JSONDecoder()
-    d.dateDecodingStrategy = .iso8601
+    d.dateDecodingStrategy = .custom { decoder in
+      let container = try decoder.singleValueContainer()
+      let raw = try container.decode(String.self)
+      guard let date = iso8601.date(from: raw) else {
+        throw DecodingError.dataCorruptedError(
+          in: container, debugDescription: "Invalid ISO8601 date: \(raw)"
+        )
+      }
+      return date
+    }
     return d
   }()
 

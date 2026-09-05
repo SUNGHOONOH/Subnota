@@ -61,6 +61,20 @@ private func makeMemoStore() throws -> MemoStore {
   #expect(try memos.all().isEmpty)
 }
 
+/// JSON 라운드트립에서 초 이하 정밀도가 손실되지 않아야 한다. 온초 픽스처(예: Date(timeIntervalSince1970: 10))는
+/// 이 손실을 가려버리므로 일부러 밀리초 단위가 있는 타임스탬프를 쓴다. (ISO8601DateFormatter의
+/// withFractionalSeconds 는 밀리초 3자리까지만 표현하므로 그 이상의 마이크로초는 애초에 대상이 아니다.)
+@Test func subSecondPrecisionSurvivesRoundTrip() throws {
+  let memos = try makeMemoStore()
+  let preciseNow = Date(timeIntervalSince1970: 1_788_632_906.744)
+  let created = try memos.create(content: "정밀 타임스탬프", category: nil, now: preciseNow)
+
+  let loaded = try memos.load(id: created.id)
+  #expect(loaded == created)
+  #expect(loaded?.createdAt == preciseNow)
+  #expect(loaded?.contentUpdatedAt == preciseNow)
+}
+
 @Test func memosAreScopedToOwner() throws {
   let dir = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
