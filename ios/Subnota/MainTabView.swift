@@ -32,8 +32,3 @@ private struct PlaceholderTab: View {
     }
   }
 }
-
-// 임시 — Task 7 에서 실제 구현으로 교체한다.
-struct MemoListView: View {
-  var body: some View { PlaceholderTab(title: "메모") }
-}
