@@ -51,6 +51,20 @@ struct MemoListView: View {
 
   @ViewBuilder
   private func content(_ model: MemoListModel) -> some View {
+    VStack(spacing: 0) {
+      if let loadError = model.loadError {
+        Text(loadError)
+          .font(Typography.ui(12))
+          .foregroundStyle(Palette.inkMuted)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 8)
+      }
+      listOrEmptyState(model)
+    }
+  }
+
+  @ViewBuilder
+  private func listOrEmptyState(_ model: MemoListModel) -> some View {
     if model.memos.isEmpty {
       VStack(spacing: 6) {
         Text("아직 메모가 없습니다").font(Typography.ui(15, weight: .medium)).foregroundStyle(Palette.ink)

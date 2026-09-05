@@ -41,13 +41,15 @@ final class MemoListModel {
     guard let store else { return }
     var updated = memo
     updated.contentUpdatedAt = Date()
-    try? store.save(updated)
+    do { try store.save(updated) }
+    catch { loadError = "메모를 저장하지 못했습니다." }
     load()
   }
 
   func delete(_ memo: Memo) {
     guard let store else { return }
-    try? store.delete(id: memo.id)
+    do { try store.delete(id: memo.id) }
+    catch { loadError = "메모를 삭제하지 못했습니다." }
     load()
   }
 }

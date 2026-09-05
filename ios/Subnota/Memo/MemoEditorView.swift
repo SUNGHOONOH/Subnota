@@ -4,6 +4,7 @@ import SubnotaKit
 struct MemoEditorView: View {
   @Environment(\.scenePhase) private var scenePhase
   @State private var text: String
+  @State private var lastSavedContent: String
   private let memo: Memo
   private let onSave: (Memo) -> Void
 
@@ -11,6 +12,7 @@ struct MemoEditorView: View {
     self.memo = memo
     self.onSave = onSave
     _text = State(initialValue: memo.content)
+    _lastSavedContent = State(initialValue: memo.content)
   }
 
   var body: some View {
@@ -30,9 +32,10 @@ struct MemoEditorView: View {
   }
 
   private func flush() {
-    guard text != memo.content else { return }
+    guard text != lastSavedContent else { return }
     var updated = memo
     updated.content = text
+    lastSavedContent = text
     onSave(updated)
   }
 }
