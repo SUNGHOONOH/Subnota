@@ -121,7 +121,7 @@ public final class MemoStore: Sendable {
     sourceUpdatedAt: Date?, now: Date = Date()
   ) throws {
     let contentHash = ContentHash.hash(content)
-    let stamp = Self.iso8601.string(from: now)
+    let stamp = ServerTimestamp.string(from: now)
     let payload = RecoveryPayload(
       content: content,
       contentHash: contentHash,
@@ -130,7 +130,7 @@ public final class MemoStore: Sendable {
       id: "\(memoId):\(contentHash)",
       memoId: memoId,
       source: source,
-      sourceUpdatedAt: sourceUpdatedAt.map(Self.iso8601.string(from:)),
+      sourceUpdatedAt: sourceUpdatedAt.map(ServerTimestamp.string(from:)),
       updatedAt: stamp
     )
     try store.upsert(
@@ -186,54 +186,12 @@ public final class MemoStore: Sendable {
     try save(memo)
   }
 
-  // JSONEncoder/JSONDecoder are already Sendable on this SDK (unlike
-  // LocalStore.iso8601 in Task 1), so no nonisolated(unsafe) escape hatch is
-  // needed for them. But the plain `.iso8601` strategy drops fractional
-  // seconds, silently truncating createdAt/contentUpdatedAt on every
-  // save→load round-trip. Mirror LocalStore's ISO8601DateFormatter
-  // (.withInternetDateTime + .withFractionalSeconds) via a custom strategy so
-  // JSON payload precision matches the SQL updated_at column and the
-  // Electron app's toISOString() output.
-  //
-  // ISO8601DateFormatter itself predates Sendable, but it is only read
-  // (string/date) after setup here, never mutated again, so concurrent use
-  // is safe despite nonisolated(unsafe).
-  private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-  }()
-
-  private static let encoder: JSONEncoder = {
-    let e = JSONEncoder()
-    e.dateEncodingStrategy = .custom { date, encoder in
-      var container = encoder.singleValueContainer()
-      try container.encode(iso8601.string(from: date))
-    }
-    return e
-  }()
-
-  private static let decoder: JSONDecoder = {
-    let d = JSONDecoder()
-    d.dateDecodingStrategy = .custom { decoder in
-      let container = try decoder.singleValueContainer()
-      let raw = try container.decode(String.self)
-      guard let date = iso8601.date(from: raw) else {
-        throw DecodingError.dataCorruptedError(
-          in: container, debugDescription: "Invalid ISO8601 date: \(raw)"
-        )
-      }
-      return date
-    }
-    return d
-  }()
-
   private static func encode(_ memo: Memo) throws -> String {
-    String(decoding: try encoder.encode(memo), as: UTF8.self)
+    try PayloadCoder.encode(memo)
   }
 
   private static func decode(_ json: String) throws -> Memo {
-    try decoder.decode(Memo.self, from: Data(json.utf8))
+    try PayloadCoder.decode(Memo.self, from: json)
   }
 
   /// 테스트에서 저장된 페이로드 형식을 직접 검증하기 위한 통로. 프로덕션 API 아님.
