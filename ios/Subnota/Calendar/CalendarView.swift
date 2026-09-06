@@ -181,13 +181,22 @@ final class CalendarModel {
     }
   }
 
-  /// 체크 토글. 이 태스크에서는 로컬 `isCompleted` 만 바꾼다 —
-  /// `activity_completions` / `daily_completions` 는 Task 4 다.
+  /// 체크 토글. 완료로 바꿀 때만 완료 이벤트를 남긴다 — 체크를 끄면 로컬
+  /// `isCompleted` 만 돌아오고 이벤트는 그대로 있다(서버가 append-only 다.
+  /// 데스크탑 `toggleCalendarBlockCompleted` 도 같다).
   func toggle(_ block: CalendarBlock) {
+    guard let store else { return }
     var next = block
     next.isCompleted.toggle()
     next.completedAt = next.isCompleted ? Date() : nil
-    save(next)
+    do {
+      // 정규화까지 끝난 결과로 기록해야 종일 일정의 local_date 가 맞는다.
+      let saved = try store.save(next)
+      if saved.isCompleted { try store.recordCompletion(of: saved) }
+      load(loadedDays)
+    } catch {
+      loadError = "일정을 저장하지 못했습니다."
+    }
   }
 
   func save(_ block: CalendarBlock) {

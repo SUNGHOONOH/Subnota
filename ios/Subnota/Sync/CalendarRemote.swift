@@ -45,6 +45,78 @@ struct CalendarRemote {
       .execute()
   }
 
+  /// 데스크탑 `recordActivityCompletion`. `ignoreDuplicates` 가
+  /// `Prefer: resolution=ignore-duplicates` 를 보내서, 같은 (user, block) 이 이미
+  /// 있으면 서버는 조용히 아무것도 하지 않는다 — append-only 다.
+  func record(_ completion: ActivityCompletion) async throws {
+    try await client
+      .from("activity_completions")
+      .upsert(
+        ActivityRow(completion: completion, userId: userId),
+        onConflict: "user_id,calendar_block_id", returning: .minimal, ignoreDuplicates: true
+      )
+      .execute()
+  }
+
+  /// 데스크탑 `recordDailyCompletion`. 유일키만 (user, local_date) 로 다르다.
+  func record(_ completion: DailyCompletion) async throws {
+    try await client
+      .from("daily_completions")
+      .upsert(
+        DailyRow(completion: completion, userId: userId),
+        onConflict: "user_id,local_date", returning: .minimal, ignoreDuplicates: true
+      )
+      .execute()
+  }
+
+  private struct ActivityRow: Encodable {
+    let id: String
+    let userId: String
+    let calendarBlockId: String
+    let completedAt: String
+    let localDate: String
+
+    init(completion: ActivityCompletion, userId: String) {
+      id = completion.id
+      self.userId = userId
+      calendarBlockId = completion.calendarBlockId
+      completedAt = ServerTimestamp.string(from: completion.completedAt)
+      localDate = completion.localDate
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case userId = "user_id"
+      case calendarBlockId = "calendar_block_id"
+      case completedAt = "completed_at"
+      case localDate = "local_date"
+    }
+  }
+
+  private struct DailyRow: Encodable {
+    let id: String
+    let userId: String
+    let localDate: String
+    let completedAt: String
+    let todoCount: Int
+
+    init(completion: DailyCompletion, userId: String) {
+      id = completion.id
+      self.userId = userId
+      localDate = completion.localDate
+      completedAt = ServerTimestamp.string(from: completion.completedAt)
+      todoCount = completion.todoCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case userId = "user_id"
+      case localDate = "local_date"
+      case completedAt = "completed_at"
+      case todoCount = "todo_count"
+    }
+  }
+
   /// 보내는 값은 데스크탑 `upsertCalendarBlock` 이 채우는 것과 같다. 제목 대체값과
   /// 종일 일정의 end_date/all_day_date 규칙은 `CalendarStore` 가 저장할 때 이미
   /// 적용했으므로 여기서는 그대로 옮기기만 한다.

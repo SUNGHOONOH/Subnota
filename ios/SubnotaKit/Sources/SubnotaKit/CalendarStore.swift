@@ -12,6 +12,25 @@ public struct CalendarEntry: Sendable, Equatable {
   }
 }
 
+/// 데스크탑 `activity_completions` 한 행. 블록을 처음 완료했을 때 한 번 생기고
+/// 절대 지워지지 않는다 — 체크를 꺼도 남는다.
+public struct ActivityCompletion: Codable, Sendable, Equatable {
+  public let id: String
+  public let calendarBlockId: String
+  public let completedAt: Date
+  /// **로컬 시간대 기준** `YYYY-MM-DD`.
+  public let localDate: String
+}
+
+/// 데스크탑 `daily_completions` 한 행. 그 날 Todo 를 전부 끝낸 순간 한 번 생긴다.
+public struct DailyCompletion: Codable, Sendable, Equatable {
+  public let id: String
+  public let localDate: String
+  public let completedAt: Date
+  /// 하루가 끝난 그 시점의 Todo 총 개수. 나중에 일정이 늘어도 바뀌지 않는다.
+  public let todoCount: Int
+}
+
 /// 로컬 일정 저장소. `MemoStore` 와 같은 배관이지만 계약이 다르다:
 /// 저장은 평범한 upsert, 삭제는 하드 삭제, 충돌 해결은 없다.
 public final class CalendarStore: Sendable {
@@ -130,7 +149,83 @@ public final class CalendarStore: Sendable {
     try write(block, status: Self.synced)
   }
 
+  // MARK: - 완료 이벤트
+
+  /// Todo 를 체크했을 때 부른다. 데스크탑 `recordGrowthOnComplete` 와 같은 규칙이다:
+  /// 블록을 처음 완료하면 `activity`, 그 날 Todo 를 전부 끝냈으면 `daily` 를 남긴다.
+  ///
+  /// **append-only 이고 멱등이다.** 로컬 레코드 키를 서버의 유일키(activity 는
+  /// 블록 id, daily 는 날짜)와 똑같이 잡아서, 몇 번을 불러도 행이 늘지 않는다.
+  /// 되돌리는 경로는 없다 — 체크를 꺼도 이벤트는 남는다(데스크탑도 그렇다).
+  ///
+  /// 호출 전에 블록이 완료 상태로 저장돼 있어야 한다. 하루 완료 판정은 저장소를
+  /// 다시 읽어서 하기 때문이다.
+  public func recordCompletion(of block: CalendarBlock, now: Date = Date()) throws {
+    let localDate = dayKey(block)
+
+    if try store.fetch(ownerId: ownerId, type: .activityCompletion, id: block.id) == nil {
+      try writeCompletion(
+        .activityCompletion, id: block.id, now: now,
+        payload: ActivityCompletion(
+          id: Self.newId(), calendarBlockId: block.id, completedAt: now, localDate: localDate
+        )
+      )
+    }
+
+    // 데스크탑 `isDayComplete` — 하나라도 있고 전부 완료여야 한다.
+    let dayBlocks = try visibleBlocks().filter { dayKey($0) == localDate }
+    guard !dayBlocks.isEmpty, dayBlocks.allSatisfy(\.isCompleted) else { return }
+    guard try store.fetch(ownerId: ownerId, type: .dailyCompletion, id: localDate) == nil else {
+      return
+    }
+    try writeCompletion(
+      .dailyCompletion, id: localDate, now: now,
+      payload: DailyCompletion(
+        id: Self.newId(), localDate: localDate, completedAt: now, todoCount: dayBlocks.count
+      )
+    )
+  }
+
+  /// 아직 서버에 못 올린 완료 이벤트. 오프라인에서 쌓였다가 동기화 때 나간다.
+  public func pendingActivityCompletions() throws -> [ActivityCompletion] {
+    try pendingCompletions(.activityCompletion)
+  }
+
+  public func pendingDailyCompletions() throws -> [DailyCompletion] {
+    try pendingCompletions(.dailyCompletion)
+  }
+
+  /// 서버가 받았다. 페이로드는 그대로 두고 상태만 바꾼다 — 이벤트는 불변이다.
+  /// `id` 는 로컬 키다: activity 는 블록 id, daily 는 `local_date`.
+  public func markCompletionSynced(_ type: RecordType, id: String) throws {
+    guard var record = try store.fetch(ownerId: ownerId, type: type, id: id) else { return }
+    record.syncStatus = Self.synced
+    try store.upsert(record)
+  }
+
+  private func pendingCompletions<T: Decodable>(_ type: RecordType) throws -> [T] {
+    try store.list(ownerId: ownerId, type: type)
+      .filter { $0.syncStatus != Self.synced }
+      .map { try PayloadCoder.decode(T.self, from: $0.payloadJSON) }
+  }
+
+  private func writeCompletion<T: Encodable>(
+    _ type: RecordType, id: String, now: Date, payload: T
+  ) throws {
+    try store.upsert(
+      LocalRecord(
+        ownerId: ownerId, type: type, id: id,
+        payloadJSON: try PayloadCoder.encode(payload),
+        syncStatus: Self.pending, updatedAt: now
+      )
+    )
+  }
+
   // MARK: - 내부
+
+  /// Postgres 는 uuid 를 소문자로 돌려준다 — 대문자로 만들면 다음 pull 이 같은 행을
+  /// 못 알아본다(일정 id 에서 이미 겪은 함정이다).
+  private static func newId() -> String { UUID().uuidString.lowercased() }
 
   private func visibleBlocks() throws -> [CalendarBlock] {
     try entries().filter { $0.syncStatus != Self.pendingDelete }.map(\.block)

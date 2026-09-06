@@ -2,7 +2,7 @@ import SwiftUI
 import SubnotaKit
 
 /// 하루치 Todo 목록. 추가 · 체크 토글 · 제목/메모 편집 · 삭제.
-/// 체크는 로컬 `isCompleted` 만 바꾼다 — 완료 이벤트 기록은 Phase 5 Task 4 다.
+/// 체크는 로컬 `isCompleted` 를 바꾸고 완료 이벤트를 남긴다(되돌리지는 않는다).
 struct DayDetailView: View {
   let model: CalendarModel
   let date: Date

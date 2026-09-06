@@ -53,6 +53,7 @@ final class SyncService {
 
     // 캘린더는 메모와 독립이다. 메모 쪽이 실패해도 일정은 올라가야 한다.
     await pushCalendar()
+    await pushCompletions()
     do {
       try await pullCalendar()
     } catch {
@@ -245,6 +246,26 @@ final class SyncService {
         // 이 일정은 대기 상태로 남아 다음 동기화에서 다시 시도된다.
         lastError = "일부 일정을 올리지 못했습니다."
       }
+    }
+  }
+
+  /// 완료 이벤트 아웃박스. 오프라인에서 쌓인 것을 올린다 — 서버 쪽 upsert 가 멱등이라
+  /// 같은 것을 다시 보내도 행이 늘지 않는다. pull 은 없다: append-only 라 받아올
+  /// 것이 없고, 유일한 소비자인 월간 리포트는 서버에서 직접 읽는다.
+  private func pushCompletions() async {
+    do {
+      for record in try calendar.pendingActivityCompletions() {
+        try await calendarRemote.record(record)
+        try calendar.markCompletionSynced(.activityCompletion, id: record.calendarBlockId)
+      }
+      for record in try calendar.pendingDailyCompletions() {
+        try await calendarRemote.record(record)
+        try calendar.markCompletionSynced(.dailyCompletion, id: record.localDate)
+      }
+    } catch {
+      log(error)
+      // 남은 것은 대기 상태로 두고 다음 동기화에서 다시 보낸다.
+      lastError = "일부 완료 기록을 올리지 못했습니다."
     }
   }
 
