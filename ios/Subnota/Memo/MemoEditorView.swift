@@ -21,11 +21,8 @@ struct MemoEditorView: View {
   }
 
   var body: some View {
-    TextEditor(text: $text)
-      .font(Typography.editor())
-      .lineSpacing(16 * 0.6)          // line-height 1.6
-      .foregroundStyle(Palette.ink)
-      .scrollContentBackground(.hidden)
+    // 폰트·줄간격·색은 원문에 입히는 속성이라 MarkdownStyling 이 갖는다.
+    MarkdownTextView(text: $text)
       .background(Palette.canvas)
       .padding(.horizontal, 16)
       .navigationBarTitleDisplayMode(.inline)

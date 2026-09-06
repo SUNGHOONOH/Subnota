@@ -32,6 +32,15 @@ enum Palette {
   static let success = Color(light: 0x2E7D57, dark: 0x4CAF7D)
   /// --app-color-danger
   static let danger = Color(light: 0xB3382F, dark: 0xF97066)
+
+  // 에디터 하이라이트. 데스크탑에는 다크 값이 없어서(라이트 값을 그대로 쓴다)
+  // 다크는 같은 색상을 불투명도만 올려 잡았다 — 어두운 바탕에서 안 보이면 안 된다.
+  /// `==하이라이트==` 배경. 데스크탑 `mark` = rgba(112, 177, 124, 0.34).
+  static let textHighlight = Color(
+    light: Color(hex: 0x70B17C).opacity(0.34), dark: Color(hex: 0x70B17C).opacity(0.30))
+  /// 날짜 토큰 배경. 데스크탑 `simple-editor.scss` `.date-token` = rgba(102, 112, 90, 0.16).
+  static let dateHighlight = Color(
+    light: Color(hex: 0x66705A).opacity(0.16), dark: Color(hex: 0xBFCBA8).opacity(0.22))
 }
 
 extension Color {
