@@ -50,7 +50,12 @@ struct AuthView: View {
       Text("Subnota")
         .font(Typography.wordmark(30))
         .foregroundStyle(Palette.ink)
-      Text(isSignUp ? "Subnota 시작하기" : "정리하지 말고, 작성만 하세요.")
+      // 데스크탑 AuthScreen 은 모드별 제목과 태그라인을 함께 보여준다. 하나만
+      // 번갈아 보여주면 지금이 로그인인지 가입인지 알 수 없다.
+      Text(isSignUp ? "Subnota 시작하기" : "다시 만나서 반가워요")
+        .font(Typography.ui(15, weight: .medium))
+        .foregroundStyle(Palette.ink)
+      Text("정리하지 말고, 작성만 하세요.")
         .font(Typography.ui(13))
         .foregroundStyle(Palette.inkMuted)
     }
