@@ -26,7 +26,10 @@ public final class MemoStore: Sendable {
 
   public func create(content: String, category: String?, now: Date = Date()) throws -> Memo {
     let memo = Memo(
-      id: UUID().uuidString, content: content, category: category,
+      // 서버는 uuid 를 소문자로 돌려준다. 대문자로 만들면 pull 이 같은 메모를 못
+      // 알아보고 사본을 하나 더 만든다(다음 pull 이 대문자 행을 지워 결국 하나로
+      // 수렴하지만, 그 사이 목록에 두 번 나오고 memo_recovery 의 id 가 고아가 된다).
+      id: UUID().uuidString.lowercased(), content: content, category: category,
       createdAt: now, contentUpdatedAt: now
     )
     try save(memo)

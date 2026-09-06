@@ -219,3 +219,11 @@ private func entry(_ memos: MemoStore, _ id: String) throws -> MemoEntry? {
   #expect(try mine.all().count == 1)
   #expect(try theirs.all().isEmpty)
 }
+
+/// 서버는 uuid 를 소문자로 돌려준다. 대문자 id 로 만들면 pull 이 같은 메모를 못
+/// 알아보고 사본을 하나 더 만든다 — 캘린더에서 실제로 목록에 두 번 나왔다.
+@Test func memoIdsAreLowercasedSoTheServerRoundTripMatches() throws {
+  let memos = try makeMemoStore()
+  let memo = try memos.create(content: "x", category: nil)
+  #expect(memo.id == memo.id.lowercased())
+}
