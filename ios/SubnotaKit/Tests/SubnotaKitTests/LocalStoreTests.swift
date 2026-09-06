@@ -1,12 +1,17 @@
 import Foundation
+import GRDB
 import Testing
 @testable import SubnotaKit
 
-private func makeStore() throws -> LocalStore {
+private func makeTempPath() throws -> URL {
   let dir = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  return try LocalStore(path: dir.appendingPathComponent("test.sqlite3"))
+  return dir.appendingPathComponent("test.sqlite3")
+}
+
+private func makeStore() throws -> LocalStore {
+  try LocalStore(path: try makeTempPath())
 }
 
 private func makeRecord(
@@ -60,6 +65,63 @@ private func makeRecord(
 
   #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "a") == nil)
   #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "b") != nil)
+}
+
+@Test func syncedPayloadRoundTripsAndDefaultsToNil() throws {
+  let store = try makeStore()
+  try store.upsert(makeRecord(id: "no-base"))
+  #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "no-base")?.syncedPayloadJSON == nil)
+
+  var withBase = makeRecord(id: "with-base")
+  withBase.syncedPayloadJSON = #"{"content":"acked"}"#
+  try store.upsert(withBase)
+
+  #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "with-base") == withBase)
+  #expect(try store.list(ownerId: "user-1", type: .memo)
+    .first { $0.id == "with-base" }?.syncedPayloadJSON == #"{"content":"acked"}"#)
+}
+
+/// Phase 0+1 이 만든 기기의 DB 에는 synced_payload_json 컬럼이 없다.
+/// CREATE TABLE IF NOT EXISTS 는 기존 테이블을 고치지 않으므로, 이 마이그레이션이
+/// 빠지면 앱이 켜지자마자 모든 읽기·쓰기가 깨진다.
+@Test func opensADatabaseCreatedBeforeTheSyncedPayloadColumn() throws {
+  let path = try makeTempPath()
+  let legacy = try DatabaseQueue(path: path.path)
+  try legacy.write { db in
+    try db.execute(sql: """
+      CREATE TABLE local_records (
+        owner_id TEXT NOT NULL,
+        record_type TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        sync_status TEXT,
+        updated_at TEXT NOT NULL,
+        is_archived INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (owner_id, record_type, record_id)
+      )
+      """)
+    try db.execute(sql: """
+      INSERT INTO local_records
+        (owner_id, record_type, record_id, payload_json, sync_status, updated_at, is_archived)
+      VALUES ('user-1', 'memo', 'legacy', '{"content":"old"}', 'pending',
+              '1970-01-01T00:16:40.000Z', 0)
+      """)
+  }
+  try legacy.close()
+
+  let store = try LocalStore(path: path)
+
+  // 옛 행이 그대로 살아 있고, 컬럼은 NULL 로 채워진다.
+  let loaded = try store.fetch(ownerId: "user-1", type: .memo, id: "legacy")
+  #expect(loaded?.payloadJSON == #"{"content":"old"}"#)
+  #expect(loaded?.syncedPayloadJSON == nil)
+
+  // 새 컬럼에 쓰고 읽는 것도 된다.
+  var updated = try #require(loaded)
+  updated.syncedPayloadJSON = #"{"content":"acked"}"#
+  try store.upsert(updated)
+  #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "legacy")?.syncedPayloadJSON
+    == #"{"content":"acked"}"#)
 }
 
 @Test func recordTypeRawValuesMatchDesktop() {

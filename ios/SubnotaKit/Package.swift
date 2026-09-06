@@ -26,7 +26,11 @@ let package = Package(
     ),
     .testTarget(
       name: "SubnotaKitTests",
-      dependencies: ["SubnotaKit"],
+      // Phase 0+1 이 만든 옛 스키마를 테스트에서 직접 만들어 열어 보려면 필요하다.
+      dependencies: [
+        "SubnotaKit",
+        .product(name: "GRDB", package: "GRDB.swift")
+      ],
       resources: [.copy("Fixtures/sync-golden.json")]
     )
   ]

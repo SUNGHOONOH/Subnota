@@ -5,14 +5,23 @@ import SubnotaKit
 @Observable
 final class MemoListModel {
   private(set) var memos: [Memo] = []
+  private(set) var trashed: [Memo] = []
   var loadError: String?
 
   private let store: MemoStore?
+  private(set) var sync: SyncService?
+
+  /// 화면에 한 줄로 띄울 안내. 로컬 오류가 우선이다 — 그게 더 급하다.
+  var notice: String? { loadError ?? sync?.lastError }
+  var isSyncing: Bool { sync?.isSyncing ?? false }
+  var isOnline: Bool { sync?.isOnline ?? false }
 
   init(ownerId: String) {
     do {
       let local = try LocalStore(path: try AppGroup.databaseURL())
-      store = MemoStore(store: local, ownerId: ownerId)
+      let memoStore = MemoStore(store: local, ownerId: ownerId)
+      store = memoStore
+      sync = SyncService(memos: memoStore, userId: ownerId)
     } catch {
       store = nil
       loadError = "로컬 저장소를 열지 못했습니다."
@@ -23,6 +32,7 @@ final class MemoListModel {
     guard let store else { return }
     do {
       memos = try store.all()
+      trashed = try store.trashed()
       loadError = nil
     } catch { loadError = "메모를 불러오지 못했습니다." }
   }
@@ -59,5 +69,26 @@ final class MemoListModel {
     } catch {
       loadError = "메모를 휴지통으로 옮기지 못했습니다."
     }
+  }
+
+  func restore(_ memo: Memo) {
+    guard let store else { return }
+    do {
+      try store.restore(id: memo.id, now: Date())
+      load()
+    } catch {
+      loadError = "메모를 되돌리지 못했습니다."
+    }
+  }
+
+  /// 네트워크가 없어도 로컬 목록은 그대로다 — 동기화 실패가 화면을 비우지 않는다.
+  func syncNow() async {
+    await sync?.syncNow()
+    load()
+  }
+
+  func emptyTrash() async {
+    await sync?.emptyTrash()
+    load()
   }
 }

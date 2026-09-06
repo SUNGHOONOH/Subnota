@@ -5,6 +5,7 @@ struct MemoListView: View {
   @Environment(SessionStore.self) private var session
   @State private var model: MemoListModel?
   @State private var openedMemo: Memo?
+  @State private var showingTrash = false
 
   var body: some View {
     NavigationStack {
@@ -26,6 +27,16 @@ struct MemoListView: View {
           }
           .tint(Palette.brand)
         }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            showingTrash = true
+          } label: {
+            Image(systemName: "trash").accessibilityLabel("휴지통")
+          }
+          .tint(Palette.inkMuted)
+          .disabled(model == nil)
+        }
+        // 설정(Phase 3)의 자리다. 지금은 로그아웃만 한다 — 건드리지 않는다.
         ToolbarItem(placement: .topBarLeading) {
           Button {
             Task { await session.signOut() }
@@ -40,20 +51,28 @@ struct MemoListView: View {
           model?.save(edited)
         }
       }
+      .navigationDestination(isPresented: $showingTrash) {
+        if let model { TrashView(model: model) }
+      }
     }
-    .onAppear {
+    // 첫 진입에서 한 번 맞춘다. 빈 상태에는 당길 목록이 없어서 새로고침 제스처만
+    // 두면 새 기기가 서버 메모를 영영 못 받는다.
+    .task {
       if model == nil, let ownerId = session.userId {
         model = MemoListModel(ownerId: ownerId)
       }
       model?.load()
+      await model?.syncNow()
     }
+    // 에디터에서 돌아왔을 때 목록을 다시 읽는다.
+    .onAppear { model?.load() }
   }
 
   @ViewBuilder
   private func content(_ model: MemoListModel) -> some View {
     VStack(spacing: 0) {
-      if let loadError = model.loadError {
-        Text(loadError)
+      if let notice = model.notice {
+        Text(notice)
           .font(Typography.ui(12))
           .foregroundStyle(Palette.inkMuted)
           .padding(.horizontal, 16)
@@ -81,12 +100,13 @@ struct MemoListView: View {
         }
       }
       .listStyle(.plain)
+      .refreshable { await model.syncNow() }
     }
   }
 
   private func row(_ memo: Memo) -> some View {
     VStack(alignment: .leading, spacing: 3) {
-      Text(title(of: memo))
+      Text(memo.listTitle)
         .font(Typography.ui(15, weight: .medium))
         .foregroundStyle(Palette.ink)
         .lineLimit(1)
@@ -96,9 +116,12 @@ struct MemoListView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
+}
 
-  private func title(of memo: Memo) -> String {
-    let firstLine = memo.content.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+extension Memo {
+  /// 목록 행 제목 — 첫 줄. 데스크탑 사이드바와 같은 규칙이다. 휴지통도 같이 쓴다.
+  var listTitle: String {
+    let firstLine = content.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
     let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? "제목 없음" : trimmed
   }

@@ -90,11 +90,15 @@ struct MemoRemote {
     )
   }
 
-  /// 휴지통으로 — 서버도 행을 지우지 않는다.
-  func archive(id: String) async throws {
+  /// 휴지통으로 보내기·되돌리기 — 서버도 행을 지우지 않는다.
+  ///
+  /// `upsert_memo_if_base_hash` 는 `is_archived` 를 건드리지 않으므로 되돌리기도
+  /// 반드시 여기를 지나야 한다. 빼면 되돌린 메모가 서버에서는 보관 상태로 남고,
+  /// 다음 pull 이 "서버에 없다"고 판정해 로컬에서 지워 버린다.
+  func setArchived(id: String, _ archived: Bool) async throws {
     try await client
       .from("memos")
-      .update(["is_archived": true], returning: .minimal)
+      .update(["is_archived": archived], returning: .minimal)
       .eq("id", value: id)
       .eq("user_id", value: userId)
       .execute()

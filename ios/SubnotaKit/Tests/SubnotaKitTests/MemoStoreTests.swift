@@ -75,6 +75,116 @@ private func makeMemoStore() throws -> MemoStore {
   #expect(loaded?.contentUpdatedAt == preciseNow)
 }
 
+// MARK: - 동기화 base
+
+private func entry(_ memos: MemoStore, _ id: String) throws -> MemoEntry? {
+  try memos.entries().first { $0.memo.id == id }
+}
+
+@Test func newMemoHasNoSyncedBase() throws {
+  let memos = try makeMemoStore()
+  let memo = try memos.create(content: "새 메모", category: nil, now: Date(timeIntervalSince1970: 10))
+
+  let found = try entry(memos, memo.id)
+  #expect(found?.syncStatus == "pending")
+  #expect(found?.syncedBase == nil)
+}
+
+/// base 가 없으면 3-way 병합이 불가능해진다. 로컬 편집이 이걸 지우면 동시 편집이
+/// 병합 대신 통째 덮어쓰기가 된다.
+@Test func localEditsKeepTheSyncedBase() throws {
+  let memos = try makeMemoStore()
+  var memo = try memos.create(content: "서버본", category: nil, now: Date(timeIntervalSince1970: 10))
+  try memos.markSynced(memo, base: memo)
+
+  memo.content = "고친 것"
+  memo.contentUpdatedAt = Date(timeIntervalSince1970: 50)
+  try memos.save(memo)
+
+  let found = try entry(memos, memo.id)
+  #expect(found?.memo.content == "고친 것")
+  #expect(found?.syncStatus == "pending")
+  #expect(found?.syncedBase?.content == "서버본")
+}
+
+/// 푸시를 미는 사이에 사용자가 더 고쳤으면 그 글자를 덮으면 안 된다.
+@Test func markSyncedDoesNotOverwriteNewerLocalEdits() throws {
+  let memos = try makeMemoStore()
+  let acked = try memos.create(content: "밀던 것", category: nil, now: Date(timeIntervalSince1970: 10))
+
+  var newer = acked
+  newer.content = "미는 사이에 더 침"
+  newer.contentUpdatedAt = Date(timeIntervalSince1970: 50)
+  try memos.save(newer)
+
+  try memos.markSynced(acked, base: acked)
+
+  let found = try entry(memos, acked.id)
+  #expect(found?.memo.content == "미는 사이에 더 침")
+  // 아직 안 올라간 편집이 남았으므로 다음 동기화에서 다시 밀어야 한다.
+  #expect(found?.syncStatus == "pending")
+  #expect(found?.syncedBase?.content == "밀던 것")
+}
+
+@Test func applyRemoteReplacesContentAndBase() throws {
+  let memos = try makeMemoStore()
+  let memo = try memos.create(content: "로컬", category: nil, now: Date(timeIntervalSince1970: 10))
+
+  var server = memo
+  server.content = "서버가 준 것"
+  server.contentUpdatedAt = Date(timeIntervalSince1970: 90)
+  try memos.applyRemote(server)
+
+  let found = try entry(memos, memo.id)
+  #expect(found?.memo.content == "서버가 준 것")
+  #expect(found?.syncStatus == "synced")
+  #expect(found?.syncedBase?.content == "서버가 준 것")
+}
+
+/// 복구 기록은 목록에도 휴지통에도 안 보인다 — 중복 노트를 만들지 않기 위한 것이다.
+@Test func recoveryIsPreservedOutOfSight() throws {
+  let memos = try makeMemoStore()
+  let memo = try memos.create(content: "이긴 쪽", category: nil, now: Date(timeIntervalSince1970: 10))
+
+  try memos.preserveRecovery(
+    memoId: memo.id, content: "진 쪽", source: "server",
+    sourceUpdatedAt: Date(timeIntervalSince1970: 20), now: Date(timeIntervalSince1970: 30)
+  )
+
+  #expect(try memos.all().map(\.id) == [memo.id])
+  #expect(try memos.trashed().isEmpty)
+  #expect(try memos.entries().count == 1)
+}
+
+@Test func recoveryPayloadMatchesTheDesktopShape() throws {
+  let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let store = try LocalStore(path: dir.appendingPathComponent("test.sqlite3"))
+  let memos = MemoStore(store: store, ownerId: "user-1")
+
+  try memos.preserveRecovery(
+    memoId: "m1", content: "진 쪽", source: "local",
+    sourceUpdatedAt: Date(timeIntervalSince1970: 20), now: Date(timeIntervalSince1970: 30)
+  )
+
+  let hash = ContentHash.hash("진 쪽")
+  let record = try #require(
+    try store.fetch(ownerId: "user-1", type: .memoRecovery, id: "m1:\(hash)")
+  )
+  let payload = try #require(
+    try JSONSerialization.jsonObject(with: Data(record.payloadJSON.utf8)) as? [String: Any]
+  )
+  #expect(payload["id"] as? String == "m1:\(hash)")
+  #expect(payload["memo_id"] as? String == "m1")
+  #expect(payload["content"] as? String == "진 쪽")
+  #expect(payload["content_hash"] as? String == hash)
+  #expect(payload["source"] as? String == "local")
+  #expect(payload["source_updated_at"] as? String == "1970-01-01T00:00:20.000Z")
+  #expect(payload["created_at"] as? String == "1970-01-01T00:00:30.000Z")
+  #expect(payload["updated_at"] as? String == "1970-01-01T00:00:30.000Z")
+}
+
 @Test func memosAreScopedToOwner() throws {
   let dir = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent(UUID().uuidString, isDirectory: true)

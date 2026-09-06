@@ -32,6 +32,7 @@ public final class LocalStore: Sendable {
           sync_status TEXT,
           updated_at TEXT NOT NULL,
           is_archived INTEGER NOT NULL DEFAULT 0,
+          synced_payload_json TEXT,
           PRIMARY KEY (owner_id, record_type, record_id)
         )
         """)
@@ -39,6 +40,12 @@ public final class LocalStore: Sendable {
         CREATE INDEX IF NOT EXISTS idx_local_records_owner_type_updated
           ON local_records (owner_id, record_type, updated_at DESC)
         """)
+      // Phase 0+1 기기에는 이 컬럼이 없는 테이블이 이미 있다. CREATE TABLE IF NOT
+      // EXISTS 는 기존 테이블을 고치지 않으므로, 없을 때만 따로 더한다.
+      let columns = try db.columns(in: "local_records").map(\.name)
+      if !columns.contains("synced_payload_json") {
+        try db.execute(sql: "ALTER TABLE local_records ADD COLUMN synced_payload_json TEXT")
+      }
     }
   }
 
@@ -46,17 +53,19 @@ public final class LocalStore: Sendable {
     try dbQueue.write { db in
       try db.execute(sql: """
         INSERT INTO local_records
-          (owner_id, record_type, record_id, payload_json, sync_status, updated_at, is_archived)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (owner_id, record_type, record_id, payload_json, sync_status, updated_at,
+           is_archived, synced_payload_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (owner_id, record_type, record_id) DO UPDATE SET
-          payload_json = excluded.payload_json,
-          sync_status  = excluded.sync_status,
-          updated_at   = excluded.updated_at,
-          is_archived  = excluded.is_archived
+          payload_json        = excluded.payload_json,
+          sync_status         = excluded.sync_status,
+          updated_at          = excluded.updated_at,
+          is_archived         = excluded.is_archived,
+          synced_payload_json = excluded.synced_payload_json
         """, arguments: [
           record.ownerId, record.type.rawValue, record.id, record.payloadJSON,
           record.syncStatus, Self.iso8601.string(from: record.updatedAt),
-          record.isArchived ? 1 : 0
+          record.isArchived ? 1 : 0, record.syncedPayloadJSON
         ])
     }
   }
@@ -113,7 +122,8 @@ public final class LocalStore: Sendable {
       payloadJSON: row["payload_json"],
       syncStatus: row["sync_status"],
       updatedAt: iso8601.date(from: stamp) ?? .distantPast,
-      isArchived: archived != 0
+      isArchived: archived != 0,
+      syncedPayloadJSON: row["synced_payload_json"]
     )
   }
 }
