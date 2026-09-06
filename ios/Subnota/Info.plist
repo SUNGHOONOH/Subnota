@@ -22,6 +22,17 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.subnota.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>subnota</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Pretendard-Regular.otf</string>
