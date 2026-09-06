@@ -54,10 +54,10 @@ final class MemoListModel {
   func delete(_ memo: Memo) {
     guard let store else { return }
     do {
-      try store.delete(id: memo.id)
+      try store.moveToTrash(id: memo.id, now: Date())
       load()
     } catch {
-      loadError = "메모를 삭제하지 못했습니다."
+      loadError = "메모를 휴지통으로 옮기지 못했습니다."
     }
   }
 }

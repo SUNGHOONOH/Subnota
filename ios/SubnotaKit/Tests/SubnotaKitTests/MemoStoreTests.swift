@@ -51,11 +51,11 @@ private func makeMemoStore() throws -> MemoStore {
   #expect(try memos.all().map(\.id) == [newer.id, older.id])
 }
 
-@Test func deleteRemovesTheMemo() throws {
+@Test func purgeRemovesTheMemo() throws {
   let memos = try makeMemoStore()
   let memo = try memos.create(content: "지울 것", category: nil, now: Date(timeIntervalSince1970: 10))
 
-  try memos.delete(id: memo.id)
+  try memos.purge(id: memo.id)
 
   #expect(try memos.load(id: memo.id) == nil)
   #expect(try memos.all().isEmpty)
