@@ -8,13 +8,15 @@ let package = Package(
     .library(name: "SubnotaKit", targets: ["SubnotaKit"])
   ],
   dependencies: [
-    .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0")
+    .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+    .package(url: "https://github.com/apple/swift-markdown.git", from: "0.8.0"),
   ],
   targets: [
     .target(
       name: "SubnotaKit",
       dependencies: [
-        .product(name: "GRDB", package: "GRDB.swift")
+        .product(name: "GRDB", package: "GRDB.swift"),
+        .product(name: "Markdown", package: "swift-markdown"),
       ],
       // 데스크탑과 같은 파일을 그대로 실행한다 — MemoMerge.swift 참고.
       resources: [
