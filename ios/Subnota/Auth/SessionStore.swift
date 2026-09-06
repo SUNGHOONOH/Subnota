@@ -5,6 +5,9 @@ import Supabase
 @Observable
 final class SessionStore {
   private(set) var userId: String?
+  /// 설정 화면이 보여줄 이메일. `userId` 와 항상 같이 움직인다 — 복원 경로에서
+  /// 빠지면 앱을 껐다 켠 뒤 설정이 빈칸을 보인다.
+  private(set) var email: String?
   /// 앱 시작 시 세션 복원 중인지. 이 값만 RootView 의 전체 화면 스피너를 켠다.
   private(set) var isRestoring = true
   /// 폼 안에서 진행 중인 요청. 로그인 화면은 계속 보이고 컨트롤만 잠긴다 —
@@ -19,13 +22,21 @@ final class SessionStore {
   /// 앱 시작 시 저장된 세션을 복원한다. 실패는 정상 — 로그인 화면으로 간다.
   func restore() async {
     defer { isRestoring = false }
-    userId = try? await client.auth.session.user.id.uuidString
+    guard let user = try? await client.auth.session.user else { return }
+    adopt(user)
+  }
+
+  /// 로그인 성공의 유일한 통로. 여기 하나만 지나가게 해야 `email` 을 채우는 걸
+  /// 어느 경로에서 빠뜨리는 일이 없다.
+  private func adopt(_ user: User) {
+    userId = user.id.uuidString
+    email = user.email
   }
 
   func signIn(email: String, password: String) async {
     await run(failureMessage: "로그인하지 못했습니다. 이메일과 비밀번호를 확인해 주세요.") {
       let session = try await self.client.auth.signIn(email: email, password: password)
-      self.userId = session.user.id.uuidString
+      self.adopt(session.user)
     }
   }
 
@@ -42,7 +53,7 @@ final class SessionStore {
     await run(failureMessage: "가입하지 못했습니다. 잠시 후 다시 시도해 주세요.") {
       let response = try await self.client.auth.signUp(email: email, password: password)
       if let session = response.session {
-        self.userId = session.user.id.uuidString
+        self.adopt(session.user)
       } else {
         // 이메일 확인이 켜져 있으면 세션 없이 돌아온다. 가입은 접수된 상태다.
         self.noticeMessage = "확인 메일을 보냈습니다. 메일의 링크를 눌러 가입을 마쳐 주세요."
@@ -63,13 +74,14 @@ final class SessionStore {
         provider: provider,
         redirectTo: Self.oauthRedirect
       )
-      self.userId = session.user.id.uuidString
+      self.adopt(session.user)
     }
   }
 
   func signOut() async {
     try? await client.auth.signOut()
     userId = nil
+    email = nil
   }
 
   /// 폼 요청의 공통 껍데기. 사용자가 시트를 닫은 것은 실패가 아니므로 조용히 넘긴다.

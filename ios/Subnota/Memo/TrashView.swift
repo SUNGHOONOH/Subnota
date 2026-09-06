@@ -84,8 +84,10 @@ struct TrashView: View {
             .buttonStyle(.borderless)
             .tint(Palette.ink)
         }
+        .listRowBackground(Color.clear)
       }
       .listStyle(.plain)
+      .scrollContentBackground(.hidden)
     }
   }
 }

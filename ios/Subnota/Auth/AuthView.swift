@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AuthView: View {
   @Environment(SessionStore.self) private var session
+  @Environment(\.colorScheme) private var colorScheme
   @State private var email = ""
   @State private var password = ""
   @State private var passwordConfirmation = ""
@@ -67,7 +68,10 @@ struct AuthView: View {
       Button {
         Task { await session.signIn(with: .google) }
       } label: {
-        socialLabel("Google 계정으로 로그인", icon: GoogleGlyph(), tint: Palette.ink)
+        // 버튼 바탕이 흰색으로 고정이므로 글자도 고정이어야 한다. Palette.ink 를
+        // 쓰면 다크에서 흰 버튼에 흰 글자가 된다. #1F1F1F 는 Google 브랜딩
+        // 지침이 흰 버튼에 지정한 글자색이다.
+        socialLabel("Google 계정으로 로그인", icon: GoogleGlyph(), tint: Color(hex: 0x1F1F1F))
       }
       .background(Color.white, in: RoundedRectangle(cornerRadius: Self.corner))
       .overlay(RoundedRectangle(cornerRadius: Self.corner).stroke(Palette.border))
@@ -89,7 +93,9 @@ struct AuthView: View {
   /// `session.signIn(with: .apple)` 로 잇는다.
   private var appleButton: some View {
     SignInWithAppleButton(.signIn) { _ in } onCompletion: { _ in }
-      .signInWithAppleButtonStyle(.black)
+      // Apple 의 지침대로 바탕에 맞춰 뒤집는다. 다크에서 .black 을 두면
+      // 어두운 캔버스에 검은 버튼이라 자리 자체가 안 보인다.
+      .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
       .frame(height: Self.buttonHeight)
       .clipShape(RoundedRectangle(cornerRadius: Self.corner))
       .disabled(true)
@@ -169,7 +175,7 @@ struct AuthView: View {
           .frame(height: Self.buttonHeight)
       }
       .background(Palette.brand, in: RoundedRectangle(cornerRadius: Self.corner))
-      .foregroundStyle(.white)
+      .foregroundStyle(Palette.onBrand)
       .opacity(canSubmit ? 1 : 0.5)
       .disabled(!canSubmit)
     }

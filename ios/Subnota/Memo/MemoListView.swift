@@ -6,6 +6,7 @@ struct MemoListView: View {
   @State private var model: MemoListModel?
   @State private var openedMemo: Memo?
   @State private var showingTrash = false
+  @State private var showingSettings = false
 
   var body: some View {
     NavigationStack {
@@ -36,12 +37,11 @@ struct MemoListView: View {
           .tint(Palette.inkMuted)
           .disabled(model == nil)
         }
-        // 설정(Phase 3)의 자리다. 지금은 로그아웃만 한다 — 건드리지 않는다.
         ToolbarItem(placement: .topBarLeading) {
           Button {
-            Task { await session.signOut() }
+            showingSettings = true
           } label: {
-            Image(systemName: "gearshape")
+            Image(systemName: "gearshape").accessibilityLabel("설정")
           }
           .tint(Palette.inkMuted)
         }
@@ -53,6 +53,9 @@ struct MemoListView: View {
       }
       .navigationDestination(isPresented: $showingTrash) {
         if let model { TrashView(model: model) }
+      }
+      .navigationDestination(isPresented: $showingSettings) {
+        SettingsView()
       }
     }
     // 첫 진입에서 한 번 맞춘다. 빈 상태에는 당길 목록이 없어서 새로고침 제스처만
@@ -98,8 +101,12 @@ struct MemoListView: View {
         .onDelete { offsets in
           offsets.map { model.memos[$0] }.forEach(model.delete)
         }
+        .listRowBackground(Color.clear)
       }
       .listStyle(.plain)
+      // List 가 제 배경을 칠하면 다크에서 순흑이 되어 Palette.canvas 를 덮는다
+      // — 제목 영역과 목록 사이에 이음매가 보인다. 에디터도 같은 이유로 숨긴다.
+      .scrollContentBackground(.hidden)
       .refreshable { await model.syncNow() }
     }
   }

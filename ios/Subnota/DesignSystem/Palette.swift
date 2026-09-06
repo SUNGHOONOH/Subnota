@@ -1,20 +1,37 @@
 import SwiftUI
+import UIKit
 
 /// desktop/docs/design.md 의 색 체계를 옮긴 것.
 /// 브랜드 색은 primary action / focus / selection 에만 쓴다. 장식으로 쓰지 않는다.
+///
+/// 다크 값은 지어낸 것이 아니라 데스크탑 `desktop/src/styles/_color-tokens.scss` 의
+/// `html.dark` 블록에서 읽은 것이다. 다른 다크를 만들면 두 앱이 다른 제품처럼 보인다.
 enum Palette {
-  static let brand = Color(hex: 0x325496)        // 잉크 블루
-  static let brandPetal = Color(hex: 0x0B6E4F)   // 로고 오른쪽 잎 전용
-  static let ink = Color(hex: 0x2E2A26)          // 따뜻한 다크브라운 — 순흑 아님
-  static let inkMuted = Color(hex: 0x6B635C)
-  static let canvas = Color.white                // 전면 백색 워크스페이스
-  static let chrome = Color(hex: 0xF4F2EF)       // 중성 회색 크롬
-  static let border = Color(hex: 0xE3DFDA)       // 웜 뉴트럴 헤어라인
+  /// --app-color-brand-500 / -400 (= action-primary)
+  static let brand = Color(light: 0x325496, dark: 0x83A5E2)
+  /// 브랜드 위에 얹는 글자. 다크의 밝은 액센트에 흰 글씨는 대비 2.49로 미달한다
+  /// — 데스크탑 `--app-color-action-primary-text` 가 검은 글씨를 쓰는 이유다.
+  static let onBrand = Color(light: 0xFFFFFF, dark: 0x141413)
+  /// --app-color-brand-petal. 로고 오른쪽 잎 전용.
+  static let brandPetal = Color(light: 0x0B6E4F, dark: 0x3D9C74)
+  /// --app-color-text. 따뜻한 다크브라운 — 순흑 아님.
+  static let ink = Color(light: 0x2E2A26, dark: 0xECE7DD)
+  /// --app-color-muted
+  static let inkMuted = Color(light: 0x6B635C, dark: 0x9A948A)
+  /// --app-color-bg-canvas. 전면 백색 워크스페이스.
+  static let canvas = Color(light: .white, dark: Color(hex: 0x1B1A17))
+  /// --app-color-chrome-bg. 캔버스보다 한 단계 떨어진 별개의 면.
+  static let chrome = Color(light: 0xF4F2EF, dark: 0x24221E)
+  /// --app-color-border. 다크는 불투명 회색이 아니라 바탕 위에 얹는 반투명이다.
+  static let border = Color(light: Color(hex: 0xE3DFDA), dark: Color(hex: 0xFAF9F5).opacity(0.12))
 
   // 상태 색. 브랜드색과 경쟁하지 않도록 채도를 낮췄다. brandPetal(#0b6e4f)은
   // 로고 잎 전용이라 성공색으로 쓰지 않는다.
-  static let success = Color(hex: 0x2E7D57)
-  static let danger = Color(hex: 0xB3382F)
+  /// `_color-tokens.scss` 에는 success 토큰이 없다. 데스크탑의 성공색은
+  /// `subnota-workspace.scss` 의 `--legacy-success` 다 — 다크 오버라이드가 #4caf7d.
+  static let success = Color(light: 0x2E7D57, dark: 0x4CAF7D)
+  /// --app-color-danger
+  static let danger = Color(light: 0xB3382F, dark: 0xF97066)
 }
 
 extension Color {
@@ -26,5 +43,17 @@ extension Color {
       blue: Double(hex & 0xFF) / 255,
       opacity: 1
     )
+  }
+
+  /// 라이트/다크 한 쌍. `UIColor` 의 dynamic provider 를 감싸므로 루트의
+  /// `.preferredColorScheme` 만 바꿔도 이 색을 쓰는 모든 뷰가 따라온다.
+  init(light: Color, dark: Color) {
+    self.init(uiColor: UIColor { traits in
+      UIColor(traits.userInterfaceStyle == .dark ? dark : light)
+    })
+  }
+
+  init(light: UInt32, dark: UInt32) {
+    self.init(light: Color(hex: light), dark: Color(hex: dark))
   }
 }
