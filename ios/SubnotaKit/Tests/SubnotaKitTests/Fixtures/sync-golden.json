@@ -1,0 +1,184 @@
+{
+  "note": "desktop/src/lib/{contentHash,mergeMemo}.ts 에서 생성한 골든 픽스처. Swift 포팅본은 이 값을 정확히 재현해야 한다. 재생성하지 말 것 — 값이 바뀌면 두 클라이언트가 갈렸다는 뜻이다.",
+  "generatedAt": "2026-09-06T07:22:11.083Z",
+  "hashText": [
+    {
+      "input": "",
+      "expected": "ztntfp"
+    },
+    {
+      "input": "a",
+      "expected": "1r9wi7g"
+    },
+    {
+      "input": "hello world",
+      "expected": "1n91413"
+    },
+    {
+      "input": "안녕하세요",
+      "expected": "1u0je2e"
+    },
+    {
+      "input": "메모\n두 번째 줄",
+      "expected": "1dndjkl"
+    },
+    {
+      "input": "👍",
+      "expected": "11s9oov"
+    },
+    {
+      "input": "a👍b",
+      "expected": "sy32uw"
+    },
+    {
+      "input": "가나다라마바사아자차카타파하",
+      "expected": "19r2ctl"
+    },
+    {
+      "input": "# 제목\n\n- [ ] 할 일\n- [x] 끝난 일",
+      "expected": "3yh5du"
+    },
+    {
+      "input": "==하이라이트== 와 <mark data-color=\"#325496\">유색</mark>",
+      "expected": "sw7t26"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "expected": "263fxh"
+    },
+    {
+      "input": "\n\n\n",
+      "expected": "1rpv0ml"
+    },
+    {
+      "input": "  leading and trailing  ",
+      "expected": "10owlm0"
+    },
+    {
+      "input": "Ω≈ç√∫˜µ≤≥÷",
+      "expected": "10x59or"
+    }
+  ],
+  "mergeMemoContent": [
+    {
+      "name": "server-only-change",
+      "base": "hello world",
+      "local": "hello world",
+      "server": "hello brave world",
+      "expectedOk": true,
+      "expectedText": "hello brave world"
+    },
+    {
+      "name": "local-only-change",
+      "base": "hello world",
+      "local": "hello there world",
+      "server": "hello world",
+      "expectedOk": true,
+      "expectedText": "hello there world"
+    },
+    {
+      "name": "both-changed-different-places",
+      "base": "one\ntwo\nthree",
+      "local": "ONE\ntwo\nthree",
+      "server": "one\ntwo\nTHREE",
+      "expectedOk": true,
+      "expectedText": "ONE\ntwo\nTHREE"
+    },
+    {
+      "name": "both-changed-same-place",
+      "base": "one\ntwo\nthree",
+      "local": "one\nLOCAL\nthree",
+      "server": "one\nSERVER\nthree",
+      "expectedOk": true,
+      "expectedText": "one\nSERVER\nthree"
+    },
+    {
+      "name": "korean-both-changed",
+      "base": "첫 줄\n둘째 줄\n셋째 줄",
+      "local": "첫 줄 수정\n둘째 줄\n셋째 줄",
+      "server": "첫 줄\n둘째 줄\n셋째 줄 수정",
+      "expectedOk": true,
+      "expectedText": "첫 줄 수정\n둘째 줄\n셋째 줄 수정"
+    },
+    {
+      "name": "server-appended",
+      "base": "메모",
+      "local": "메모",
+      "server": "메모\n추가된 줄",
+      "expectedOk": true,
+      "expectedText": "메모\n추가된 줄"
+    },
+    {
+      "name": "local-deleted-a-line",
+      "base": "a\nb\nc",
+      "local": "a\nc",
+      "server": "a\nb\nc",
+      "expectedOk": true,
+      "expectedText": "a\nc"
+    },
+    {
+      "name": "empty-base",
+      "base": "",
+      "local": "local text",
+      "server": "server text",
+      "expectedOk": true,
+      "expectedText": "server textlocal text"
+    },
+    {
+      "name": "identical-everything",
+      "base": "same",
+      "local": "same",
+      "server": "same",
+      "expectedOk": true,
+      "expectedText": "same"
+    },
+    {
+      "name": "emoji-edit",
+      "base": "status: 👍",
+      "local": "status: 👍 done",
+      "server": "status: 🎉",
+      "expectedOk": true,
+      "expectedText": "status: 🎉 done"
+    },
+    {
+      "name": "checklist-toggle",
+      "base": "- [ ] 할 일\n- [ ] 다른 일",
+      "local": "- [x] 할 일\n- [ ] 다른 일",
+      "server": "- [ ] 할 일\n- [x] 다른 일",
+      "expectedOk": true,
+      "expectedText": "- [x] 할 일\n- [x] 다른 일"
+    },
+    {
+      "name": "large-server-rewrite",
+      "base": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n",
+      "local": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nlocal tail\n",
+      "server": "rewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\n",
+      "expectedOk": true,
+      "expectedText": "rewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nrewritten\nlocal tail\n"
+    },
+    {
+      "name": "local-fully-rewritten",
+      "base": "alpha beta gamma delta epsilon zeta eta theta",
+      "local": "완전히 다른 내용으로 새로 씀. 원문의 흔적이 없다.",
+      "server": "alpha beta GAMMA delta epsilon zeta eta theta",
+      "expectedOk": false,
+      "expectedText": "완전히 다른 내용으로 새로 씀. 원문의 흔적이 없다."
+    },
+    {
+      "name": "local-emptied-server-edited",
+      "base": "one\ntwo\nthree\nfour\nfive",
+      "local": "",
+      "server": "one\ntwo\nthree CHANGED\nfour\nfive",
+      "expectedOk": false,
+      "expectedText": ""
+    },
+    {
+      "name": "disjoint-rewrites",
+      "base": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "local": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "server": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "expectedOk": false,
+      "expectedText": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    }
+  ]
+}
