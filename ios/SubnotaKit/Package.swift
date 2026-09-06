@@ -15,6 +15,10 @@ let package = Package(
       name: "SubnotaKit",
       dependencies: [.product(name: "GRDB", package: "GRDB.swift")]
     ),
-    .testTarget(name: "SubnotaKitTests", dependencies: ["SubnotaKit"])
+    .testTarget(
+      name: "SubnotaKitTests",
+      dependencies: ["SubnotaKit"],
+      resources: [.copy("Fixtures/sync-golden.json")]
+    )
   ]
 )
