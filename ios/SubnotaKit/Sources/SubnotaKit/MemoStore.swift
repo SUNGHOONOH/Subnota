@@ -85,14 +85,25 @@ public final class MemoStore: Sendable {
   /// 서버가 푸시를 받아들였다. `base` 는 **서버가 실제로 갖고 있는 내용**이다 —
   /// 안 올린 내용을 base 로 삼으면 다음 푸시가 서버 원문을 잘못 병합한다.
   ///
-  /// 미는 사이에 사용자가 더 고쳤으면 내용은 건드리지 않고 base 만 갱신한다.
-  /// 안 그러면 방금 친 글자가 조용히 사라진다.
-  public func markSynced(_ acked: Memo, base: Memo?) throws {
-    let baseJSON = try base.map(Self.encode)
-    if let current = try load(id: acked.id), current.contentUpdatedAt > acked.contentUpdatedAt {
-      try write(current, baseJSON: baseJSON, status: "pending")
+  /// `pushed` 는 이 푸시가 나갈 때 스냅샷한 로컬 레코드다. 지금 로컬이 그것과
+  /// 다르면 미는 사이에 사용자가 더 친 것이므로 방금 친 글자를 지킨다.
+  ///
+  /// 시각 비교로 판별하지 않는 이유: `contentUpdatedAt` 은 JSON 왕복에서 밀리초로
+  /// 잘린다. 같은 밀리초 안에 친 글자는 "더 최신"으로 안 보여 그대로 덮인다.
+  /// 내용 비교에는 그 창이 없다.
+  ///
+  /// 그때는 **base 도 올리지 않는다.** ack 된 내용은 화면에서 밀려났는데 base 만
+  /// 거기로 옮기면, 다음 병합이 base == server 가 되어 패치가 하나도 안 나오고
+  /// 다른 기기의 편집이 로컬에서도 서버에서도 사라진다. base 를 그대로 두면 다음
+  /// 푸시가 그 지점부터 다시 병합해 되찾는다 — 데스크탑도 이 상황에서 결과 적용을
+  /// 포기하고 다시 민다(`App.tsx` 의 revision 검사).
+  public func markSynced(_ acked: Memo, base: Memo?, pushed: Memo) throws {
+    if let current = try load(id: acked.id), current != pushed {
+      let keptBase = try store.fetch(ownerId: ownerId, type: .memo, id: acked.id)?
+        .syncedPayloadJSON
+      try write(current, baseJSON: keptBase, status: "pending")
     } else {
-      try write(acked, baseJSON: baseJSON, status: "synced")
+      try write(acked, baseJSON: try base.map(Self.encode), status: "synced")
     }
   }
 

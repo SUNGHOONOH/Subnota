@@ -103,7 +103,7 @@ final class SyncService {
     // 데스크탑 계약이다. 내용을 안 올렸으니 base 의 내용도 그대로 둔다.
     if memo.isArchived {
       try await remote.setArchived(id: memo.id, true)
-      try memos.markSynced(memo, base: archivedBase(entry))
+      try memos.markSynced(memo, base: archivedBase(entry), pushed: entry.memo)
       return
     }
 
@@ -117,7 +117,7 @@ final class SyncService {
       try memos.purge(id: memo.id)
       return
     }
-    try memos.markSynced(canonical, base: canonical)
+    try memos.markSynced(canonical, base: canonical, pushed: entry.memo)
   }
 
   /// `memoSync.ts` 의 `pushMemoMerging`. nil 은 `status == 'deleted'` 다.

@@ -95,7 +95,7 @@ private func entry(_ memos: MemoStore, _ id: String) throws -> MemoEntry? {
 @Test func localEditsKeepTheSyncedBase() throws {
   let memos = try makeMemoStore()
   var memo = try memos.create(content: "서버본", category: nil, now: Date(timeIntervalSince1970: 10))
-  try memos.markSynced(memo, base: memo)
+  try memos.markSynced(memo, base: memo, pushed: memo)
 
   memo.content = "고친 것"
   memo.contentUpdatedAt = Date(timeIntervalSince1970: 50)
@@ -117,13 +117,34 @@ private func entry(_ memos: MemoStore, _ id: String) throws -> MemoEntry? {
   newer.contentUpdatedAt = Date(timeIntervalSince1970: 50)
   try memos.save(newer)
 
-  try memos.markSynced(acked, base: acked)
+  try memos.markSynced(acked, base: acked, pushed: acked)
 
   let found = try entry(memos, acked.id)
   #expect(found?.memo.content == "미는 사이에 더 침")
   // 아직 안 올라간 편집이 남았으므로 다음 동기화에서 다시 밀어야 한다.
   #expect(found?.syncStatus == "pending")
-  #expect(found?.syncedBase?.content == "밀던 것")
+  // base 는 움직이지 않는다 — SyncBaseTests 의 이유 참고.
+  #expect(found?.syncedBase == nil)
+}
+
+/// `contentUpdatedAt` 은 JSON 왕복에서 밀리초로 잘린다. 같은 밀리초 안에 친 글자를
+/// 시각 비교로 판별하려 하면 "더 최신"으로 안 보여 그대로 덮인다.
+@Test func markSyncedKeepsAnEditMadeInTheSameMillisecond() throws {
+  let memos = try makeMemoStore()
+  let acked = try memos.create(
+    content: "밀던 것", category: nil, now: Date(timeIntervalSince1970: 10.5)
+  )
+
+  var newer = acked
+  newer.content = "같은 밀리초에 더 침"
+  newer.contentUpdatedAt = Date(timeIntervalSince1970: 10.5004)
+  try memos.save(newer)
+
+  try memos.markSynced(acked, base: acked, pushed: acked)
+
+  let found = try entry(memos, acked.id)
+  #expect(found?.memo.content == "같은 밀리초에 더 침")
+  #expect(found?.syncStatus == "pending")
 }
 
 @Test func applyRemoteReplacesContentAndBase() throws {
