@@ -6,6 +6,7 @@ struct MemoEditorView: View {
   @State private var text: String
   @State private var lastSavedContent: String
   @State private var autosave: Task<Void, Never>?
+  @State private var handle = EditorHandle()
   private let memo: Memo
   private let onSave: (Memo) -> Void
 
@@ -22,7 +23,7 @@ struct MemoEditorView: View {
 
   var body: some View {
     // 폰트·줄간격·색은 원문에 입히는 속성이라 MarkdownStyling 이 갖는다.
-    MarkdownTextView(text: $text)
+    MarkdownTextView(text: $text, handle: handle)
       .background(Palette.canvas)
       .padding(.horizontal, 16)
       .navigationBarTitleDisplayMode(.inline)

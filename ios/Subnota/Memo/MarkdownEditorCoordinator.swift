@@ -7,9 +7,24 @@ final class MarkdownEditorCoordinator: NSObject, UITextViewDelegate {
   var text: Binding<String>
   /// 마지막으로 색을 입힌 테마. 다크로 바뀌면 다시 입혀야 한다.
   var styledScheme: ColorScheme?
+  /// 툴바를 그리는 호스팅 컨트롤러. 여기서 안 잡으면 바로 해제돼 SwiftUI 가 갱신을 멈춘다.
+  private var toolbarHost: UIHostingController<FormattingToolbar>?
 
   init(text: Binding<String>) {
     self.text = text
+  }
+
+  /// 키보드 위 서식 툴바.
+  func toolbar(_ handle: EditorHandle) -> UIView {
+    if let existing = toolbarHost?.view { return existing }
+    let host = UIHostingController(rootView: FormattingToolbar { [weak handle] in
+      handle?.apply($0)
+    })
+    host.sizingOptions = [.intrinsicContentSize]
+    host.view.backgroundColor = .clear
+    host.view.frame = CGRect(x: 0, y: 0, width: 0, height: FormattingToolbar.height)
+    toolbarHost = host
+    return host.view
   }
 
   func textViewDidChange(_ textView: UITextView) {

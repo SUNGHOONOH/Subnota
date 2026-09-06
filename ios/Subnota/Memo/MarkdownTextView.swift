@@ -8,6 +8,8 @@ import UIKit
 /// 지우지 않고 흐리게만 한다. 지우면 표시 길이가 원문과 어긋나 커서가 깨진다.
 struct MarkdownTextView: UIViewRepresentable {
   @Binding var text: String
+  /// 키보드 위 툴바가 이 뷰를 붙잡는 손잡이.
+  let handle: EditorHandle
   @Environment(\.colorScheme) private var colorScheme
 
   func makeCoordinator() -> MarkdownEditorCoordinator {
@@ -28,6 +30,11 @@ struct MarkdownTextView: UIViewRepresentable {
     view.smartDashesType = .no
     view.smartInsertDeleteType = .no
     view.text = text  // 원문 그대로. 렌더링 결과를 넣지 않는다.
+    handle.textView = view
+    // 서식 툴바는 SwiftUI `.toolbar(placement: .keyboard)` 로는 뜨지 않았다 —
+    // 첫 응답자가 UIKit 텍스트 뷰라 SwiftUI 가 키보드 세션을 잡지 못한다.
+    // 텍스트 뷰가 직접 들고 있는 `inputAccessoryView` 는 하드웨어 키보드에서도 뜬다.
+    view.inputAccessoryView = context.coordinator.toolbar(handle)
     context.coordinator.restyle(view)
     return view
   }
