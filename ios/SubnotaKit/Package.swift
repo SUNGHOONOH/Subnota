@@ -31,7 +31,10 @@ let package = Package(
         "SubnotaKit",
         .product(name: "GRDB", package: "GRDB.swift")
       ],
-      resources: [.copy("Fixtures/sync-golden.json")]
+      resources: [
+        .copy("Fixtures/sync-golden.json"),
+        .copy("Fixtures/date-golden.json"),
+      ]
     )
   ]
 )
