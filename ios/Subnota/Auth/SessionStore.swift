@@ -86,6 +86,11 @@ final class SessionStore {
     } catch is CancellationError {
       // 사용자가 취소했다.
     } catch {
+      // 사용자에게는 일반 문구를 보이되, 원인은 잃지 않는다. 이걸 삼키면
+      // OAuth 가 어디서 틀어졌는지 알아낼 방법이 없다.
+      #if DEBUG
+        print("[Subnota][auth] \(failureMessage) — \(String(reflecting: error))")
+      #endif
       errorMessage = failureMessage
     }
   }
