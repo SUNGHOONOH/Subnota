@@ -124,6 +124,24 @@ private func makeRecord(
     == #"{"content":"acked"}"#)
 }
 
+/// 계정 삭제와 계정 전환의 방어선. `memo_recovery` 에는 병합에서 밀려난 메모 **본문**이
+/// 남아 있어서, 한 종류라도 빠뜨리면 같은 기기에 다음으로 로그인한 계정이 남의 메모를 본다.
+@Test func clearOwnerRemovesEveryRecordTypeForThatOwnerOnly() throws {
+  let store = try makeStore()
+  try store.upsert(LocalRecord(ownerId: "a", type: .memo, id: "1", payloadJSON: "{}"))
+  try store.upsert(LocalRecord(ownerId: "a", type: .memoRecovery, id: "2", payloadJSON: "{}"))
+  try store.upsert(LocalRecord(ownerId: "a", type: .calendar, id: "3", payloadJSON: "{}"))
+  try store.upsert(LocalRecord(ownerId: "b", type: .memo, id: "4", payloadJSON: "{}"))
+
+  try store.clearOwner("a")
+
+  #expect(try store.list(ownerId: "a", type: .memo).isEmpty)
+  #expect(try store.list(ownerId: "a", type: .memoRecovery).isEmpty)
+  #expect(try store.list(ownerId: "a", type: .calendar).isEmpty)
+  // 다른 계정 데이터는 남는다.
+  #expect(try store.list(ownerId: "b", type: .memo).count == 1)
+}
+
 @Test func recordTypeRawValuesMatchDesktop() {
   #expect(RecordType.activityCompletion.rawValue == "activity_completion")
   #expect(RecordType.dailyCompletion.rawValue == "daily_completion")

@@ -22,6 +22,8 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>MEMO_BACKEND_URL</key>
+	<string>$(MEMO_BACKEND_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

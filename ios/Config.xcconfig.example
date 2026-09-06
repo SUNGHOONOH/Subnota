@@ -1,4 +1,6 @@
 // 복사해서 Config.xcconfig 로 쓴다. Config.xcconfig 는 커밋하지 않는다.
-// 이 둘만 앱 번들에 들어가도 된다. service-role 키는 절대 넣지 않는다.
+// 이 셋만 앱 번들에 들어가도 된다. service-role 키는 절대 넣지 않는다.
 SUPABASE_URL = https:/$()/your-project.supabase.co
 SUPABASE_ANON_KEY = your-anon-key
+// 계정 삭제(DELETE /account)에만 쓴다. 없으면 그 기능만 막힌다.
+MEMO_BACKEND_URL = https:/$()/your-backend.run.app

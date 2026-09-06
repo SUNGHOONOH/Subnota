@@ -100,6 +100,16 @@ public final class LocalStore: Sendable {
     }
   }
 
+  /// 그 owner 의 모든 레코드를 지운다 — 계정 삭제와 계정 전환용.
+  /// `RecordType` 을 순회하지 않는 것이 요점이다. 종류가 늘어도 이 문장은 그대로 전부
+  /// 지운다. 특히 `memo_recovery` 에는 병합에서 밀려난 메모 본문이 남아 있어서, 한
+  /// 종류라도 새면 다음으로 로그인한 계정이 남의 메모를 보게 된다.
+  public func clearOwner(_ ownerId: String) throws {
+    try dbQueue.write { db in
+      try db.execute(sql: "DELETE FROM local_records WHERE owner_id = ?", arguments: [ownerId])
+    }
+  }
+
   // ISO8601DateFormatter is only read (string/date) after setup here, never mutated
   // again, so concurrent use is safe even though the type predates Sendable.
   private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
