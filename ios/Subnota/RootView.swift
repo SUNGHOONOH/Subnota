@@ -6,7 +6,7 @@ struct RootView: View {
 
   var body: some View {
     Group {
-      if session.isLoading {
+      if session.isRestoring {
         ProgressView().tint(Palette.brand)
       } else if session.userId != nil {
         MainTabView()
