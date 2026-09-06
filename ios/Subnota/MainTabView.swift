@@ -4,13 +4,22 @@ struct MainTabView: View {
   var body: some View {
     TabView {
       MemoListView()
-        .tabItem { Label("메모", systemImage: "note.text") }
+        .tabItem {
+          Image(systemName: "note.text")
+            .accessibilityLabel("메모")
+        }
 
       PlaceholderTab(title: "캘린더")
-        .tabItem { Label("캘린더", systemImage: "calendar") }
+        .tabItem {
+          Image(systemName: "calendar")
+            .accessibilityLabel("캘린더")
+        }
 
       PlaceholderTab(title: "링크")
-        .tabItem { Label("링크", systemImage: "macwindow") }
+        .tabItem {
+          Image(systemName: "macwindow")
+            .accessibilityLabel("링크")
+        }
     }
     .tint(Palette.brand)
   }

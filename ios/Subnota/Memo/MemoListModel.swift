@@ -21,8 +21,10 @@ final class MemoListModel {
 
   func load() {
     guard let store else { return }
-    do { memos = try store.all() }
-    catch { loadError = "메모를 불러오지 못했습니다." }
+    do {
+      memos = try store.all()
+      loadError = nil
+    } catch { loadError = "메모를 불러오지 못했습니다." }
   }
 
   func create() -> Memo? {
@@ -41,15 +43,21 @@ final class MemoListModel {
     guard let store else { return }
     var updated = memo
     updated.contentUpdatedAt = Date()
-    do { try store.save(updated) }
-    catch { loadError = "메모를 저장하지 못했습니다." }
-    load()
+    do {
+      try store.save(updated)
+      load()
+    } catch {
+      loadError = "메모를 저장하지 못했습니다."
+    }
   }
 
   func delete(_ memo: Memo) {
     guard let store else { return }
-    do { try store.delete(id: memo.id) }
-    catch { loadError = "메모를 삭제하지 못했습니다." }
-    load()
+    do {
+      try store.delete(id: memo.id)
+      load()
+    } catch {
+      loadError = "메모를 삭제하지 못했습니다."
+    }
   }
 }
