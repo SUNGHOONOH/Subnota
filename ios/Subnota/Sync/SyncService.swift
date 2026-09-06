@@ -15,11 +15,15 @@ final class SyncService {
 
   private let memos: MemoStore
   private let remote: MemoRemote
+  private let calendar: CalendarStore
+  private let calendarRemote: CalendarRemote
   private let monitor = NWPathMonitor()
 
-  init(memos: MemoStore, userId: String) {
+  init(memos: MemoStore, calendar: CalendarStore, userId: String) {
     self.memos = memos
+    self.calendar = calendar
     remote = MemoRemote(client: SupabaseClientProvider.shared, userId: userId)
+    calendarRemote = CalendarRemote(client: SupabaseClientProvider.shared, userId: userId)
     monitor.pathUpdateHandler = { [weak self] path in
       let online = path.status == .satisfied
       Task { @MainActor in self?.isOnline = online }
@@ -45,6 +49,15 @@ final class SyncService {
     } catch {
       log(error)
       lastError = "서버에서 메모를 받아오지 못했습니다."
+    }
+
+    // 캘린더는 메모와 독립이다. 메모 쪽이 실패해도 일정은 올라가야 한다.
+    await pushCalendar()
+    do {
+      try await pullCalendar()
+    } catch {
+      log(error)
+      lastError = "서버에서 일정을 받아오지 못했습니다."
     }
   }
 
@@ -202,6 +215,47 @@ final class SyncService {
       && !serverIds.contains(entry.memo.id) {
       try memos.purge(id: entry.memo.id)
     }
+  }
+
+  // MARK: - 캘린더
+
+  /// 메모와 달리 병합이 없다 — 서버에 그대로 올리고 마지막에 쓴 쪽이 이긴다.
+  /// 삭제는 서버에서도 하드 삭제라, 서버가 지운 것을 확인한 뒤에만 로컬 행을 없앤다.
+  private func pushCalendar() async {
+    let entries: [CalendarEntry]
+    do {
+      entries = try calendar.entries()
+    } catch {
+      log(error)
+      lastError = "로컬 일정을 읽지 못했습니다."
+      return
+    }
+
+    for entry in entries where entry.syncStatus != CalendarStore.synced {
+      do {
+        if entry.syncStatus == CalendarStore.pendingDelete {
+          try await calendarRemote.delete(id: entry.block.id)
+          try calendar.purge(id: entry.block.id)
+        } else {
+          let acked = try await calendarRemote.upsert(entry.block)
+          try calendar.markSynced(acked.toBlock(), pushed: entry.block)
+        }
+      } catch {
+        log(error)
+        // 이 일정은 대기 상태로 남아 다음 동기화에서 다시 시도된다.
+        lastError = "일부 일정을 올리지 못했습니다."
+      }
+    }
+  }
+
+  /// 무엇을 적용하고 무엇을 지울지는 `CalendarPullPlan` 이 정한다 — 그래야 그
+  /// 판단(특히 pending 을 덮지 않는 규칙)을 네트워크 없이 테스트할 수 있다.
+  private func pullCalendar() async throws {
+    let plan = CalendarPullPlan.make(
+      rows: try await calendarRemote.fetchAll(), local: try calendar.entries()
+    )
+    for block in plan.apply { try calendar.applyRemote(block) }
+    for id in plan.purge { try calendar.purge(id: id) }
   }
 
   // MARK: - 도움말

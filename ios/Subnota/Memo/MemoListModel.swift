@@ -21,7 +21,13 @@ final class MemoListModel {
       let local = try LocalStore(path: try AppGroup.databaseURL())
       let memoStore = MemoStore(store: local, ownerId: ownerId)
       store = memoStore
-      sync = SyncService(memos: memoStore, userId: ownerId)
+      // CalendarStore 는 상태가 없다 — 캘린더 화면(Phase 5 Task 3)이 같은
+      // LocalStore 로 자기 것을 만들어도 안전하다.
+      sync = SyncService(
+        memos: memoStore,
+        calendar: CalendarStore(store: local, ownerId: ownerId),
+        userId: ownerId
+      )
     } catch {
       store = nil
       loadError = "로컬 저장소를 열지 못했습니다."
