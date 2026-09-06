@@ -55,7 +55,7 @@ struct MemoListView: View {
         if let model { TrashView(model: model) }
       }
       .navigationDestination(isPresented: $showingSettings) {
-        SettingsView()
+        SettingsView(sync: model?.sync)
       }
     }
     // 첫 진입에서 한 번 맞춘다. 빈 상태에는 당길 목록이 없어서 새로고침 제스처만

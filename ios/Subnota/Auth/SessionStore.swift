@@ -80,6 +80,18 @@ final class SessionStore {
 
   func signOut() async {
     try? await client.auth.signOut()
+    forgetSession()
+  }
+
+  /// 계정 삭제 뒤의 로그아웃. 서버 세션은 계정과 함께 이미 사라졌으므로 전역
+  /// 로그아웃은 실패한다 — 로컬 토큰만 버린다(데스크탑 `App.tsx` 의
+  /// `signOut({ scope: 'local' })`). 일반 로그아웃 동작은 건드리지 않는다.
+  func signOutAfterAccountDeletion() async {
+    try? await client.auth.signOut(scope: .local)
+    forgetSession()
+  }
+
+  private func forgetSession() {
     userId = nil
     email = nil
   }
