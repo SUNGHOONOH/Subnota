@@ -24,7 +24,7 @@ import Testing
   #expect(cases.contains { !$0.expectedOk })
 }
 
-@Test func rebasePrefersTheLiveEditorText() {
+@Test func rebaseAppliesTheEditorDeltaOntoTheCanonicalText() {
   // 편집기가 살아 있는 동안 정본이 바뀌면, 최신 타이핑을 잃지 않는 쪽으로 붙인다.
   let result = MemoMerge.rebaseEditorChange(
     previous: "hello",
@@ -33,4 +33,28 @@ import Testing
   )
   #expect(result.ok)
   #expect(result.text == "hello world")
+}
+
+// 아래 두 케이스의 기대값은 짐작이 아니라 데스크탑 JS 를 돌려서 얻었다.
+// 정방향만 검증하면 폴백 두 갈래가 한 번도 실행되지 않는다.
+
+@Test func rebaseFallsBackToTheInverseDirection() {
+  // 정본이 비면 정방향 패치는 놓을 자리가 없다. 데스크탑은 반대 방향으로 물러선다.
+  let result = MemoMerge.rebaseEditorChange(
+    previous: "hello world",
+    next: "hello brave new world",
+    canonical: ""
+  )
+  #expect(result.ok)
+  #expect(result.text == "ave new world")
+}
+
+@Test func rebaseKeepsTheLiveTextWhenNeitherDirectionApplies() {
+  let result = MemoMerge.rebaseEditorChange(
+    previous: "짧음",
+    next: "xxxxxxxx",
+    canonical: "hello wo음hello wo"
+  )
+  #expect(!result.ok)
+  #expect(result.text == "xxxxxxxx")
 }

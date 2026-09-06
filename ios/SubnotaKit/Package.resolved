@@ -1,14 +1,6 @@
 {
-  "originHash" : "2f689bc85d107c8a89e8942e19d06e0eec6ffacf09ebe1da5d691ee6374547b9",
+  "originHash" : "429a1560d8f6b8bc9d22e37f095c7827404f7cea3b44ef4d497a2137bc3f3128",
   "pins" : [
-    {
-      "identity" : "diffmatchpatch",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/PasiSalenius/DiffMatchPatch.git",
-      "state" : {
-        "revision" : "d6a15076e2de59cd8fd6aba9f7b852aee6b6c414"
-      }
-    },
     {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",
