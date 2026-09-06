@@ -243,3 +243,11 @@ private func at(_ iso: String) -> Date {
   #expect(loaded == remote)
   #expect(try calendar.entries().first?.syncStatus == CalendarStore.synced)
 }
+
+/// 서버는 uuid 를 소문자로 돌려준다. 대문자 id 로 만들면 pull 이 같은 일정을 못
+/// 알아보고 사본을 하나 더 만들어 화면에 두 번 나온다.
+@Test func createsLowercasedIdsSoTheServerRoundTripMatches() throws {
+  let calendar = try makeCalendarStore()
+  let created = try calendar.create(title: "회의", startDate: at("2026-03-01T02:00:00.000Z"))
+  #expect(created.id == created.id.lowercased())
+}

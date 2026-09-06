@@ -23,7 +23,8 @@ public final class CalendarStore: Sendable {
   private let store: LocalStore
   private let ownerId: String
   /// 종일 일정의 날짜 경계를 정하는 시간대. 기기 시간대가 기본이고 테스트가 주입한다.
-  private let timeZone: TimeZone
+  /// 화면도 같은 시간대로 날짜 키를 만들어야 격자와 저장소가 어긋나지 않는다.
+  public let timeZone: TimeZone
 
   public init(store: LocalStore, ownerId: String, timeZone: TimeZone = .current) {
     self.store = store
@@ -43,7 +44,9 @@ public final class CalendarStore: Sendable {
     now: Date = Date()
   ) throws -> CalendarBlock {
     let block = CalendarBlock(
-      id: UUID().uuidString, title: title, note: note,
+      // Postgres 는 uuid 를 소문자로 돌려준다. 대문자로 만들면 pull 이 같은 일정을
+      // 못 알아보고 로컬에 소문자 사본을 하나 더 만든다 — 화면에 두 번 보인다.
+      id: UUID().uuidString.lowercased(), title: title, note: note,
       startDate: startDate, endDate: endDate, allDay: allDay,
       order: order, color: color, categoryId: categoryId,
       createdAt: now, updatedAt: now
@@ -135,7 +138,8 @@ public final class CalendarStore: Sendable {
 
   /// 데스크탑 `getBlockStart` — 종일 일정의 날짜는 `start_date` 가 아니라 저장된
   /// `all_day_date` 다. 다른 시간대에서 만든 종일 일정이 하루 밀리지 않는다.
-  private func dayKey(_ block: CalendarBlock) -> String {
+  /// 월 격자가 날짜별로 묶을 때도 이 규칙을 그대로 써야 한다 — 그래서 public 이다.
+  public func dayKey(_ block: CalendarBlock) -> String {
     if block.allDay, let allDayDate = block.allDayDate { return allDayDate }
     return LocalCalendarDate.string(from: block.startDate, timeZone: timeZone)
   }

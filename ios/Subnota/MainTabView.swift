@@ -9,7 +9,7 @@ struct MainTabView: View {
             .accessibilityLabel("메모")
         }
 
-      PlaceholderTab(title: "캘린더")
+      CalendarView()
         .tabItem {
           Image(systemName: "calendar")
             .accessibilityLabel("캘린더")
@@ -25,7 +25,7 @@ struct MainTabView: View {
   }
 }
 
-/// Phase 4·5 에서 실제 화면으로 교체된다.
+/// 링크 탭은 다음 Phase 에서 실제 화면으로 교체된다.
 private struct PlaceholderTab: View {
   let title: String
 
