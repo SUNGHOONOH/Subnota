@@ -29,6 +29,7 @@ struct AuthView: View {
         divider
         emailForm
         modeToggle
+        legalNotice
       }
       .padding(24)
       .frame(maxWidth: 420)
@@ -113,6 +114,41 @@ struct AuthView: View {
     }
   }
 
+  /// 비밀번호 확인 필드의 상태. 색만으로 알리면 색각 이상 사용자가 못 보므로
+  /// 아이콘과 접근성 라벨을 함께 붙인다.
+  private enum ConfirmationState {
+    case empty, matching, mismatched
+
+    var tint: Color? {
+      switch self {
+      case .empty: nil
+      case .matching: Palette.success
+      case .mismatched: Palette.danger
+      }
+    }
+
+    var icon: String? {
+      switch self {
+      case .empty: nil
+      case .matching: "checkmark.circle.fill"
+      case .mismatched: "exclamationmark.circle.fill"
+      }
+    }
+
+    var spokenState: String {
+      switch self {
+      case .empty: "미입력"
+      case .matching: "비밀번호가 일치합니다"
+      case .mismatched: "비밀번호가 일치하지 않습니다"
+      }
+    }
+  }
+
+  private var confirmationState: ConfirmationState {
+    if passwordConfirmation.isEmpty { return .empty }
+    return passwordsMatch ? .matching : .mismatched
+  }
+
   private var emailForm: some View {
     VStack(spacing: 12) {
       VStack(spacing: 10) {
@@ -126,24 +162,20 @@ struct AuthView: View {
           text: $password
         )
         .textContentType(isSignUp ? .newPassword : .password)
-        if isSignUp {
-          SecureField("비밀번호 확인", text: $passwordConfirmation)
-            .textContentType(.newPassword)
-        }
       }
       .font(Typography.ui(15))
       .padding(12)
       .background(Palette.chrome, in: RoundedRectangle(cornerRadius: Self.corner))
       .overlay(RoundedRectangle(cornerRadius: Self.corner).stroke(Palette.border))
 
+      if isSignUp {
+        confirmationField
+      }
       if isSignUp, !password.isEmpty {
         passwordChecklist
       }
-      if isSignUp, !passwordConfirmation.isEmpty, !passwordsMatch {
-        hint("비밀번호가 일치하지 않습니다.", colour: .red)
-      }
       if let message = session.errorMessage {
-        hint(message, colour: .red)
+        hint(message, colour: Palette.danger)
       }
       if let notice = session.noticeMessage {
         hint(notice, colour: Palette.inkMuted)
@@ -168,6 +200,36 @@ struct AuthView: View {
       .opacity(canSubmit ? 1 : 0.5)
       .disabled(!canSubmit)
     }
+  }
+
+  /// 일치하면 초록, 어긋나면 빨강으로 옅게 덮는다. 워시는 아주 낮은 불투명도라
+  /// 브랜드색과 경쟁하지 않고, 테두리와 아이콘이 실제 신호를 담당한다.
+  private var confirmationField: some View {
+    let state = confirmationState
+    return HStack(spacing: 8) {
+      SecureField("비밀번호 확인", text: $passwordConfirmation)
+        .textContentType(.newPassword)
+        .font(Typography.ui(15))
+      if let icon = state.icon, let tint = state.tint {
+        Image(systemName: icon)
+          .font(.system(size: 15))
+          .foregroundStyle(tint)
+          .transition(.opacity)
+      }
+    }
+    .padding(12)
+    .background(
+      (state.tint ?? Palette.chrome).opacity(state.tint == nil ? 1 : 0.08),
+      in: RoundedRectangle(cornerRadius: Self.corner)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: Self.corner)
+        .stroke(state.tint ?? Palette.border)
+    )
+    .animation(.easeOut(duration: 0.15), value: state.spokenState)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("비밀번호 확인")
+    .accessibilityValue(state.spokenState)
   }
 
   /// 데스크탑과 같은 네 가지 조건을 그대로 보여준다.
@@ -196,6 +258,34 @@ struct AuthView: View {
       .font(Typography.ui(12))
       .foregroundStyle(colour)
       .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// 데스크탑 AuthScreen 의 `.auth-legal-notice` 와 같은 문구·같은 URL 을 쓴다.
+  /// App Store 심사 지침 5.1.1 은 앱 안에서 개인정보 처리방침에 접근할 수 있을 것을
+  /// 요구한다 — 설정에만 두지 않고 가입 지점에도 둔다.
+  private var legalNotice: some View {
+    let terms = URL(string: "https://subnota.com/terms")!
+    let privacy = URL(string: "https://subnota.com/privacy")!
+    return Group {
+      Text("계속하면 ")
+        + Text(AttributedString("서비스 이용약관", attributes: linkStyle(terms)))
+        + Text("에 동의하며, ")
+        + Text(AttributedString("개인정보 처리방침", attributes: linkStyle(privacy)))
+        + Text("에 따라 개인정보가 처리됩니다.")
+    }
+    .font(Typography.ui(11))
+    .foregroundStyle(Palette.inkMuted)
+    .multilineTextAlignment(.center)
+    .padding(.top, 4)
+    .padding(.bottom, 24)
+  }
+
+  private func linkStyle(_ url: URL) -> AttributeContainer {
+    var container = AttributeContainer()
+    container.link = url
+    container.foregroundColor = Palette.inkMuted
+    container.underlineStyle = .single
+    return container
   }
 
   private var modeToggle: some View {

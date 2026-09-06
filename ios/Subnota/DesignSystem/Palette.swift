@@ -10,6 +10,11 @@ enum Palette {
   static let canvas = Color.white                // 전면 백색 워크스페이스
   static let chrome = Color(hex: 0xF4F2EF)       // 중성 회색 크롬
   static let border = Color(hex: 0xE3DFDA)       // 웜 뉴트럴 헤어라인
+
+  // 상태 색. 브랜드색과 경쟁하지 않도록 채도를 낮췄다. brandPetal(#0b6e4f)은
+  // 로고 잎 전용이라 성공색으로 쓰지 않는다.
+  static let success = Color(hex: 0x2E7D57)
+  static let danger = Color(hex: 0xB3382F)
 }
 
 extension Color {
