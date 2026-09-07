@@ -20,7 +20,7 @@ struct MainTabView: View {
         }
         .badge(inbox?.items.count ?? 0)
 
-      PlaceholderTab(title: "링크")
+      InboxListView()
         .tabItem {
           Image(systemName: "macwindow")
             .accessibilityLabel("링크")
@@ -33,23 +33,6 @@ struct MainTabView: View {
         inbox = ScheduleInboxModel(ownerId: ownerId)
       }
       await inbox?.refresh()
-    }
-  }
-}
-
-/// 링크 탭은 다음 Phase 에서 실제 화면으로 교체된다.
-private struct PlaceholderTab: View {
-  let title: String
-
-  var body: some View {
-    NavigationStack {
-      VStack(spacing: 8) {
-        Text(title).font(Typography.ui(15, weight: .semibold)).foregroundStyle(Palette.ink)
-        Text("준비 중입니다").font(Typography.ui(13)).foregroundStyle(Palette.inkMuted)
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Palette.canvas)
-      .navigationTitle(title)
     }
   }
 }
