@@ -4,6 +4,7 @@ import SubnotaKit
 /// 링크 탭. 공유하거나 데스크탑에서 담은 링크의 요약 목록이다.
 struct InboxListView: View {
   @Environment(SessionStore.self) private var session
+  @Environment(\.scenePhase) private var scenePhase
   @State private var model: InboxListModel?
   @State private var opened: InboxSession?
 
@@ -31,6 +32,11 @@ struct InboxListView: View {
       }
       model?.load()
       await model?.refresh()
+    }
+    // 사파리에서 공유하고 앱으로 돌아오면 이 탭은 이미 떠 있어서 `.task` 가 다시
+    // 돌지 않는다. 그러면 공유한 링크가 당겨 새로고침할 때까지 안 보인다.
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { Task { await model?.refresh() } }
     }
   }
 
@@ -200,6 +206,9 @@ final class InboxListModel {
 
   /// 네트워크가 없어도 로컬 캐시는 그대로다 — 새로고침 실패가 목록을 비우지 않는다.
   func refresh() async {
+    // 공유 큐를 먼저 비운다. 목록을 받아 온 뒤에 올리면 방금 공유한 링크가
+    // 다음 새로고침까지 안 보인다.
+    await SharedItemDrain.drain()
     do {
       try store?.replace(with: try await remote.list())
       loadError = nil

@@ -27,6 +27,9 @@ targets:
         product: SubnotaKit
       - package: Supabase
         product: Supabase
+      # 앱이 확장을 품는다. App Group entitlement 는 양쪽에 다 있어야 한다 —
+      # 한쪽만 붙이면 공유 큐가 서로 안 보인다.
+      - target: SubnotaShareExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.subnota.app
@@ -37,3 +40,17 @@ targets:
     configFiles:
       Debug: Config.xcconfig
       Release: Config.xcconfig
+
+  SubnotaShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SubnotaShareExtension
+    settings:
+      base:
+        # 확장의 번들 id 는 앱 id 로 시작해야 한다.
+        PRODUCT_BUNDLE_IDENTIFIER: com.subnota.app.share
+        INFOPLIST_FILE: SubnotaShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SubnotaShareExtension/SubnotaShareExtension.entitlements
+        SWIFT_VERSION: "6.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
