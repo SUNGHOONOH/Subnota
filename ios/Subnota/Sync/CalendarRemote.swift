@@ -69,6 +69,37 @@ struct CalendarRemote {
       .execute()
   }
 
+  // MARK: - 일정 수집함
+
+  private static let inboxColumns =
+    "id, memo_id, title, source_text, scheduled_at, time_text, all_day, confidence, status, "
+    + "created_at"
+
+  /// 데스크탑 `fetchScheduleInbox` 와 같은 계약 — pending 만, 감지된 시각 순, 30개까지.
+  func fetchScheduleInbox() async throws -> [RemoteScheduleInboxRow] {
+    try await client
+      .from("schedule_inbox")
+      .select(Self.inboxColumns)
+      .eq("user_id", value: userId)
+      .eq("status", value: "pending")
+      .order("scheduled_at", ascending: true)
+      .limit(30)
+      .execute()
+      .value
+  }
+
+  /// 데스크탑 `updateScheduleInboxStatus`. 개발 중 들어간 잘못된 id 를 그대로 보내면
+  /// PostgREST 가 영구히 400(22P02)을 돌려줘 아웃박스가 영원히 재시도한다.
+  func updateScheduleInbox(id: String, status: String) async throws {
+    guard UUID(uuidString: id) != nil else { return }
+    try await client
+      .from("schedule_inbox")
+      .update(["status": status], returning: .minimal)
+      .eq("id", value: id)
+      .eq("user_id", value: userId)
+      .execute()
+  }
+
   private struct ActivityRow: Encodable {
     let id: String
     let userId: String

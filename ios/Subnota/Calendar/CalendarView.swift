@@ -4,6 +4,9 @@ import SubnotaKit
 /// 월 격자와 주 뷰. 날짜를 누르면 그 날의 Todo 목록으로 들어간다.
 /// 드래그로 일정을 옮기는 동작은 스펙에서 뺐다 — 넣지 말 것.
 struct CalendarView: View {
+  /// 탭 배지와 같은 상태를 봐야 해서 `MainTabView` 가 만들어 넘긴다.
+  let inbox: ScheduleInboxModel?
+
   @Environment(SessionStore.self) private var session
   @State private var model: CalendarModel?
   /// 지금 보고 있는 달(또는 주)에 속한 아무 날. 이동은 이 값만 바꾼다.
@@ -12,6 +15,7 @@ struct CalendarView: View {
   @State private var openedDay: DaySelection?
   @State private var report: MonthlyReportModel?
   @State private var showingReport = false
+  @State private var showingInbox = false
 
   /// 사용자가 달력을 불교력으로 바꿔 뒀어도 화면은 기기 설정을 따른다.
   /// 한 주의 시작 요일도 여기서 온다 — 한국은 일요일, 유럽은 월요일이다.
@@ -43,6 +47,18 @@ struct CalendarView: View {
           .tint(Palette.inkMuted)
           .disabled(report == nil)
         }
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            showingInbox = true
+          } label: {
+            // 개수는 탭 배지가 들고 있다. 여기서는 들어온 게 있다는 것만 채운
+            // 아이콘으로 알린다.
+            Image(systemName: (inbox?.items.isEmpty ?? true) ? "tray" : "tray.full")
+              .accessibilityLabel("일정 수집함")
+          }
+          .tint(Palette.inkMuted)
+          .disabled(inbox == nil)
+        }
         ToolbarItem(placement: .topBarTrailing) {
           // 몇 달 넘긴 뒤 오늘로 돌아올 길이 없으면 안 된다.
           Button("오늘") { anchor = Date() }
@@ -55,6 +71,10 @@ struct CalendarView: View {
       }
       .sheet(isPresented: $showingReport) {
         if let report { MonthlyReportView(model: report) }
+      }
+      // 수락한 후보는 새 일정이 됐다 — 격자를 다시 읽어야 보인다.
+      .sheet(isPresented: $showingInbox, onDismiss: { model?.load(days) }) {
+        if let inbox { ScheduleInboxView(model: inbox) }
       }
     }
     .task {
