@@ -169,13 +169,20 @@ final class CalendarModel {
   var loadError: String?
 
   private let store: CalendarStore?
+  /// 위젯 스냅샷은 오늘 일정과 최근 메모를 같이 담는다 — 한쪽만으로는 못 만든다.
+  private let memos: MemoStore?
+  private let ownerId: String
   private var loadedDays: [Date] = []
 
   init(ownerId: String) {
+    self.ownerId = ownerId
     do {
-      store = CalendarStore(store: try LocalStore(path: try AppGroup.databaseURL()), ownerId: ownerId)
+      let local = try LocalStore(path: try AppGroup.databaseURL())
+      store = CalendarStore(store: local, ownerId: ownerId)
+      memos = MemoStore(store: local, ownerId: ownerId)
     } catch {
       store = nil
+      memos = nil
       loadError = "로컬 저장소를 열지 못했습니다."
     }
   }
@@ -188,6 +195,9 @@ final class CalendarModel {
       let blocks = try store.blocks(in: DateInterval(start: first, end: max(first, last)))
       byDay = Dictionary(grouping: blocks, by: store.dayKey)
       loadError = nil
+      if let memos {
+        WidgetSnapshot.refresh(memos: memos, calendar: store, ownerId: ownerId)
+      }
     } catch {
       loadError = "일정을 불러오지 못했습니다."
     }
