@@ -186,6 +186,13 @@ public final class CalendarStore: Sendable {
     )
   }
 
+  /// 이 기기에 남아 있는 완료 이벤트 전부. 월간 리포트의 입력이다 — 올린 것까지
+  /// 세지 않으면 동기화 직후 "해낸 일"이 0으로 떨어진다.
+  public func activityCompletions() throws -> [ActivityCompletion] {
+    try store.list(ownerId: ownerId, type: .activityCompletion)
+      .map { try PayloadCoder.decode(ActivityCompletion.self, from: $0.payloadJSON) }
+  }
+
   /// 아직 서버에 못 올린 완료 이벤트. 오프라인에서 쌓였다가 동기화 때 나간다.
   public func pendingActivityCompletions() throws -> [ActivityCompletion] {
     try pendingCompletions(.activityCompletion)

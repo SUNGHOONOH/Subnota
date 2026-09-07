@@ -218,6 +218,18 @@ private func completeTodo(
   #expect(try calendar.pendingDailyCompletions().isEmpty)
 }
 
+/// 월간 리포트는 대기열이 아니라 전부를 읽는다 — 올린 이벤트를 빼면 동기화
+/// 직후에 "해낸 일"이 0으로 떨어진다.
+@Test func keepsSyncedCompletionsInTheReportInput() throws {
+  let (calendar, _) = try makeStores()
+  let now = at("2026-03-01T05:00:00.000Z")
+  let block = try completeTodo(calendar, title: "하나", start: now, now: now)
+  try calendar.markCompletionSynced(.activityCompletion, id: block.id)
+
+  #expect(try calendar.pendingActivityCompletions().isEmpty)
+  #expect(try calendar.activityCompletions().map(\.localDate) == ["2026-03-01"])
+}
+
 /// 서버로 보내는 id 는 소문자 uuid 다 — Postgres 가 소문자로 돌려주므로 대문자로
 /// 만들면 다음 pull 이 같은 행을 못 알아본다(캘린더에서 이미 겪은 함정이다).
 @Test func mintsLowercaseUuidsForCompletionRows() throws {

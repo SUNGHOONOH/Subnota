@@ -33,6 +33,17 @@ enum Palette {
   /// --app-color-danger
   static let danger = Color(light: 0xB3382F, dark: 0xF97066)
 
+  /// --app-color-data-1 … -5. 월간 리포트 잔디의 5단계. 데이터에 브랜드색을 쓰지
+  /// 않으려고 데스크탑이 따로 둔 색이다 — 단계는 투명도가 아니라 색으로 구분한다.
+  /// index 0 = 기록 없음.
+  static let dataLevels: [Color] = [
+    Color(light: 0xE7F2EA, dark: 0x1B2A21),
+    Color(light: 0xC4E3CD, dark: 0x244631),
+    Color(light: 0x98D2AA, dark: 0x2F6644),
+    Color(light: 0x61BB82, dark: 0x3D8B5B),
+    Color(light: 0x1DAD64, dark: 0x4FB87A),
+  ]
+
   // 에디터 하이라이트. 데스크탑에는 다크 값이 없어서(라이트 값을 그대로 쓴다)
   // 다크는 같은 색상을 불투명도만 올려 잡았다 — 어두운 바탕에서 안 보이면 안 된다.
   /// `==하이라이트==` 배경. 데스크탑 `mark` = rgba(112, 177, 124, 0.34).

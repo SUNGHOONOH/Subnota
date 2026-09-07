@@ -36,6 +36,7 @@ let package = Package(
       resources: [
         .copy("Fixtures/sync-golden.json"),
         .copy("Fixtures/date-golden.json"),
+        .copy("Fixtures/report-golden.json"),
       ]
     )
   ]

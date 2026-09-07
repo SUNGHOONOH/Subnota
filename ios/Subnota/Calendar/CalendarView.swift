@@ -10,6 +10,8 @@ struct CalendarView: View {
   @State private var anchor = Date()
   @State private var scope: CalendarScope = .month
   @State private var openedDay: DaySelection?
+  @State private var report: MonthlyReportModel?
+  @State private var showingReport = false
 
   /// 사용자가 달력을 불교력으로 바꿔 뒀어도 화면은 기기 설정을 따른다.
   /// 한 주의 시작 요일도 여기서 온다 — 한국은 일요일, 유럽은 월요일이다.
@@ -31,6 +33,16 @@ struct CalendarView: View {
       .navigationTitle("캘린더")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            report?.load()
+            showingReport = true
+          } label: {
+            Image(systemName: "chart.bar.xaxis").accessibilityLabel("월간 리포트")
+          }
+          .tint(Palette.inkMuted)
+          .disabled(report == nil)
+        }
         ToolbarItem(placement: .topBarTrailing) {
           // 몇 달 넘긴 뒤 오늘로 돌아올 길이 없으면 안 된다.
           Button("오늘") { anchor = Date() }
@@ -41,10 +53,14 @@ struct CalendarView: View {
       .navigationDestination(item: $openedDay) { selection in
         if let model { DayDetailView(model: model, date: selection.date) }
       }
+      .sheet(isPresented: $showingReport) {
+        if let report { MonthlyReportView(model: report) }
+      }
     }
     .task {
       if model == nil, let ownerId = session.userId {
         model = CalendarModel(ownerId: ownerId)
+        report = MonthlyReportModel(ownerId: ownerId)
       }
       model?.load(days)
     }
