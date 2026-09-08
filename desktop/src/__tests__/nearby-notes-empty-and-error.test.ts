@@ -7,7 +7,8 @@ import { joinNoteContent, splitNoteContent } from '../lib/noteTitle';
 const read = (relativePath: string) =>
   readFileSync(resolve(__dirname, '..', relativePath), 'utf8');
 
-const splitSource = read('features/memo/components/MemoSplitWorkspace.tsx');
+const nearbySearchSource = read('features/memo/useNearbyNotesSearch.ts');
+const nearbySource = read('features/memo/components/NearbyNotesPane.tsx');
 const miniSource = read('features/mini/MiniComposer.tsx');
 const styles = read('styles/subnota-workspace.scss');
 
@@ -15,9 +16,9 @@ describe('State B — 주변 메모가 없을 때', () => {
   // 백엔드는 콜드 스타트로 20초까지 걸린다. 붙을 메모도 링크도 없는 계정이
   // 그 20초를 기다렸다가 "다시 시도"를 보면, 없는 것을 계속 다시 찾게 된다.
   it('붙을 것이 없으면 요청 없이 빈 상태로 끝낸다', () => {
-    const search = splitSource.slice(
-      splitSource.indexOf('const runEditorStateBSearch'),
-      splitSource.indexOf('await onBeforeNetworkSearch?.();'),
+    const search = nearbySearchSource.slice(
+      nearbySearchSource.indexOf('const runEditorStateBSearch'),
+      nearbySearchSource.indexOf('await onBeforeNetworkSearch?.();'),
     );
 
     expect(search).toContain('const hasSearchableNeighbor =');
@@ -31,17 +32,17 @@ describe('State B — 주변 메모가 없을 때', () => {
 describe('State B — 검색이 실패했을 때', () => {
   // 떠 있는 카드로 얹으면 토스트처럼 읽혀 빈 결과와 실패가 서로 다른 곳에 뜬다.
   it('빈 상태와 같은 자리에 마크 + 문구 + 다시 시도로 선다', () => {
-    const errorBlock = splitSource.slice(
-      splitSource.indexOf('{editor.networkErrorMessage && ('),
-      splitSource.indexOf('{editor.networkIsLoading &&'),
+    const errorBlock = nearbySource.slice(
+      nearbySource.indexOf('{errorMessage && ('),
+      nearbySource.indexOf('{isLoading &&'),
     );
 
     expect(errorBlock).toContain('<EmptyState');
     expect(errorBlock).toContain('tone="start"');
-    expect(errorBlock).toContain('title={editor.networkErrorMessage}');
-    expect(errorBlock).toContain('isNetworkSearchRetryableMessage');
-    expect(errorBlock).toContain('void runEditorStateBSearch(pane, editor)');
-    expect(splitSource).not.toContain('net-overlay-stack');
+    expect(errorBlock).toContain('title={errorMessage}');
+    expect(errorBlock).toContain('canRetry');
+    expect(errorBlock).toContain('onClick={onRetry}');
+    expect(nearbySource).not.toContain('net-overlay-stack');
   });
 
   // .empty-state.canvas는 그래프를 가리지 않으려고 클릭을 통과시킨다.

@@ -24,7 +24,8 @@ describe('Quick Subnota — 단축키는 표시만 한다', () => {
   });
 
   it('설정 쪽 단축키 편집은 그대로 남아 있다', () => {
-    const settings = read('features/settings/SettingsModal.tsx');
+    const settings = `${read('features/settings/SettingsModal.tsx')}
+${read('features/settings/SettingsHotkeysSection.tsx')}`;
 
     expect(settings).toContain('suspendGlobalShortcuts');
     expect(settings).toContain('ShortcutRecorder');

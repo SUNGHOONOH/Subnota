@@ -20,7 +20,6 @@ import { StarterKit } from "@tiptap/starter-kit"
 import { Image } from "@tiptap/extension-image"
 import { TaskItem, TaskList } from "@tiptap/extension-list"
 import { TextAlign } from "@tiptap/extension-text-align"
-import { Highlight } from "@tiptap/extension-highlight"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import { Selection } from "@tiptap/extensions"
@@ -41,6 +40,7 @@ import {
   DATE_HIGHLIGHT_LANGUAGE_META,
   DateHighlight,
 } from "@/components/tiptap-extension/date-highlight-extension"
+import { ColorHighlightMarkdown } from "@/components/tiptap-extension/color-highlight-markdown-extension"
 import { FormattingShortcuts } from "@/components/tiptap-extension/formatting-shortcuts-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
 import { CodeBlock } from "@/components/tiptap-node/code-block-node/code-block-node-extension"
@@ -446,7 +446,7 @@ export function SimpleEditor({
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Highlight.configure({ multicolor: true }),
+      ColorHighlightMarkdown.configure({ multicolor: true }),
       DateHighlight.configure({ language }),
       AmbientGhostExtension,
       Image,

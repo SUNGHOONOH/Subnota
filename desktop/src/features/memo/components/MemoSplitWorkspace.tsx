@@ -5,40 +5,16 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
-import { Skeleton, Tooltip, VisuallyHidden } from '@mantine/core';
 import type { Editor } from '@tiptap/core';
 import { formatRelativeDay } from '../../../lib/relativeDay';
 import {
   type AppShortcutSettings,
   formatHotkeyHint,
-  formatHotkeyTooltip,
 } from '../../../lib/shortcutSettings';
-import SubnotaScatterMark from '../../../components/SubnotaScatterMark';
 import {
-  AppWindow,
   CalendarDays,
-  Check,
-  ChevronDown,
-  ClipboardCopy,
-  Cloud,
-  Columns2,
-  Copy,
-  Download,
-  Inbox,
-  MoreHorizontal,
   Network,
-  NotebookText,
-  PanelLeft,
-  PanelLeftClose,
-  Pin,
-  PinSolid,
-  Plus,
-  Search,
-  Topics,
-  Trash2,
-  X,
 } from '@/components/icons';
 import { useClickOutside } from '@mantine/hooks';
 import TooltipIconButton from '../../../components/TooltipIconButton';
@@ -60,27 +36,16 @@ import {
 import { resolveMemoSavePresentation } from '../../../lib/memoSaveStatus';
 import { InboxSession } from '../../../services/backend/inboxService';
 import { isMeaningfulChunk, MemoChunk } from '../../../lib/memoChunker';
-import { copyTextToClipboard } from '../../../lib/copy-code';
 import type { AmbientSearchTarget } from '../../../lib/ambientSearch';
 import {
   NetworkSearchResult,
-  formatNetworkSearchErrorMessage,
-  isNetworkSearchRetryableMessage,
-  searchStateB,
-} from '../../../services/backend/networkService';
-import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
-import { EditorContext } from '@tiptap/react';
-import { UndoRedoButton } from '../../../components/tiptap-ui/undo-redo-button/undo-redo-button';
+} from '../../../services/local/memoSearchTypes';
 import {
   type AmbientGhost,
   type AmbientIdleAnchor,
   NoteFixedToolbar,
   SimpleEditor,
 } from '../../../components/tiptap-templates/simple/simple-editor';
-import CalendarWorkspace from '../../calendar/CalendarWorkspace';
-import ScheduleInboxWorkspace from '../../schedule/ScheduleInboxWorkspace';
-import InboxWorkspace from '../../inbox/InboxWorkspace';
-import { getMemoCategory } from '../../../lib/memoCategory';
 import {
   editorsAfterCloseTab,
   editorsAfterOpenSource,
@@ -96,23 +61,26 @@ import {
   buildScheduleNote,
   didScheduleConfirmSelectionChange,
 } from '../../../lib/scheduleFromSelection';
-import DateSchedulePopover from './DateSchedulePopover';
-import ScheduleConfirmPopover from './ScheduleConfirmPopover';
-import SourceDetailPane from './SourceDetailPane';
-import KnowledgeGraphView, {
-  KnowledgeGraphEdge,
-  KnowledgeGraphNode,
-} from './KnowledgeGraphView';
+import MemoSplitScheduleOverlay, {
+  type MemoSplitScheduleConfirmState,
+} from './MemoSplitScheduleOverlay';
+import RelatedSentenceCard from './RelatedSentenceCard';
+import MemoSplitPaneHeader from './MemoSplitPaneHeader';
+import MemoSplitNoteMenu from './MemoSplitNoteMenu';
+import MemoSplitSpecialView from './MemoSplitSpecialView';
+import SplitWorkspaceCommandBar from './SplitWorkspaceCommandBar';
+import { useSplitPaneResize } from '../useSplitPaneResize';
+import { useNearbyNotesSearch } from '../useNearbyNotesSearch';
 import {
-  capCrossTopicBridges,
-  capIntraTopicEdges,
-  getSimilarityMapGeometry,
-  GRAPH_COLORS,
-  GRAPH_INBOX_NODE,
-  LINK_NODE_ICON,
-  NOTE_NODE_ICON,
-} from './knowledgeGraph';
-import EmptyState from '../../../components/EmptyState';
+  EDITOR_TAB_DRAG_TYPE,
+  getActiveEditor,
+  getPaneEditors,
+  inboxSessionToSourceResult,
+  memoToPreviewResult,
+  mirrorEditorPatch,
+  TabDropTarget,
+  createEditor,
+} from '../memoSplitWorkspaceUtils';
 import { localize, useUiLanguage } from '../../../lib/uiLanguage';
 
 export type MemoSplitPaneView =
@@ -154,509 +122,11 @@ export interface MemoSplitPaneState extends MemoSplitEditorState {
   editors?: MemoSplitEditorState[];
 }
 
-const VIEW_LABELS: Record<MemoSplitPaneView, { en: string; ko: string }> = {
-  briefing: { en: 'Schedule inbox', ko: '일정 저장함' },
-  calendar: { en: 'Calendar', ko: '캘린더' },
-  inbox: { en: 'Link inbox', ko: '링크 저장함' },
-  memo: { en: 'Note', ko: '노트' },
-  network: { en: 'Nearby notes', ko: '주변 메모' },
-  source: { en: 'Web summary', ko: '웹 요약' },
-  topics: { en: 'Topics', ko: 'Topics' },
-};
-
-const viewLabel = (view: MemoSplitPaneView, language: 'en' | 'ko') =>
-  VIEW_LABELS[view][language];
-
-const getMemoTabLabel = (content: string, language: 'en' | 'ko') => {
-  const firstContentLine = content
-    .split('\n')
-    .map((line) => line.trim())
-    .find(Boolean);
-
-  return firstContentLine ?? viewLabel('memo', language);
-};
-
-const EDITOR_TAB_DRAG_TYPE = 'application/x-subnota-editor-tab';
-
-type TabDropTarget = {
-  editorId?: string;
-  paneId: string;
-  position: 'after' | 'before';
-};
-
 // network·source는 네트워크 검색·웹 요약 열기의 결과로만 열리는 뷰라
 // 사용자가 직접 고르는 목록에서는 제외한다.
-const MENU_VIEWS: MemoSplitPaneView[] = ['memo', 'inbox', 'calendar', 'topics'];
-
-const VIEW_ICONS: Partial<Record<MemoSplitPaneView, typeof NotebookText>> = {
-  briefing: Inbox,
-  calendar: CalendarDays,
-  inbox: AppWindow,
-  memo: NotebookText,
-  topics: Topics,
-};
-// Drag floor only — keeps a pane grabbable. Auto-layout (window narrowing) has no
-// floor (CSS min-width:0), so content panes clip rather than forcing a scrollbar.
-const SPLIT_PANE_MIN_WIDTH_PX = 240;
-const TOPIC_GRAPH_MEMO_NODE_LIMIT = 32;
-// Cross-topic pairs keep only their strongest bridges (same as the rail map).
-const TOPIC_BRIDGE_EDGE_LIMIT = 2;
-// Intra-topic edges: per-memo KNN union + similarity floor. Backend ships
-// top-8/0.38 which renders as a clique; our edge data sits at p50≈0.44 with
-// real matches ≥0.7, so 3/0.45 keeps the strong skeleton only.
-const TOPIC_INTRA_EDGE_TOP_K = 3;
-const TOPIC_INTRA_EDGE_MIN_SIMILARITY = 0.45;
-// Distinct hues so clusters read as different color groups. First three match
-// the topics-network reference mock (violet-blue / green / orange-red);
-// assigned by cluster index in buildSplitTopicGraph.
-const TOPIC_COLORS = [
-  '#8f8ee0',
-  '#5cb84d',
-  '#d1502c',
-  '#b8892b',
-  '#4aa5a5',
-  '#c04f7a',
-  '#3d7dbf',
-  '#7b6240',
-];
-
-const createEditorId = () =>
-  `editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const createEditor = (
-  view: MemoSplitPaneView = 'memo',
-  patch: Partial<MemoSplitEditorState> = {},
-): MemoSplitEditorState => ({
-  id: createEditorId(),
-  mode: view === 'memo' ? 'draft' : undefined,
-  view,
-  ...patch,
-});
-
-const paneToEditor = (pane: MemoSplitPaneState): MemoSplitEditorState => ({
-  draftCategory: pane.draftCategory,
-  draftText: pane.draftText,
-  highlight: pane.highlight,
-  id: pane.activeEditorId ?? `${pane.id}-editor`,
-  isViewPicker: pane.isViewPicker,
-  memoId: pane.memoId,
-  mode: pane.mode,
-  networkErrorMessage: pane.networkErrorMessage,
-  networkIsLoading: pane.networkIsLoading,
-  networkQueryChunk: pane.networkQueryChunk,
-  networkRequestId: pane.networkRequestId,
-  networkResults: pane.networkResults,
-  selectionEnd: pane.selectionEnd,
-  selectionStart: pane.selectionStart,
-  selectedText: pane.selectedText,
-  sourceResult: pane.sourceResult,
-  view: pane.view,
-});
-
-const getPaneEditors = (pane: MemoSplitPaneState) => {
-  return pane.editors && pane.editors.length > 0
-    ? pane.editors
-    : [paneToEditor(pane)];
-};
-
-const getActiveEditor = (pane: MemoSplitPaneState) => {
-  const editors = getPaneEditors(pane);
-  return (
-    editors.find((editor) => editor.id === pane.activeEditorId) ?? editors[0]
-  );
-};
-
 const PaneBodyRenderer = ({ render }: { render: () => React.ReactNode }) => (
   <>{render()}</>
 );
-
-const mirrorEditorPatch = (
-  editor: MemoSplitEditorState,
-): Partial<MemoSplitPaneState> => ({
-  draftCategory: editor.draftCategory,
-  draftText: editor.draftText,
-  highlight: editor.highlight,
-  isViewPicker: editor.isViewPicker,
-  memoId: editor.memoId,
-  mode: editor.mode,
-  networkErrorMessage: editor.networkErrorMessage,
-  networkIsLoading: editor.networkIsLoading,
-  networkQueryChunk: editor.networkQueryChunk,
-  networkRequestId: editor.networkRequestId,
-  networkResults: editor.networkResults,
-  selectionEnd: editor.selectionEnd,
-  selectionStart: editor.selectionStart,
-  selectedText: editor.selectedText,
-  sourceResult: editor.sourceResult,
-  view: editor.view,
-});
-
-const clamp = (value: number, min: number, max: number) => {
-  return Math.min(max, Math.max(min, value));
-};
-
-const getGraphMemoTitle = (
-  memo: MemoRow,
-  language: 'en' | 'ko',
-  limit = 13,
-) => {
-  const title =
-    memo.content
-      .split('\n')
-      .map((line) => line.trim())
-      .find(Boolean) ?? localize(language, '제목 없는 노트', 'Untitled note');
-
-  return title.length > limit ? `${title.slice(0, limit).trimEnd()}...` : title;
-};
-
-const showTopicFolderFromGraph = (topicId: string, memoId?: string) => {
-  window.dispatchEvent(
-    new CustomEvent('subnota:show-topic-folder', {
-      detail: { memoId, topicId },
-    }),
-  );
-};
-
-const buildSplitKnnGraph = (
-  results: NetworkSearchResult[],
-  getLabel: (result: NetworkSearchResult) => string,
-  language: 'en' | 'ko',
-) => {
-  // State B is an edge-less similarity map centered on the current memo.
-  // Similarity is encoded by both radial distance and node size.
-  const nodes: KnowledgeGraphNode[] = [
-    {
-      color: '#1d1d1f',
-      id: 'network:query',
-      label: localize(language, '현재 메모', 'Current note'),
-      size: 15,
-      x: 0,
-      y: 0,
-    },
-  ];
-  const edges: KnowledgeGraphEdge[] = [];
-  const total = Math.max(results.length, 1);
-  const similarities = results.map((result) => clamp(result.similarity, 0, 1));
-  const lowestSimilarity = Math.min(...similarities, 1);
-  const highestSimilarity = Math.max(...similarities, 0);
-
-  results.forEach((result, index) => {
-    const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
-    const similarity = clamp(result.similarity, 0, 1);
-    const geometry = getSimilarityMapGeometry(
-      similarity,
-      lowestSimilarity,
-      highestSimilarity,
-      NETWORK_MIN_SIMILARITY,
-    );
-    const nodeId = `network:${result.chunkId}`;
-
-    nodes.push({
-      color:
-        result.sourceKind === 'inbox'
-          ? GRAPH_INBOX_NODE
-          : GRAPH_COLORS.defaultNode,
-      id: nodeId,
-      image: result.sourceKind === 'inbox' ? LINK_NODE_ICON : NOTE_NODE_ICON,
-      label: getLabel(result),
-      size: geometry.size,
-      x: Math.cos(angle) * geometry.distance,
-      y: Math.sin(angle) * geometry.distance,
-    });
-  });
-
-  return { edges, nodes };
-};
-
-const getResultTitle = (
-  result: NetworkSearchResult,
-  memos: MemoRow[],
-  language: 'en' | 'ko',
-) => {
-  if (result.sourceKind === 'inbox') {
-    return result.title || result.sourceLabel || localize(language, '링크', 'Link');
-  }
-  const memo = result.memoId
-    ? memos.find((item) => item.id === result.memoId)
-    : null;
-  const source = memo?.content ?? result.memoContent ?? result.chunkText ?? '';
-  const firstLine = source
-    .split('\n')
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!firstLine) {
-    return localize(language, '제목 없는 노트', 'Untitled note');
-  }
-  return firstLine.length > 22
-    ? `${firstLine.slice(0, 22).trimEnd()}…`
-    : firstLine;
-};
-
-const formatTopicUpdatedAt = (updatedAt: string | null | undefined) => {
-  if (!updatedAt) {
-    return null;
-  }
-
-  const date = new Date(updatedAt);
-  return Number.isNaN(date.getTime()) ? null : format(date, 'yyyy.MM.dd HH:mm');
-};
-
-// Topics는 갱신 중에도 기존 결과(또는 로컬 폴백)를 지우지 않는다. 갱신
-// 사실은 제목 옆의 이 점 하나로만 알린다 — 패널 전체를 덮지 않는다.
-const TopicsBusyDot = ({ language }: { language: 'en' | 'ko' }) => (
-  <>
-    <span aria-hidden="true" className="inline-busy" />
-    <VisuallyHidden role="status">
-      {localize(language, 'Topics 갱신 중', 'Updating topics')}
-    </VisuallyHidden>
-  </>
-);
-
-const getGraphInboxTitle = (
-  item: InboxSession,
-  language: 'en' | 'ko',
-  limit = 13,
-) => {
-  const title =
-    item.title ?? item.domain ?? localize(language, '저장한 링크', 'Saved link');
-  return title.length > limit ? `${title.slice(0, limit).trimEnd()}...` : title;
-};
-
-// Shape a saved inbox summary like a network result so the shared source view
-// (renderSourceBody / openSourceInPane) can display it.
-const inboxSessionToSourceResult = (
-  item: InboxSession,
-): NetworkSearchResult => ({
-  chunkId: `inbox-${item.id}`,
-  chunkText: item.summaryOneLiner ?? item.summary ?? item.description ?? '',
-  createdAt: item.createdAt ? Date.parse(item.createdAt) : null,
-  endIndex: 0,
-  inboxSessionId: item.id,
-  memoContent: null,
-  memoCreatedAt: null,
-  memoId: null,
-  memoUpdatedAt: null,
-  similarity: 0,
-  sourceKind: 'inbox',
-  sourceLabel: item.channelTitle ?? item.domain,
-  sourceType: item.sourceType,
-  sourceUrl: item.canonicalUrl ?? item.originalUrl,
-  startIndex: 0,
-  thumbnailUrl: item.thumbnailUrl,
-  title: item.title,
-});
-
-// 미리보기 패널은 NetworkSearchResult를 받는다. 검색이 아니라 메모를 직접
-// 지목해서 여는 경로(Topics 칩, 캘린더 원본 노트)에서는 하이라이트할 청크가
-// 없으므로 start/end를 0으로 두고 본문 전체만 보여준다.
-const memoToPreviewResult = (memo: MemoRow): NetworkSearchResult => ({
-  chunkId: `memo-${memo.id}`,
-  chunkText: '',
-  createdAt: memo.created_at ? Date.parse(memo.created_at) : null,
-  endIndex: 0,
-  inboxSessionId: null,
-  memoContent: memo.content,
-  memoCreatedAt: memo.created_at ? Date.parse(memo.created_at) : null,
-  memoId: memo.id,
-  memoUpdatedAt: memo.updated_at ? Date.parse(memo.updated_at) : null,
-  similarity: 0,
-  sourceKind: 'memo',
-  sourceLabel: null,
-  sourceType: null,
-  sourceUrl: null,
-  startIndex: 0,
-  thumbnailUrl: null,
-  title: null,
-});
-
-const buildSplitTopicGraph = (
-  clusters: TopicCluster[],
-  memberships: TopicMembership[],
-  globalEdges: MemoSimilarityEdge[],
-  memos: MemoRow[],
-  activeMemoId: string | null,
-  inboxMemberships: TopicInboxMembership[] = [],
-  inboxEdges: TopicMemoInboxEdge[] = [],
-  inboxItems: InboxSession[] = [],
-  language: 'en' | 'ko',
-) => {
-  const memoById = new Map(memos.map((memo) => [memo.id, memo]));
-  const inboxItemById = new Map(inboxItems.map((item) => [item.id, item]));
-  const nodes: KnowledgeGraphNode[] = [];
-  const edges: KnowledgeGraphEdge[] = [];
-  const total = Math.max(clusters.length, 1);
-  // Push clusters onto a wider ring as their count grows so they don't overlap.
-  const topicRing = 1.4 + total * 0.18;
-  // Per-cluster color by index → the first 8 clusters are always distinct.
-  const topicColor = new Map(
-    clusters.map((cluster, index) => [
-      cluster.id,
-      TOPIC_COLORS[index % TOPIC_COLORS.length],
-    ]),
-  );
-  const colorOf = (id: string | null | undefined) =>
-    (id && topicColor.get(id)) || TOPIC_COLORS[0];
-
-  clusters.forEach((cluster, index) => {
-    const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
-    const topicMemberships = memberships.filter(
-      (item) => item.topicId === cluster.id,
-    );
-    const isActiveLinked = Boolean(
-      activeMemoId &&
-      topicMemberships.some((item) => item.memoId === activeMemoId),
-    );
-    const count = Math.max(
-      cluster.memoCount,
-      topicMemberships.length,
-      isActiveLinked ? 1 : 0,
-    );
-    const nodeId = `topic:${cluster.id}`;
-
-    nodes.push({
-      color: isActiveLinked ? '#236b45' : colorOf(cluster.id),
-      forceLabel: true,
-      id: nodeId,
-      kind: 'topic',
-      label: cluster.label,
-      // Hub size grows with cluster weight, but capped like the rail map —
-      // 24 turned the active hub (+3 from the reducer) into a black hole.
-      size: clamp(9 + count * 0.9 + (cluster.confidence ?? 0) * 3, 10, 16),
-      topicId: cluster.id,
-      x: Math.cos(angle) * topicRing,
-      y: Math.sin(angle) * topicRing,
-    });
-
-    topicMemberships
-      .map((membership) => ({
-        memo: memoById.get(membership.memoId),
-        score: membership.score ?? 0.5,
-      }))
-      .filter((row): row is { memo: MemoRow; score: number } =>
-        Boolean(row.memo),
-      )
-      .sort((a, b) => b.score - a.score)
-      .slice(0, TOPIC_GRAPH_MEMO_NODE_LIMIT)
-      .forEach(({ memo, score }, memoIndex, memoRows) => {
-        const memoAngle =
-          (Math.PI * 2 * memoIndex) / Math.max(memoRows.length, 1);
-        // Orbit grows with the node count so a busy cluster fans out into a
-        // readable ring instead of piling into one dense disk.
-        const memoOrbit = 0.18 + memoRows.length * 0.02;
-        const memoNodeId = `memo:${memo.id}`;
-
-        nodes.push({
-          color: memo.id === activeMemoId ? '#236b45' : colorOf(cluster.id),
-          // No forced labels: real data has many same-title memos, so Sigma's
-          // density culling + hover reveal keeps the map readable (rail policy).
-          id: memoNodeId,
-          image: NOTE_NODE_ICON,
-          kind: 'memo',
-          label: getGraphMemoTitle(memo, language),
-          memoId: memo.id,
-          size: clamp(
-            4.5 + score * 4 + (memo.id === activeMemoId ? 2 : 0),
-            5,
-            10,
-          ),
-          topicId: cluster.id,
-          x: Math.cos(angle) * topicRing + Math.cos(memoAngle) * memoOrbit,
-          y: Math.sin(angle) * topicRing + Math.sin(memoAngle) * memoOrbit,
-        });
-        edges.push({
-          id: `${nodeId}-${memoNodeId}`,
-          source: nodeId,
-          target: memoNodeId,
-          weight: clamp(score, 0.25, 1) * 0.55,
-        });
-      });
-
-    // Saved web-inbox summaries attached to this topic — link-icon leaves on
-    // a hub spoke; the force layout settles them next to the memo members.
-    inboxMemberships
-      .filter((membership) => membership.topicId === cluster.id)
-      .map((membership) => ({
-        item: inboxItemById.get(membership.inboxSessionId),
-        score: membership.score ?? 0.5,
-      }))
-      .filter((row): row is { item: InboxSession; score: number } =>
-        Boolean(row.item),
-      )
-      .forEach(({ item, score }, inboxIndex, rows) => {
-        const inboxAngle =
-          (Math.PI * 2 * inboxIndex) / Math.max(rows.length, 1) + Math.PI / 5;
-        const inboxNodeId = `inbox:${item.id}`;
-
-        nodes.push({
-          color: colorOf(cluster.id),
-          id: inboxNodeId,
-          image: LINK_NODE_ICON,
-          label: getGraphInboxTitle(item, language),
-          size: clamp(4.5 + score * 4, 5, 9),
-          topicId: cluster.id,
-          x: Math.cos(angle) * topicRing + Math.cos(inboxAngle) * 0.3,
-          y: Math.sin(angle) * topicRing + Math.sin(inboxAngle) * 0.3,
-        });
-        edges.push({
-          id: `${nodeId}-${inboxNodeId}`,
-          source: nodeId,
-          target: inboxNodeId,
-          weight: clamp(score, 0.25, 1) * 0.55,
-        });
-      });
-  });
-
-  const simplifiedGlobalEdges = capIntraTopicEdges(
-    globalEdges,
-    TOPIC_INTRA_EDGE_TOP_K,
-    TOPIC_INTRA_EDGE_MIN_SIMILARITY,
-  );
-  // Node selection must not reshape the map. Topics stay distinguished by
-  // color while the same full set of sparse intra-topic and bridge edges
-  // remains visible before and after a click.
-  const visibleGlobalEdges = capCrossTopicBridges(
-    simplifiedGlobalEdges,
-    TOPIC_BRIDGE_EDGE_LIMIT,
-  );
-
-  visibleGlobalEdges.forEach((edge, index) => {
-    const isIntraTopic =
-      Boolean(edge.sourceTopicId) && edge.sourceTopicId === edge.targetTopicId;
-    edges.push({
-      color: isIntraTopic ? colorOf(edge.sourceTopicId) : '#c8beb0',
-      id: `split-global-memo-edge-${edge.sourceMemoId}-${edge.targetMemoId}-${index}`,
-      // Cross-topic edges stay visible but hairline-thin so the long lines
-      // between clusters don't turn the map into spaghetti.
-      size: isIntraTopic ? undefined : 0.35 + edge.similarity * 0.45,
-      source: `memo:${edge.sourceMemoId}`,
-      target: `memo:${edge.targetMemoId}`,
-      weight: edge.similarity,
-    });
-  });
-
-  inboxEdges.forEach((edge, index) => {
-    edges.push({
-      color: colorOf(edge.topicId),
-      id: `split-memo-inbox-edge-${edge.memoId}-${edge.inboxSessionId}-${index}`,
-      size: 0.35 + edge.similarity * 0.45,
-      source: `memo:${edge.memoId}`,
-      target: `inbox:${edge.inboxSessionId}`,
-      weight: edge.similarity,
-    });
-  });
-
-  return { edges, nodes };
-};
-
-const getSourceLabel = (result: NetworkSearchResult, language: 'en' | 'ko') => {
-  if (result.sourceKind === 'memo') {
-    return localize(language, '노트', 'Note');
-  }
-  if (result.sourceLabel) {
-    return result.sourceLabel;
-  }
-  return localize(language, '웹페이지', 'Web page');
-};
 
 interface MemoSplitWorkspaceProps {
   ambientEditorId?: string | null;
@@ -665,7 +135,6 @@ interface MemoSplitWorkspaceProps {
   ambientPendingEditorId?: string | null;
   ambientResult?: NetworkSearchResult | null;
   onMemoEditorBlur?: (memoId: string) => void;
-  onBeforeNetworkSearch?: () => Promise<void>;
   onRunAmbientSearch?: (target?: AmbientSearchTarget) => void;
   canAddPane?: boolean;
   focusedPaneId?: string | null;
@@ -759,7 +228,15 @@ interface MemoSplitWorkspaceProps {
   ) => void;
 
   // Topics 지도 데이터
+  folderSourceTopicIds?: string[];
   isTopicsLoading?: boolean;
+  onCreateFolderFromTopic?: (draft: {
+    description?: string;
+    mode: 'automatic' | 'manual';
+    name: string;
+    topicId: string;
+  }) => Promise<unknown>;
+  onRegenerateTopics?: () => Promise<void>;
   topicClusters: TopicCluster[];
   topicUpdatedAt?: string | null;
   topicInboxEdges?: TopicMemoInboxEdge[];
@@ -779,7 +256,6 @@ const MemoSplitWorkspace = ({
   ambientPendingEditorId = null,
   ambientResult = null,
   onMemoEditorBlur,
-  onBeforeNetworkSearch,
   onRunAmbientSearch,
   canAddPane = true,
   focusedPaneId,
@@ -831,7 +307,10 @@ const MemoSplitWorkspace = ({
   onDeleteScheduleInbox,
   onPlaceScheduleInbox,
   onPlaceScheduleSuggestion,
+  folderSourceTopicIds = [],
   isTopicsLoading = false,
+  onCreateFolderFromTopic,
+  onRegenerateTopics,
   topicClusters,
   topicUpdatedAt = null,
   topicInboxEdges = [],
@@ -853,20 +332,8 @@ const MemoSplitWorkspace = ({
   // 피커를 "날짜 변경"으로 열 때 감지된 날짜를 시드로 넘긴다.
   const [datePickerSeed, setDatePickerSeed] = useState<Date | null>(null);
   // 날짜가 감지됐을 때 바로 저장하지 않고 보여주는 확인 팝오버 상태.
-  const [scheduleConfirm, setScheduleConfirm] = useState<{
-    anchor: {
-      left: number;
-      top: number;
-      width: number;
-    };
-    editorId: string;
-    date: Date;
-    allDay: boolean;
-    title: string;
-    label: string;
-    selectionEnd: number;
-    selectionStart: number;
-  } | null>(null);
+  const [scheduleConfirm, setScheduleConfirm] =
+    useState<MemoSplitScheduleConfirmState | null>(null);
   const [openMenuPaneId, setOpenMenuPaneId] = useState<string | null>(null);
   const [draggedTab, setDraggedTab] = useState<{
     editorId: string;
@@ -901,9 +368,6 @@ const MemoSplitWorkspace = ({
     noteMenuDropdownEl,
     noteMenuButtonEl,
   ]);
-  const [focusedTopicId, setFocusedTopicId] = useState<string | null>(null);
-  const [topicFocusId, setTopicFocusId] = useState<string | null>(null);
-  const [focusedMemoId, setFocusedMemoId] = useState<string | null>(null);
   const [editorInstances, setEditorInstances] = useState<
     Record<string, Editor | null>
   >({});
@@ -918,7 +382,6 @@ const MemoSplitWorkspace = ({
     () => initialPaneWidths,
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const networkControllersRef = useRef<Map<string, AbortController>>(new Map());
   const panesRef = useRef(panes);
   const paneIdsRef = useRef(panes.map((pane) => pane.id).join('|'));
   const draggedTabRef = useRef<{ editorId: string; paneId: string } | null>(
@@ -926,46 +389,8 @@ const MemoSplitWorkspace = ({
   );
 
   useEffect(() => {
-    const handleShowTopicFolder = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ memoId?: string; topicId?: string }>
-      ).detail;
-      setFocusedTopicId(detail?.topicId ?? null);
-      setFocusedMemoId(detail?.memoId ?? null);
-    };
-
-    window.addEventListener('subnota:show-topic-folder', handleShowTopicFolder);
-    return () =>
-      window.removeEventListener(
-        'subnota:show-topic-folder',
-        handleShowTopicFolder,
-      );
-  }, []);
-
-  useEffect(() => {
     panesRef.current = panes;
   }, [panes]);
-
-  useEffect(() => {
-    const liveEditorIds = new Set(
-      panes.flatMap((pane) => getPaneEditors(pane).map((editor) => editor.id)),
-    );
-    for (const [editorId, controller] of networkControllersRef.current) {
-      if (!liveEditorIds.has(editorId)) {
-        controller.abort();
-        networkControllersRef.current.delete(editorId);
-      }
-    }
-  }, [panes]);
-
-  useEffect(() => {
-    return () => {
-      for (const controller of networkControllersRef.current.values()) {
-        controller.abort();
-      }
-      networkControllersRef.current.clear();
-    };
-  }, []);
 
   useEffect(() => {
     const paneIds = panes.map((pane) => pane.id).join('|');
@@ -1092,149 +517,14 @@ const MemoSplitWorkspace = ({
     [onChangePane],
   );
 
-  const runEditorStateBSearch = useCallback(
-    async (pane: MemoSplitPaneState, editor: MemoSplitEditorState) => {
-      const memo = editor.memoId ? memoById.get(editor.memoId) : null;
-      const queryText = (editor.draftText ?? memo?.content ?? '').trim();
-      const targetEditor =
-        editor.view === 'network'
-          ? editor
-          : createEditor('network', { memoId: editor.memoId });
-
-      if (!queryText) {
-        upsertEditorById(
-          pane.id,
-          targetEditor,
-          {
-            networkErrorMessage:
-              t(
-                '내용이 있는 메모에서 주변 메모를 찾아 주세요.',
-                'Add some content to this note before finding nearby notes.',
-              ),
-            networkIsLoading: false,
-            networkResults: [],
-            view: 'network',
-          },
-          true,
-        );
-        return;
-      }
-
-      // 붙을 것이 하나도 없으면 서버에 물어볼 이유가 없다. 백엔드는 콜드
-      // 스타트로 20초까지 걸릴 수 있고, 그동안 사용자는 "없음"을 기다린다.
-      const hasSearchableNeighbor =
-        inboxItems.length > 0 ||
-        memos.some(
-          (candidate) =>
-            candidate.id !== editor.memoId && candidate.content.trim().length > 0,
-        );
-      if (!hasSearchableNeighbor) {
-        upsertEditorById(
-          pane.id,
-          targetEditor,
-          {
-            networkErrorMessage: null,
-            networkIsLoading: false,
-            networkQueryChunk: {
-              end: queryText.length,
-              id: 'query-local-empty',
-              index: 0,
-              start: 0,
-              text: queryText,
-            },
-            networkResults: [],
-            view: 'network',
-          },
-          true,
-        );
-        return;
-      }
-
-      await onBeforeNetworkSearch?.();
-
-      const networkRequestId = `network-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-      const queryChunk: MemoChunk = {
-        end: queryText.length,
-        id: `query-${networkRequestId}`,
-        index: 0,
-        start: 0,
-        text: queryText,
-      };
-      networkControllersRef.current.get(targetEditor.id)?.abort();
-      const controller = new AbortController();
-      networkControllersRef.current.set(targetEditor.id, controller);
-
-      // networkResults는 비우지 않는다 — 재검색이면 기존 그래프를 그대로 두고
-      // 작은 상태 표시만 얹었다가 새 결과로 교체한다.
-      upsertEditorById(
-        pane.id,
-        targetEditor,
-        {
-          networkErrorMessage: null,
-          networkIsLoading: true,
-          networkQueryChunk: queryChunk,
-          networkRequestId,
-          view: 'network',
-        },
-        true,
-      );
-
-      try {
-        const response = await searchStateB({
-          limit: 8,
-          minimumSimilarity: NETWORK_MIN_SIMILARITY,
-          memoId: editor.memoId ?? null,
-          queryText,
-          signal: controller.signal,
-        });
-
-        if (networkControllersRef.current.get(targetEditor.id) !== controller) {
-          return;
-        }
-        upsertEditorById(
-          pane.id,
-          targetEditor,
-          {
-            networkErrorMessage: null,
-            networkIsLoading: false,
-            networkQueryChunk: response.queryChunk,
-            networkRequestId,
-            networkResults: response.results,
-            view: 'network',
-          },
-          false,
-        );
-      } catch (error) {
-        if (
-          controller.signal.aborted ||
-          networkControllersRef.current.get(targetEditor.id) !== controller
-        ) {
-          return;
-        }
-        upsertEditorById(
-          pane.id,
-          targetEditor,
-          {
-            networkErrorMessage: formatNetworkSearchErrorMessage(error, {
-              isOnline: navigator.onLine,
-            }),
-            networkIsLoading: false,
-            networkRequestId,
-            networkResults: [],
-            view: 'network',
-          },
-          false,
-        );
-      } finally {
-        if (networkControllersRef.current.get(targetEditor.id) === controller) {
-          networkControllersRef.current.delete(targetEditor.id);
-        }
-      }
-    },
-    [inboxItems, memoById, memos, onBeforeNetworkSearch, t, upsertEditorById],
-  );
+  const { runEditorStateBSearch } = useNearbyNotesSearch({
+    inboxItems,
+    memoById,
+    memos,
+    panes,
+    t,
+    upsertEditorById,
+  });
 
   const handleAddEditor = useCallback(
     (pane: MemoSplitPaneState) => {
@@ -1412,68 +702,13 @@ const MemoSplitWorkspace = ({
     [clearTabDrag, onFocusPane, onMoveEditor, onSelectMemoById, panes],
   );
 
-  const beginResizePane = (
-    event: React.PointerEvent<HTMLDivElement>,
-    leftPaneId: string,
-    rightPaneId: string,
-  ) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const containerWidth = container.getBoundingClientRect().width;
-    const paneCount = Math.max(panes.length, 1);
-    const leftStart = paneWidths[leftPaneId] ?? 100 / paneCount;
-    const rightStart = paneWidths[rightPaneId] ?? 100 / paneCount;
-    const startX = event.clientX;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    let latestWidths = paneWidths;
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const deltaPercent =
-        ((moveEvent.clientX - startX) / containerWidth) * 100;
-      const combined = leftStart + rightStart;
-      const minPercent = Math.min(
-        (SPLIT_PANE_MIN_WIDTH_PX / containerWidth) * 100,
-        combined / 2,
-      );
-      const nextLeft = clamp(
-        leftStart + deltaPercent,
-        minPercent,
-        combined - minPercent,
-      );
-      const nextRight = combined - nextLeft;
-
-      latestWidths = {
-        ...latestWidths,
-        [leftPaneId]: nextLeft,
-        [rightPaneId]: nextRight,
-      };
-      setPaneWidths(latestWidths);
-    };
-
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-      window.removeEventListener('blur', onPointerUp);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      onPaneWidthsChange?.(latestWidths);
-    };
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-    window.addEventListener('blur', onPointerUp);
-  };
+  const beginResizePane = useSplitPaneResize({
+    containerRef,
+    onPaneWidthsChange,
+    paneWidths,
+    panes,
+    setPaneWidths,
+  });
 
   const openMemoInPane = useCallback(
     (paneId: string, memo: MemoRow) => {
@@ -1774,495 +1009,90 @@ const MemoSplitWorkspace = ({
     setScheduleConfirm(null);
   };
 
-  const renderHighlight = (
-    pane: MemoSplitPaneState,
-    editor: MemoSplitEditorState,
-    value: string,
-  ) => {
-    if (!editor.highlight) {
-      return null;
-    }
-
-    const startIndex = Math.max(0, editor.highlight.startIndex);
-    const endIndex = Math.max(startIndex, editor.highlight.endIndex);
-    const snippet =
-      editor.highlight.chunkText ||
-      value.slice(startIndex, Math.min(value.length, endIndex));
-
-    return (
-      <div className="highlight-card">
-        <div className="highlight-header">
-          <span className="highlight-label">{t('관련 문장', 'Related sentence')}</span>
-          <button
-            onClick={() => patchActiveEditor(pane, { highlight: null })}
-            className="highlight-close-btn"
-          >
-            ✕
-          </button>
-        </div>
-        <p className="highlight-text">{snippet}</p>
-      </div>
-    );
-  };
-
-  const renderSourceBody = (result?: NetworkSearchResult) => {
-    if (!result) {
-      return (
-        <div className="empty-source">
-          <h4>{t('출처가 없습니다', 'No source selected')}</h4>
-          <p>{t('추천 결과를 클릭하면 요약 텍스트를 볼 수 있습니다.', 'Select a recommendation to view its summary.')}</p>
-        </div>
-      );
-    }
-
-    // 저장된 수집 항목을 찾으면 전체 요약 상세(키워드/썸네일/요약·상세 토글)를
-    // 보여준다. 못 찾으면(과거 세션의 탭, 메모 청크) 기존 축약 뷰로 폴백.
-    const inboxItem = result.inboxSessionId
-      ? inboxItems.find((candidate) => candidate.id === result.inboxSessionId)
-      : null;
-    if (inboxItem) {
-      return (
-        <SourceDetailPane
-          item={inboxItem}
-          onRetrySummary={onRetryInboxSummary}
-        />
-      );
-    }
-
-    return (
-      <div className="source-pane-content">
-        <span className="source-kind">{getSourceLabel(result, language)}</span>
-        <h3 className="source-title">
-          {result.title ?? result.sourceLabel ?? t('저장한 링크', 'Saved link')}
-        </h3>
-        {result.sourceUrl && (
-          <a
-            href={result.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="source-url-link"
-          >
-            {result.sourceUrl}
-          </a>
-        )}
-        <div className="source-summary-card">
-          <h5>{t('추천에 사용된 요약', 'Summary used for this recommendation')}</h5>
-          <p>{result.chunkText || t('요약이 없습니다.', 'No summary is available.')}</p>
-        </div>
-      </div>
-    );
-  };
-
   const renderPaneBody = (
     pane: MemoSplitPaneState,
     editor: MemoSplitEditorState,
   ) => {
-    if (editor.isViewPicker) {
+    if (editor.isViewPicker || editor.view !== 'memo') {
       return (
-        <div className="split-view-picker-stage">
-          <section
-            aria-label={t('새 탭에서 열기', 'Open in a new tab')}
-            className="split-view-picker-panel"
-          >
-            <h2 className="split-view-picker-title">{t('새 탭에서 열기', 'Open in a new tab')}</h2>
-            <div className="split-view-picker">
-              {MENU_VIEWS.map((view, index) => {
-                const ViewIcon = VIEW_ICONS[view];
-                return (
-                  <button
-                    autoFocus={index === 0}
-                    className="split-view-picker-item"
-                    key={view}
-                    onClick={() => handleSelectEditorView(pane, view)}
-                    type="button"
-                  >
-                    {ViewIcon ? <ViewIcon size={18} /> : null}
-                    <span>{viewLabel(view, language)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      );
-    }
-
-    if (editor.view === 'calendar') {
-      return (
-        <CalendarWorkspace
-          blocks={calendarBlocks}
-          categories={calendarCategories}
-          isScheduleInboxOpen={isScheduleInboxPanelOpen}
-          hasNewReport={hasNewReport}
-          onCreateCategory={onCreateCalendarCategory}
-          onDeleteCategory={onDeleteCalendarCategory}
-          onDeleteBlock={onDeleteCalendarBlock}
-          onDeleteScheduleSuggestion={onDeleteScheduleInbox}
-          onDropScheduleInbox={onDropScheduleInbox}
-          onPlaceScheduleSuggestion={onPlaceScheduleSuggestion}
-          onSaveBlock={onSaveCalendarBlock}
-          onToggleScheduleInbox={onToggleScheduleInboxPanel}
-          onOpenReport={onOpenReport}
-          onToggleCompleted={onToggleCalendarBlockCompleted}
-          scheduleSuggestions={scheduleSuggestions}
-        />
-      );
-    }
-
-    if (editor.view === 'briefing') {
-      return (
-        <ScheduleInboxWorkspace
-          inboxItems={scheduleInbox}
-          onDeleteInbox={onDeleteScheduleInbox}
-          onPlaceInbox={onPlaceScheduleInbox}
-        />
-      );
-    }
-
-    if (editor.view === 'inbox') {
-      return (
-        <InboxWorkspace
-          inboxItems={inboxItems}
-          isLoading={isInboxLoading}
-          onDelete={onDeleteInboxItem}
-          onOpenDetail={(item) =>
-            onOpenPreview?.([inboxSessionToSourceResult(item)])
-          }
-          onSaveUrl={onSaveInboxUrl}
-          onToggleLike={onToggleInboxLike}
-        />
-      );
-    }
-
-    if (
-      editor.view === 'network' &&
-      (editor.networkIsLoading ||
-        editor.networkErrorMessage ||
-        editor.networkQueryChunk ||
-        editor.networkResults)
-    ) {
-      if (
-        editor.networkIsLoading ||
-        editor.networkErrorMessage ||
-        editor.networkQueryChunk ||
-        editor.networkResults
-      ) {
-        const isNetworkEmpty =
-          !editor.networkIsLoading &&
-          !editor.networkErrorMessage &&
-          Boolean(editor.networkQueryChunk) &&
-          editor.networkResults?.length === 0;
-        // KNN local search view — radial ego-graph of the cursor sentence.
-        const graph = buildSplitKnnGraph(
-          editor.networkResults ?? [],
-          (result) => getResultTitle(result, memos, language),
-          language,
-        );
-        // 그래프를 보면서 노드를 훑는 맥락이라 참조다. 새 탭으로 열면
-        // 기준이 됐던 그래프가 사라져 비교가 불가능해진다.
-        const openResult = (result: NetworkSearchResult) => {
-          if (result.memoId) {
-            onSelectMemoById(result.memoId);
-          }
-          onOpenPreview?.([result], 'detail', {});
-        };
-
-        return (
-          <div className="split-network-search net-graph-view">
-            {/* 오류도 빈 화면과 같은 자리에 같은 모양으로 선다. 떠 있는 카드로
-                얹으면 그래프가 없는 화면에서 토스트처럼 읽혀 무엇이 잘못됐는지
-                묻히고, 빈 결과와 실패가 서로 다른 곳에 뜬다. 빈 상태에는
-                행동 버튼을 두지 않지만(EmptyState 주석) 오류는 예외다 —
-                여기서 사용자가 할 수 있는 일이 다시 시도뿐이다. */}
-            {editor.networkErrorMessage && (
-              <EmptyState
-                body={
-                  isNetworkSearchRetryableMessage(editor.networkErrorMessage) ? (
-                    <button
-                      className="quick-date-chip net-error-retry"
-                      onClick={() => void runEditorStateBSearch(pane, editor)}
-                      type="button"
-                    >
-                      {t('다시 시도', 'Try again')}
-                    </button>
-                  ) : undefined
-                }
-                className="net-empty-state"
-                size="canvas"
-                title={editor.networkErrorMessage}
-                tone="start"
-              />
-            )}
-            {/* 결과 노드 수도 위치도 정해져 있지 않아 카드 스켈레톤을 쓸 수
-                없다. 대신 그래프 영역 한가운데에 중심 원 하나와 옅은 점 몇
-                개를 놓고, 문구는 1.2초가 지나야 CSS로 드러난다. 이미 그래프가
-                있으면(재검색) 그래프를 지우지 않고 작은 표시만 얹는다. */}
-            {editor.networkIsLoading &&
-              (editor.networkResults && editor.networkResults.length > 0 ? (
-                <span className="net-search-pip" role="status">
-                  <span aria-hidden="true" className="inline-busy" />
-                  <span className="net-search-pip-label">
-                    {t('주변 메모 찾는 중', 'Finding nearby notes')}
-                  </span>
-                </span>
-              ) : (
-                <div
-                  aria-live="polite"
-                  className="net-search-bloom"
-                  role="status"
-                >
-                  <SubnotaScatterMark />
-                </div>
-              ))}
-            {isNetworkEmpty && (
-              <EmptyState
-                className="net-empty-state"
-                size="canvas"
-                title={t(
-                  '연결된 메모나 저장한 링크가 아직은 없네요!',
-                  'No related notes or saved links yet.',
-                )}
-                tone="start"
-              />
-            )}
-            {editor.networkResults && editor.networkResults.length > 0 && (
-              <>
-                <KnowledgeGraphView
-                  ariaLabel={t(
-                    '현재 메모 기준 주변 메모와 링크의 유사도 맵',
-                    'Similarity map of nearby notes and links for the current note',
-                  )}
-                  className="net-graph-canvas"
-                  edges={graph.edges}
-                  getNodeTooltip={(nodeId) => {
-                    if (
-                      !nodeId.startsWith('network:') ||
-                      nodeId === 'network:query'
-                    ) {
-                      return null;
-                    }
-                    const chunkId = nodeId.slice('network:'.length);
-                    const result = editor.networkResults?.find(
-                      (item) => item.chunkId === chunkId,
-                    );
-                    return result
-                      ? `${getResultTitle(result, memos, language)} · ${t('유사도', 'Similarity')} ${Math.round(result.similarity * 100)}%`
-                      : null;
-                  }}
-                  nodes={graph.nodes}
-                  showActiveNodeControl={false}
-                  onSelectNode={(nodeId) => {
-                    if (
-                      !nodeId.startsWith('network:') ||
-                      nodeId === 'network:query'
-                    ) {
-                      return;
-                    }
-                    const chunkId = nodeId.slice('network:'.length);
-                    const result = editor.networkResults?.find(
-                      (item) => item.chunkId === chunkId,
-                    );
-                    if (result) {
-                      openResult(result);
-                    }
-                  }}
-                />
-              </>
-            )}
-          </div>
-        );
-      }
-    }
-
-    if (editor.view === 'topics' || editor.view === 'network') {
-      // `network` fallback preserves previously persisted State A tabs.
-      if (topicClusters.length > 0) {
-        const activeTopicId =
-          focusedTopicId ??
-          topicMemberships.find(
-            (membership) => membership.memoId === editor.memoId,
-          )?.topicId ??
-          null;
-        const graph = buildSplitTopicGraph(
-          topicClusters,
-          topicMemberships,
-          topicGlobalEdges,
-          memos,
-          editor.memoId,
-          topicInboxMemberships,
-          topicInboxEdges,
-          inboxItems,
-          language,
-        );
-
-        return (
-          <div className="split-global-network split-topics-stage">
-            <div className="split-topics-stage-title">
-              Topics
-              {isTopicsLoading && <TopicsBusyDot language={language} />}
-            </div>
-            {formatTopicUpdatedAt(topicUpdatedAt) && (
-              <span
-                className="split-topics-stage-updated-at"
-                title={t(
-                  'Topics 데이터가 마지막으로 갱신된 시간',
-                  'Time Topics data was last updated',
-                )}
-              >
-                {t('마지막 업데이트', 'Last updated')} ·{' '}
-                {formatTopicUpdatedAt(topicUpdatedAt)}
-              </span>
-            )}
-            <KnowledgeGraphView
-              activeNodeId={
-                focusedMemoId
-                  ? `memo:${focusedMemoId}`
-                  : topicFocusId
-                    ? `topic:${topicFocusId}`
-                    : activeTopicId
-                      ? `topic:${activeTopicId}`
-                      : null
+        <MemoSplitSpecialView
+          calendar={{
+            blocks: calendarBlocks,
+            categories: calendarCategories,
+            hasNewReport,
+            isScheduleInboxOpen: isScheduleInboxPanelOpen,
+            onCreateCategory: onCreateCalendarCategory,
+            onDeleteBlock: onDeleteCalendarBlock,
+            onDeleteCategory: onDeleteCalendarCategory,
+            onDeleteScheduleSuggestion: onDeleteScheduleInbox,
+            onDropScheduleInbox,
+            onOpenReport,
+            onPlaceScheduleSuggestion,
+            onSaveBlock: onSaveCalendarBlock,
+            onToggleCompleted: onToggleCalendarBlockCompleted,
+            onToggleScheduleInbox: onToggleScheduleInboxPanel,
+            scheduleSuggestions,
+          }}
+          editor={editor}
+          inbox={{
+            inboxItems,
+            isLoading: isInboxLoading,
+            onDelete: onDeleteInboxItem,
+            onOpenDetail: (item) =>
+              onOpenPreview?.([inboxSessionToSourceResult(item)]),
+            onSaveUrl: onSaveInboxUrl,
+            onToggleLike: onToggleInboxLike,
+          }}
+          language={language}
+          nearby={{
+            errorMessage: editor.networkErrorMessage,
+            isLoading: editor.networkIsLoading,
+            language,
+            memos,
+            onOpenResult: (result) => {
+              if (result.memoId) {
+                onSelectMemoById(result.memoId);
               }
-              ariaLabel={t('토픽 지식 그래프', 'Topic knowledge graph')}
-              className="split-knowledge-graph"
-              edges={graph.edges}
-              focusedTopicId={topicFocusId}
-              layout="force"
-              nodes={graph.nodes}
-              showActiveNodeControl={false}
-              onSelectNode={(nodeId) => {
-                if (nodeId.startsWith('topic:')) {
-                  const topicId = nodeId.slice('topic:'.length);
-                  setTopicFocusId((current) =>
-                    current === topicId ? null : topicId,
-                  );
-                  setFocusedMemoId(null);
-                  showTopicFolderFromGraph(topicId);
-                  return;
-                }
-
-                if (nodeId.startsWith('inbox:')) {
-                  const sessionId = nodeId.slice('inbox:'.length);
-                  const item = inboxItems.find(
-                    (candidate) => candidate.id === sessionId,
-                  );
-                  if (item) {
-                    // Topics 그래프를 훑는 중이므로 참조로 연다.
-                    onOpenPreview?.([inboxSessionToSourceResult(item)]);
-                  }
-                  return;
-                }
-
-                if (nodeId.startsWith('memo:')) {
-                  const memoId = nodeId.slice('memo:'.length);
-                  const topicId =
-                    topicMemberships.find(
-                      (membership) => membership.memoId === memoId,
-                    )?.topicId ?? null;
-
-                  if (topicId) {
-                    // The graph selection is also the sidebar selection. This
-                    // updates activeMemoId so the first clicked memo does not
-                    // remain highlighted after selecting another node, while
-                    // keeping the current editor tab unchanged.
-                    onSelectMemoById(memoId);
-                    showTopicFolderFromGraph(topicId, memoId);
-                  }
-                }
-              }}
-            />
-          </div>
-        );
-      }
-
-      // No backend topic clusters yet → fall back to a local category grouping
-      // so the tab is still useful offline / before the nightly topic batch.
-      // 계산이 오래 걸려도 이 폴백은 계속 보여준다 — 갱신 중이라는 사실은
-      // 제목 옆 작은 점 하나로 충분하다.
-      const fallbackCategories = Array.from(
-        new Set(memos.map((memo) => getMemoCategory(memo.category))),
+              onOpenPreview?.([result], 'detail', {});
+            },
+            onRetry: () => void runEditorStateBSearch(pane, editor),
+            queryChunk: editor.networkQueryChunk,
+            results: editor.networkResults,
+          }}
+          onSelectView={handleSelectEditorView}
+          pane={pane}
+          scheduleInbox={{
+            inboxItems: scheduleInbox,
+            onDeleteInbox: onDeleteScheduleInbox,
+            onPlaceInbox: onPlaceScheduleInbox,
+          }}
+          source={{
+            inboxItems,
+            language,
+            onRetryInboxSummary,
+            result: editor.sourceResult,
+            t,
+          }}
+          topics={{
+            activeMemoId: editor.memoId,
+            folderSourceTopicIds,
+            inboxItems,
+            isTopicsLoading,
+            memos,
+            onCreateFolderFromTopic,
+            onOpenMemo: (memo) => openMemoInPane(pane.id, memo),
+            onOpenPreview,
+            onRegenerateTopics,
+            onSelectMemoById,
+            topicClusters,
+            topicGlobalEdges,
+            topicInboxEdges,
+            topicInboxMemberships,
+            topicMemberships,
+            topicUpdatedAt,
+          }}
+        />
       );
-
-      // 보여 줄 것이 정말 아무것도 없을 때만 콘텐츠 영역에 자리표시자를 둔다.
-      if (isTopicsLoading && fallbackCategories.length === 0) {
-        return (
-          <div className="split-global-network split-topics-stage">
-            <div className="split-topics-stage-title">
-              Topics
-              <TopicsBusyDot language={language} />
-            </div>
-            <div aria-hidden="true" className="split-topics-placeholder">
-              {[0, 1, 2].map((index) => (
-                <Skeleton
-                  className="subnota-skeleton split-topics-placeholder-chip"
-                  height={22}
-                  key={index}
-                  radius="xl"
-                />
-              ))}
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="split-global-network">
-          <h4>
-            Topics
-            {isTopicsLoading && <TopicsBusyDot language={language} />}
-          </h4>
-          {fallbackCategories.length > 0 ? (
-            <>
-              <p>{t('카테고리 기반 임시 묶음', 'Temporary groups based on categories')}</p>
-              <div className="split-topic-list">
-                {fallbackCategories.map((category) => (
-                  <button
-                    key={category}
-                    className="split-topic-chip"
-                    onClick={() => {
-                      const target = memos.find(
-                        (memo) => getMemoCategory(memo.category) === category,
-                      );
-                      if (target) {
-                        // 클러스터 맥락을 유지해야 하므로 참조로 연다.
-                        onSelectMemoById(target.id);
-                        onOpenPreview?.([memoToPreviewResult(target)]);
-                      }
-                    }}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
-              {/* "야간 토픽 배치"는 내부 사정이다. 사용자가 알아야 할 것은
-                  지금 보고 있는 게 임시 묶음이고 곧 바뀐다는 것뿐이다. */}
-              <EmptyState
-                size="inline"
-                title={t(
-                  '메모가 쌓이면 주제별로 자동으로 묶입니다',
-                  'Notes are grouped by topic as they accumulate.',
-                )}
-              />
-            </>
-          ) : (
-            /* 묶을 것이 하나도 없으면 "임시 묶음" 설명도 할 말이 없다.
-               빈 상태 두 개를 쌓는 대신 마크를 단 하나로 합친다 — 링크
-               저장함의 첫 사용 화면과 같은 형태다. */
-            <EmptyState
-              body={t('비슷한 내용끼리 저절로 모입니다.', 'Similar notes will gather here automatically.')}
-              title={t(
-                '메모가 쌓이면 주제별로 자동으로 묶입니다',
-                'Notes are grouped by topic as they accumulate.',
-              )}
-              tone="start"
-            />
-          )}
-        </div>
-      );
-    }
-
-    if (editor.view === 'source') {
-      return renderSourceBody(editor.sourceResult);
     }
 
     const memo = editor.memoId ? (memoById.get(editor.memoId) ?? null) : null;
@@ -2274,7 +1104,7 @@ const MemoSplitWorkspace = ({
       ? resolveMemoSavePresentation(memo, memoSaveStates[memo.id])
       : null;
     // 자동 저장의 정상 진행·완료는 사용자가 요청한 일이 아니므로 헤더를
-    // 계속 흔들지 않는다. 실제로 조치가 필요한 실패만 같은 자리에서 알린다.
+    // 계속 흔들지 않는다. 실제로 조치가 필요한 실패만 제목 행에 알린다.
     const showSaveIssue = Boolean(
       memo &&
         (memoSaveStates[memo.id] === 'local-failed' ||
@@ -2382,15 +1212,6 @@ const MemoSplitWorkspace = ({
         }}
         >
         <div className="split-note-header">
-          {showSaveIssue && (
-            <span
-              aria-label={savePresentation?.label}
-              className="split-note-save-status"
-              title={savePresentation?.label}
-            >
-              {savePresentation?.text}
-            </span>
-          )}
           <div className="split-note-title-row">
             <input
               aria-label={t('노트 제목', 'Note title')}
@@ -2414,178 +1235,45 @@ const MemoSplitWorkspace = ({
               type="text"
               value={noteTitle}
             />
-            <div
-              className="split-note-menu-anchor"
-              ref={isNoteMenuOpen ? setNoteMenuButtonEl : undefined}
-            >
-              <TooltipIconButton
-                className={`split-action-btn split-note-menu-btn ${isNoteMenuOpen ? 'active' : ''}`}
-                onClick={() => {
-                  setNoteMenuFeedback(null);
-                  setOpenNoteMenuEditorId((current) =>
-                    current === editor.id ? null : editor.id,
-                  );
-                }}
-                tooltip={t('노트 메뉴', 'Note menu')}
+            {showSaveIssue && (
+              <span
+                aria-label={savePresentation?.label}
+                className="split-note-save-status"
+                role="status"
+                title={savePresentation?.label}
               >
-                <MoreHorizontal size={18} />
-              </TooltipIconButton>
-              {isNoteMenuOpen && (
-                <div
-                  className="split-pane-menu-dropdown split-note-menu-dropdown"
-                  ref={setNoteMenuDropdownEl}
-                >
-                  {/* 목록 행의 구름 배지를 없앤 자리. 동기화 상태는 여기서만
-                      알린다 — 구름은 "클라우드에 있다"일 때만 붙인다. */}
-                  <div className="split-menu-title-row split-menu-sync-row">
-                    {memo?.local_sync_status === 'synced' ? (
-                      <Cloud aria-hidden="true" size={15} />
-                    ) : (
-                      // 구름이 없는 상태에서도 문구가 아래 항목들과 같은 줄에
-                      // 서도록 아이콘 자리를 비워 둔다.
-                      <span
-                        aria-hidden="true"
-                        className="split-menu-title-slot"
-                      />
-                    )}
-                    <span className="split-menu-title-label">
-                      {savePresentation?.label ??
-                        t('아직 저장되지 않은 새 노트', 'New note not yet saved')}
-                    </span>
-                    {memo?.local_sync_status === 'failed' &&
-                      onRetryMemoSync && (
-                        <button
-                          aria-label={t('메모 동기화 재시도', 'Retry note sync')}
-                          className="split-menu-retry"
-                          disabled={isMemoSyncRetrying}
-                          onClick={() => onRetryMemoSync(memo.id)}
-                          type="button"
-                        >
-                          {isMemoSyncRetrying
-                            ? t('동기화 중...', 'Syncing...')
-                            : t('재시도', 'Retry')}
-                        </button>
-                      )}
-                  </div>
-                  {noteMenuFeedback && (
-                    <div
-                      className={`split-menu-feedback ${noteMenuFeedback.tone}`}
-                      role="status"
-                    >
-                      {noteMenuFeedback.message}
-                    </div>
-                  )}
-                  <div className="split-menu-separator" />
-                  <button
-                    className="split-menu-item"
-                    disabled={!memo || !onTogglePinMemo}
-                    onClick={() => {
-                      if (memo) {
-                        onTogglePinMemo?.(memo.id);
-                      }
-                      setOpenNoteMenuEditorId(null);
-                    }}
-                    type="button"
-                  >
-                    {memo && pinnedMemoIds.includes(memo.id) ? (
-                      <PinSolid size={15} />
-                    ) : (
-                      <Pin size={15} />
-                    )}
-                    <span>
-                      {memo && pinnedMemoIds.includes(memo.id)
-                        ? t('메모 고정 해제', 'Unpin note')
-                        : t('메모 고정', 'Pin note')}
-                    </span>
-                  </button>
-                  <button
-                    className="split-menu-item"
-                    onClick={async () => {
-                      const copied = await copyTextToClipboard(value);
-                      setNoteMenuFeedback(
-                        copied
-                          ? {
-                              message: t('Markdown을 복사했습니다.', 'Markdown copied.'),
-                              tone: 'success',
-                            }
-                          : {
-                              message: t('Markdown을 복사하지 못했습니다.', 'Could not copy Markdown.'),
-                              tone: 'error',
-                            },
-                      );
-                    }}
-                    type="button"
-                  >
-                    <ClipboardCopy size={15} />
-                    <span>{t('Markdown 복사', 'Copy Markdown')}</span>
-                  </button>
-                  <button
-                    className="split-menu-item"
-                    onClick={async () => {
-                      try {
-                        const filePath =
-                          await window.electronAPI.exportMarkdown(
-                            noteTitle.trim() || t('제목 없음', 'Untitled note'),
-                            value,
-                          );
-                        if (filePath) {
-                          setNoteMenuFeedback({
-                            message: t('Markdown을 내보냈습니다.', 'Markdown exported.'),
-                            tone: 'success',
-                          });
-                        } else {
-                          setOpenNoteMenuEditorId(null);
-                        }
-                      } catch {
-                        setNoteMenuFeedback({
-                          message: t('Markdown을 내보내지 못했습니다.', 'Could not export Markdown.'),
-                          tone: 'error',
-                        });
-                      }
-                    }}
-                    type="button"
-                  >
-                    <Download size={15} />
-                    <span>{t('Markdown 내보내기', 'Export Markdown')}</span>
-                  </button>
-                  <button
-                    className="split-menu-item"
-                    disabled={!value.trim()}
-                    onClick={() => {
-                      const duplicated = onCreateMemo(
-                        value,
-                        memo?.category ?? editor.draftCategory,
-                      );
-                      openMemoInPane(pane.id, duplicated);
-                      setOpenNoteMenuEditorId(null);
-                    }}
-                    type="button"
-                  >
-                    <Copy size={15} />
-                    <span>{t('복제', 'Duplicate')}</span>
-                  </button>
-                  <div className="split-menu-separator" />
-                  <button
-                    className="split-menu-item split-menu-item-danger"
-                    disabled={!memo || !onDeleteMemoById}
-                    onClick={() => {
-                      if (
-                        memo &&
-                        window.confirm(t('노트를 삭제하시겠습니까?', 'Delete this note?'))
-                      ) {
-                        onDeleteMemoById?.(memo.id);
-                        handleCloseEditor(pane, editor.id);
-                      }
-                      setOpenNoteMenuEditorId(null);
-                    }}
-                    type="button"
-                  >
-                    <Trash2 size={15} />
-                    <span>{t('삭제', 'Delete')}</span>
-                  </button>
-                </div>
-              )}
-            </div>
+                !
+              </span>
+            )}
+            <MemoSplitNoteMenu
+              editor={editor}
+              isMemoSyncRetrying={isMemoSyncRetrying}
+              isNoteMenuOpen={isNoteMenuOpen}
+              memo={memo}
+              noteMenuFeedback={noteMenuFeedback}
+              noteTitle={noteTitle}
+              onClearFeedback={() => setNoteMenuFeedback(null)}
+              onCloseEditor={handleCloseEditor}
+              onCloseMenu={() => setOpenNoteMenuEditorId(null)}
+              onCreateMemo={onCreateMemo}
+              onDeleteMemoById={onDeleteMemoById}
+              onOpenMemoInPane={openMemoInPane}
+              onRetryMemoSync={onRetryMemoSync}
+              onSetFeedback={setNoteMenuFeedback}
+              onSetMenuButtonElement={setNoteMenuButtonEl}
+              onSetMenuDropdownElement={setNoteMenuDropdownEl}
+              onToggleMenu={() =>
+                setOpenNoteMenuEditorId((current) =>
+                  current === editor.id ? null : editor.id,
+                )
+              }
+              onTogglePinMemo={onTogglePinMemo}
+              pane={pane}
+              pinnedMemoIds={pinnedMemoIds}
+              savePresentation={savePresentation}
+              translate={t}
+              value={value}
+            />
           </div>
           <NoteFixedToolbar editor={liveEditor}>
             <TooltipIconButton
@@ -2609,45 +1297,29 @@ const MemoSplitWorkspace = ({
               <Network size={15} />
             </TooltipIconButton>
           </NoteFixedToolbar>
-          {openDatePickerEditorId === editor.id ? (
-            <div className="date-schedule-floating split-date-schedule-floating">
-              <DateSchedulePopover
-                confirmLabel={t('등록', 'Add')}
-                initialDate={datePickerSeed ?? undefined}
-                onApplyDate={(date, allDay) =>
-                  applyEditorDate(editor, date, allDay)
-                }
-                onClose={() => {
-                  // 피커만 닫는다 — scheduleConfirm이 있으면 확인 바로 복귀.
-                  setOpenDatePickerEditorId(null);
-                  setDatePickerSeed(null);
-                }}
-              />
-            </div>
-          ) : scheduleConfirm?.editorId === editor.id &&
-            typeof document !== 'undefined' ? (
-            createPortal(
-              <div
-                className="schedule-confirm-floating"
-                style={{
-                  left:
-                    scheduleConfirm.anchor.left +
-                    scheduleConfirm.anchor.width / 2,
-                  top: scheduleConfirm.anchor.top - 6,
-                }}
-              >
-                <ScheduleConfirmPopover
-                  label={scheduleConfirm.label}
-                  onChangeDate={() => openPickerFromConfirm(editor)}
-                  onClose={() => setScheduleConfirm(null)}
-                  onConfirm={() => commitScheduleConfirm(editor)}
-                />
-              </div>,
-              document.body,
-            )
-          ) : null}
+          <MemoSplitScheduleOverlay
+            confirmLabel={t('등록', 'Add')}
+            datePickerSeed={datePickerSeed}
+            editor={editor}
+            onApplyDate={applyEditorDate}
+            onChangeDate={openPickerFromConfirm}
+            onCloseConfirm={() => setScheduleConfirm(null)}
+            onCloseDatePicker={() => {
+              // 피커만 닫는다 — scheduleConfirm이 있으면 확인 바로 복귀.
+              setOpenDatePickerEditorId(null);
+              setDatePickerSeed(null);
+            }}
+            onConfirm={commitScheduleConfirm}
+            openDatePickerEditorId={openDatePickerEditorId}
+            scheduleConfirm={scheduleConfirm}
+          />
         </div>
-        {renderHighlight(pane, editor, value)}
+        <RelatedSentenceCard
+          highlight={editor.highlight}
+          language={language}
+          onClose={() => patchActiveEditor(pane, { highlight: null })}
+          value={value}
+        />
         <SimpleEditor
           key={editor.id}
           ambientGhost={ambientGhost}
@@ -2764,58 +1436,15 @@ const MemoSplitWorkspace = ({
 
   return (
     <div className="split-workspace-shell">
-      <div
-        className={`split-workspace-commandbar ${
-          isSessionCollapsed ? 'session-collapsed' : ''
-        }`}
-      >
-        {onToggleSession && (
-          <TooltipIconButton
-            className="split-command-button session-toggle-button"
-            onClick={onToggleSession}
-            tooltip={formatHotkeyTooltip(
-              isSessionCollapsed
-                ? t('사이드바 열기', 'Show sidebar')
-                : t('사이드바 접기', 'Hide sidebar'),
-              appShortcuts?.toggleSidebar,
-            )}
-          >
-            {isSessionCollapsed ? (
-              <PanelLeft size={18} />
-            ) : (
-              <PanelLeftClose size={18} />
-            )}
-          </TooltipIconButton>
-        )}
-        {onOpenGlobalSearch && (
-          <TooltipIconButton
-            aria-label={t('전역 검색', 'Global search')}
-            className="split-command-button global-search-trigger"
-            onClick={onOpenGlobalSearch}
-            tooltip={formatHotkeyTooltip(t('전역 검색', 'Global search'), searchShortcut)}
-          >
-            <Search size={16} />
-          </TooltipIconButton>
-        )}
-        {/* 접기·검색(사이드바)과 undo·redo(문서)는 성격이 달라 한 덩어리로
-            읽히면 안 된다. */}
-        <div aria-hidden className="split-command-divider" />
-        <EditorContext.Provider value={{ editor: focusedToolbarEditor }}>
-          <UndoRedoButton
-            action="undo"
-            aria-label={t('실행 취소', 'Undo')}
-            tooltip={t('실행 취소', 'Undo')}
-          />
-          <UndoRedoButton
-            action="redo"
-            aria-label={t('다시 실행', 'Redo')}
-            tooltip={t('다시 실행', 'Redo')}
-          />
-        </EditorContext.Provider>
-        <div className="split-workspace-drag-spacer" />
-        {/* 네트워크 검색·메모 고정은 노트 내부(툴바/⋯ 메뉴)로 이동했다.
-            다크 모드 토글 복원 시 ThemeToggle을 이 자리에 되돌리면 된다. */}
-      </div>
+      <SplitWorkspaceCommandBar
+        appShortcuts={appShortcuts}
+        focusedToolbarEditor={focusedToolbarEditor}
+        isSessionCollapsed={isSessionCollapsed}
+        language={language}
+        onOpenGlobalSearch={onOpenGlobalSearch}
+        onToggleSession={onToggleSession}
+        searchShortcut={searchShortcut}
+      />
       <div
         className={`split-workspace-container${isSessionCollapsed ? ' session-collapsed' : ''}`}
         ref={containerRef}
@@ -2838,222 +1467,44 @@ const MemoSplitWorkspace = ({
                   flexBasis: `${paneWidths[pane.id] ?? defaultWidth}%`,
                 }}
               >
-                <div className="split-pane-header">
-                  <div aria-hidden className="split-pane-titlebar-drag" />
-                  <div
-                    className="split-editor-tabs-scroll"
-                    onDragLeave={handleTabDragLeave}
-                    onDragOver={(event) => handleTabDragOver(event, pane.id)}
-                    onDrop={(event) =>
-                      handleTabDrop(event, pane.id, editors.length)
-                    }
-                  >
-                    <div className="split-editor-tabs">
-                      {editors.map((editor) => {
-                        const tabLabel = editor.isViewPicker
-                          ? t('새 탭', 'New tab')
-                          : editor.view === 'memo'
-                            ? getMemoTabLabel(
-                                editor.draftText ??
-                                  (editor.memoId
-                                    ? memoById.get(editor.memoId)?.content
-                                    : '') ??
-                                  '',
-                                language,
-                              )
-                            : viewLabel(editor.view, language);
-
-                        return (
-                          <button
-                            aria-label={tabLabel}
-                            draggable
-                            key={editor.id}
-                            onDragEnd={clearTabDrag}
-                            onDragStart={(event) =>
-                              handleTabDragStart(event, pane.id, editor.id)
-                            }
-                            onDragOver={(event) => {
-                              event.stopPropagation();
-                              const rect =
-                                event.currentTarget.getBoundingClientRect();
-                              handleTabDragOver(event, pane.id, {
-                                editorId: editor.id,
-                                position:
-                                  event.clientX > rect.left + rect.width / 2
-                                    ? 'after'
-                                    : 'before',
-                              });
-                            }}
-                            onDrop={(event) => {
-                              const rect =
-                                event.currentTarget.getBoundingClientRect();
-                              const editorIndex = editors.findIndex(
-                                (candidate) => candidate.id === editor.id,
-                              );
-                              handleTabDrop(
-                                event,
-                                pane.id,
-                                editorIndex +
-                                  (event.clientX > rect.left + rect.width / 2
-                                    ? 1
-                                    : 0),
-                              );
-                            }}
-                            onClick={() => {
-                              onChangePane(pane.id, {
-                                ...mirrorEditorPatch(editor),
-                                activeEditorId: editor.id,
-                                editors,
-                              });
-                              onFocusPane?.(pane.id);
-                              if (editor.memoId) {
-                                onSelectMemoById(editor.memoId);
-                              }
-                            }}
-                            className={`split-editor-tab ${editor.id === activeEditor.id ? 'active' : ''}${draggedTab?.editorId === editor.id && draggedTab.paneId === pane.id ? ' dragging' : ''}${dropTarget?.paneId === pane.id && dropTarget.editorId === editor.id ? ` drop-${dropTarget.position}` : ''}`}
-                            title={tabLabel}
-                          >
-                            <span className="split-tab-label">{tabLabel}</span>
-                            <Tooltip
-                              label={formatHotkeyTooltip(
-                                t('탭 닫기', 'Close tab'),
-                                editor.id === activeEditor.id
-                                  ? appShortcuts?.closeActiveTab
-                                  : null,
-                              )}
-                              openDelay={300}
-                              position="bottom"
-                            >
-                              <span
-                                aria-label={t('탭 닫기', 'Close tab')}
-                                className="split-tab-close"
-                                draggable={false}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCloseEditor(pane, editor.id);
-                                }}
-                                onDragStart={(event) => event.preventDefault()}
-                                onPointerDown={(event) =>
-                                  event.stopPropagation()
-                                }
-                                role="button"
-                              >
-                                <X size={13} />
-                              </span>
-                            </Tooltip>
-                          </button>
-                        );
-                      })}
-                      {dropTarget?.paneId === pane.id &&
-                        !dropTarget.editorId && (
-                          <span
-                            aria-hidden
-                            className="split-tab-drop-indicator"
-                          />
-                        )}
-                      <div
-                        aria-hidden
-                        className="split-editor-tabs-drag-spacer"
-                      />
-                    </div>
-                  </div>
-                  <TooltipIconButton
-                    className="split-editor-tab-add"
-                    onClick={() => handleAddEditor(pane)}
-                    tooltip={formatHotkeyTooltip(
-                      t('새 탭', 'New tab'),
-                      appShortcuts?.createTab,
-                    )}
-                  >
-                    <Plus size={15} />
-                  </TooltipIconButton>
-                  <div
-                    className="split-pane-actions"
-                    ref={isMenuOpen ? setMenuActionsEl : undefined}
-                  >
-                    <TooltipIconButton
-                      onClick={onAddPane}
-                      className="split-action-btn"
-                      disabled={!canAddPane}
-                      tooltip={
-                        canAddPane
-                          ? formatHotkeyTooltip(
-                              t('두 패널로 나누기', 'Split into two panes'),
-                              appShortcuts?.createSplitPane,
-                            )
-                          : t(
-                              'split 패널은 최대 2개까지 열 수 있습니다',
-                              'You can open up to two split panes.',
-                            )
-                      }
-                    >
-                      <Columns2 size={14} />
-                    </TooltipIconButton>
-                    <TooltipIconButton
-                      onClick={() =>
-                        setOpenMenuPaneId((current) =>
-                          current === pane.id ? null : pane.id,
-                        )
-                      }
-                      className={`split-action-btn ${isMenuOpen ? 'active' : ''}`}
-                      tooltip={t('탭 메뉴', 'Tab menu')}
-                    >
-                      <ChevronDown size={15} />
-                    </TooltipIconButton>
-                    <TooltipIconButton
-                      disabled={panes.length <= 1}
-                      onClick={() =>
-                        onClosePane ? onClosePane(pane.id) : onCloseAllPanes?.()
-                      }
-                      className="split-action-btn"
-                      tooltip={
-                        panes.length <= 1
-                          ? t('마지막 패널은 닫을 수 없습니다', 'The last pane cannot be closed.')
-                          : t('패널 닫기', 'Close pane')
-                      }
-                    >
-                      ×
-                    </TooltipIconButton>
-                  </div>
-                  {isMenuOpen && (
-                    <div
-                      className="split-pane-menu-dropdown"
-                      ref={setMenuDropdownEl}
-                    >
-                      <button
-                        className="split-menu-item"
-                        onClick={() => handleCloseAllEditors(pane)}
-                        type="button"
-                      >
-                        {language === 'en'
-                          ? `Close all ${editors.length} tabs`
-                          : `${editors.length}개의 탭 모두 닫기`}
-                      </button>
-                      <div className="split-menu-separator" />
-                      {MENU_VIEWS.map((view) => {
-                        const ViewIcon = VIEW_ICONS[view];
-                        return (
-                          <button
-                            key={view}
-                            onClick={() => {
-                              handleSelectEditorView(pane, view);
-                            }}
-                            className={`split-menu-item split-menu-view-item ${activeEditor.view === view ? 'active' : ''}`}
-                            type="button"
-                          >
-                            <span className="split-menu-check">
-                              {activeEditor.view === view ? (
-                                <Check size={14} />
-                              ) : null}
-                            </span>
-                            {ViewIcon ? <ViewIcon size={15} /> : null}
-                            <span>{viewLabel(view, language)}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <MemoSplitPaneHeader
+                  appShortcuts={appShortcuts}
+                  canAddPane={canAddPane}
+                  draggedTab={draggedTab}
+                  dropTarget={dropTarget}
+                  editors={editors}
+                  isLastPane={panes.length <= 1}
+                  isMenuOpen={isMenuOpen}
+                  language={language}
+                  memoById={memoById}
+                  onAddEditor={handleAddEditor}
+                  onAddPane={onAddPane}
+                  onChangePane={onChangePane}
+                  onClearTabDrag={clearTabDrag}
+                  onCloseAllEditors={handleCloseAllEditors}
+                  onCloseEditor={handleCloseEditor}
+                  onClosePane={(targetPane) =>
+                    onClosePane
+                      ? onClosePane(targetPane.id)
+                      : onCloseAllPanes?.()
+                  }
+                  onFocusPane={onFocusPane}
+                  onHandleTabDragLeave={handleTabDragLeave}
+                  onHandleTabDragOver={handleTabDragOver}
+                  onHandleTabDrop={handleTabDrop}
+                  onHandleTabDragStart={handleTabDragStart}
+                  onSelectEditorView={handleSelectEditorView}
+                  onSelectMemoById={onSelectMemoById}
+                  onSetMenuActionsElement={setMenuActionsEl}
+                  onSetMenuDropdownElement={setMenuDropdownEl}
+                  onToggleMenu={() =>
+                    setOpenMenuPaneId((current) =>
+                      current === pane.id ? null : pane.id,
+                    )
+                  }
+                  pane={pane}
+                  translate={t}
+                />
                 <div className="split-pane-body-wrapper">
                   <RenderErrorBoundary
                     fallback={() => (

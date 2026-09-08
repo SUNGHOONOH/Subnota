@@ -2,15 +2,41 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
-const workspaceSource = readFileSync(
+const appSource = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${readFileSync(
+  resolve(__dirname, '../features/workspace/AppSidePanel.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/workspace/AppNavRail.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/workspace/appShellPresentation.ts'),
+  'utf8',
+)}`;
+const sessionToggleSource = readFileSync(
+  resolve(__dirname, '../features/workspace/useSessionSidebarToggle.ts'),
+  'utf8',
+);
+const openNewTabSource = readFileSync(
+  resolve(__dirname, '../features/memo/useOpenNewTab.ts'),
+  'utf8',
+);
+const workspaceSource = `${readFileSync(
   resolve(__dirname, '../features/memo/components/MemoSplitWorkspace.tsx'),
   'utf8',
-);
-const memoWorkspaceSource = readFileSync(
+)}\n${readFileSync(
+  resolve(__dirname, '../features/memo/components/MemoSplitPaneHeader.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/memo/memoSplitWorkspaceUtils.ts'),
+  'utf8',
+)}`;
+const memoWorkspaceSource = `${readFileSync(
   resolve(__dirname, '../features/memo/MemoWorkspace.tsx'),
   'utf8',
-);
+)}\n${readFileSync(
+  resolve(__dirname, '../features/memo/components/MemoFolderSidebar.tsx'),
+  'utf8',
+)}`;
 const authSource = readFileSync(
   resolve(__dirname, '../features/auth/AuthScreen.tsx'),
   'utf8',
@@ -57,11 +83,14 @@ describe('workspace shell layout', () => {
     );
     expect(appSource).toContain("'sidebar-collapse-ready'");
     expect(appSource).toContain('const SIDEBAR_COLLAPSE_DURATION_MS = 280');
-    expect(appSource).toContain('}, SIDEBAR_COLLAPSE_DURATION_MS);');
-    expect(appSource).toContain('onClickCapture={(event) => {');
+    expect(sessionToggleSource).toContain('}, collapseDurationMs);');
+    expect(appSource).toContain(
+      'const handleClickCapture = (event: MouseEvent<HTMLElement>) => {',
+    );
+    expect(appSource).toContain('onCollapsedNavInteraction();');
     expect(appSource).toContain('setFloatingNavDismissed(true)');
     expect(appSource).toContain(
-      'onMouseEnter={() => setFloatingNavDismissed(false)}',
+      'onMouseEnter={onRevealFloatingNav}',
     );
     expect(styles).toMatch(
       /\.app-shell\.session-collapsed:not\(\.sidebar-collapse-ready\) \.nav-rail\s*\{[^}]*opacity:\s*0[^}]*transform:\s*translateX/,
@@ -78,8 +107,9 @@ describe('workspace shell layout', () => {
       /exit=\{\s*shouldReduceMotion\s*\|\|\s*isSidePanelPushed\s*\n?\s*\?\s*undefined\s*\n?\s*:\s*\{ x: '100%' \}/,
     );
     expect(appSource).toContain(
-      'duration: SIDEBAR_COLLAPSE_DURATION_MS / 1000',
+      'collapseDurationMs={SIDEBAR_COLLAPSE_DURATION_MS}',
     );
+    expect(appSource).toContain('duration: collapseDurationMs / 1000');
     expect(appSource).toContain('ease: [0.4, 0, 0.2, 1]');
     expect(styles).toMatch(
       /\.app-shell\.side-panel-collapsed \.app-side-panel-reveal-zone\s*\{[\s\S]*?height:\s*96px[\s\S]*?right:\s*0[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)[\s\S]*?width:\s*12px/,
@@ -138,9 +168,12 @@ describe('workspace shell layout', () => {
 
     expect(positions.every(position => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
-    expect(appSource).toContain('const openNewTabInFocusedSplitPane = () => {');
-    expect(appSource).toContain("createEditorHelper('memo', { isViewPicker: true })");
-    expect(appSource).toContain('editorsAfterNewTab(getAppPaneEditors(pane), nextEditor)');
+    expect(openNewTabSource).toContain(
+      "createEditor('memo', { isViewPicker: true })",
+    );
+    expect(openNewTabSource).toContain(
+      'editorsAfterNewTab(getAppPaneEditors(pane), nextEditor)',
+    );
     expect(appSource).toContain("root: 'nav-mode-segment nav-context-item'");
     expect(appSource).toContain("aria-label={t('메모 보기 방식', 'Memo view')}");
     expect(appSource).toContain('orientation="vertical"');
@@ -155,7 +188,7 @@ describe('workspace shell layout', () => {
     expect(appSource).toContain('duration: 0.14');
     expect(workspaceSource).toContain('const tabLabel = editor.isViewPicker');
     expect(workspaceSource).toMatch(
-      /const getMemoTabLabel = \(content: string, language: 'en' \| 'ko'\) =>/,
+      /(?:export )?const getMemoTabLabel = \(content: string, language: 'en' \| 'ko'\) =>/,
     );
     expect(workspaceSource).toContain(".find(Boolean);");
     expect(workspaceSource).toContain('title={tabLabel}');
@@ -183,7 +216,7 @@ describe('workspace shell layout', () => {
 
   it('keeps settings separate from the direct update action', () => {
     expect(appSource).toContain('className="nav-item nav-utility nav-update-action"');
-    expect(appSource).toContain('onClick={() => void startAvailableUpdate()}');
+    expect(appSource).toContain('onClick={onStartUpdate}');
     expect(appSource).toContain('disabled={isUpdateWorking}');
     expect(appSource).toContain("aria-label={t('설정', 'Settings')}");
     expect(appSource).not.toContain('checkForAvailableUpdate(true)');

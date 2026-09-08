@@ -28,6 +28,9 @@ describe('memo save presentation', () => {
     expect(workspace).toMatch(
       /\{showSaveIssue && \([\s\S]*?className="split-note-save-status"/,
     );
+    expect(workspace).toMatch(
+      /className="split-note-title-row"[\s\S]*?\{showSaveIssue && \([\s\S]*?>\s*!\s*<\/span>/,
+    );
     expect(workspace).not.toContain("{savePresentation?.text ?? '새 노트'}");
   });
 

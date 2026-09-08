@@ -14,15 +14,33 @@ const source = readFileSync(
   resolve(__dirname, '../features/schedule/ScheduleInboxWorkspace.tsx'),
   'utf8',
 );
-const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+const appSource = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${readFileSync(
+  resolve(__dirname, '../features/workspace/AppSidePanel.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/schedule/useScheduleInboxItemActions.ts'),
+  'utf8',
+)}`;
 const placementSource = readFileSync(
   resolve(__dirname, '../lib/anchoredPlacement.ts'),
   'utf8',
 );
-const calendarSource = readFileSync(
+const calendarSource = `${readFileSync(
   resolve(__dirname, '../features/calendar/CalendarWorkspace.tsx'),
   'utf8',
-);
+)}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarHeader.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarMonthTodoArea.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarMonthView.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarEventEditorModal.tsx'),
+  'utf8',
+)}`;
 const styles = readFileSync(
   resolve(__dirname, '../styles/subnota-workspace.scss'),
   'utf8',
@@ -221,10 +239,10 @@ describe('ScheduleInboxWorkspace', () => {
   // 월간도 같은 코드를 쓴다 — 앵커를 안 넘겨서 가운데로 떨어지고 있었다.
   it('월간 일정도 앵커를 넘긴다', () => {
     expect(calendarSource).toContain(
-      'openEditor(start, block, event.currentTarget)',
+      'onOpenEditor(start, block, event.currentTarget)',
     );
     expect(calendarSource).toContain(
-      'openSuggestionEditor(suggestion, event.currentTarget)',
+      'onOpenSuggestionEditor(suggestion, event.currentTarget)',
     );
   });
 
@@ -345,7 +363,7 @@ describe('ScheduleInboxWorkspace', () => {
       /cal-month-meta[\s\S]*?cal-month-more[\s\S]*?cal-daynum/,
     );
     expect(calendarSource).toMatch(
-      /className="cal-month-more"[\s\S]*?selectDay\(date\)/,
+      /className="cal-month-more"[\s\S]*?onSelectDay\(date\)/,
     );
     expect(calendarSource).toContain('title={block.title}');
     expect(styles).toMatch(
@@ -358,12 +376,11 @@ describe('ScheduleInboxWorkspace', () => {
 
   it('keeps the monthly todo summary while opening its detail as an overlay', () => {
     expect(calendarSource).toContain('const [isMonthTodoOverlayOpen');
+    expect(calendarSource).toContain('<CalendarMonthTodoArea');
     expect(calendarSource).toContain('className="cal-month-todo-overlay"');
     expect(calendarSource).toContain('key="month-todo-overlay"');
-    expect(calendarSource).toMatch(
-      /aria-label=\{t\(\s*`\$\{formatCalendarDate\(selectedDay\)\} 할 일 상세`/,
-    );
-    expect(calendarSource).toContain('onToggleDetail={() => setMonthTodoOverlayOpen(false)}');
+    expect(calendarSource).toContain('detailAriaLabel={t(');
+    expect(calendarSource).toContain('onToggleDetail={() => setMonthTodoOverlayOpen((isOpen) => !isOpen)}');
     expect(calendarSource).toContain("if (event.key === 'Escape')");
     expect(styles).toMatch(
       /\.cal-month-todo-overlay\s*\{[\s\S]*?bottom:\s*calc\(clamp\(180px, 24%, 220px\) \+ 12px\)[\s\S]*?position:\s*absolute[\s\S]*?z-index:\s*12/,

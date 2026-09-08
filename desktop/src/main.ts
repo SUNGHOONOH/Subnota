@@ -57,6 +57,13 @@ import {
   normalizeWebUrl,
 } from './lib/url-policy';
 import {
+  getCaptureFailureMessage,
+  getInboxSaveStatusMessage,
+  normalizeRecentInboxItem,
+  RecentInboxItem,
+  truncateLabel,
+} from './features/mini/trayPresentation';
+import {
   configureLocalDatabaseMaintenanceHooks,
   flushLocalDatabaseOperations,
 } from './local-database';
@@ -1317,40 +1324,6 @@ const installApplicationMenu = () => {
   Menu.setApplicationMenu(menu);
 };
 
-interface RecentInboxItem {
-  summaryStatus?: 'pending' | 'ready' | 'partial' | 'unsupported' | 'failed';
-  title: string;
-  url: string;
-  sourceLabel: string;
-}
-
-const RECENT_INBOX_STATUSES = new Set<NonNullable<RecentInboxItem['summaryStatus']>>([
-  'pending',
-  'ready',
-  'partial',
-  'unsupported',
-  'failed',
-]);
-
-const normalizeRecentInboxItem = (value: unknown): RecentInboxItem | null => {
-  if (!value || typeof value !== 'object') return null;
-  const item = value as Partial<RecentInboxItem>;
-  const url = normalizeWebUrl(item.url);
-  if (!url || typeof item.title !== 'string' || typeof item.sourceLabel !== 'string') {
-    return null;
-  }
-  const summaryStatus = item.summaryStatus;
-  if (summaryStatus !== undefined && !RECENT_INBOX_STATUSES.has(summaryStatus)) {
-    return null;
-  }
-  return {
-    sourceLabel: item.sourceLabel.trim().slice(0, 100) || '링크',
-    summaryStatus,
-    title: item.title.trim().slice(0, 500) || url,
-    url,
-  };
-};
-
 let recentInboxItems: RecentInboxItem[] = [];
 let hasUnreadInbox = false;
 let unreadPulseTimers: Array<ReturnType<typeof setTimeout>> = [];
@@ -1433,52 +1406,6 @@ const pulseUnreadInboxBadge = () => {
   );
 };
 
-const getInboxSaveStatusMessage = (item: RecentInboxItem) => {
-  if (item.summaryStatus === 'partial') {
-    return mainT(
-      '링크와 메타데이터를 저장했습니다. 본문 요약은 제한적입니다.',
-      'Link and metadata saved. The page summary is limited.',
-    );
-  }
-  if (item.summaryStatus === 'failed' || item.summaryStatus === 'unsupported') {
-    return mainT(
-      '링크는 저장했습니다. 요약은 생성하지 못했습니다.',
-      'Link saved, but a summary could not be created.',
-    );
-  }
-  if (item.summaryStatus === 'pending') {
-    return mainT(
-      '링크를 저장했습니다. 요약을 준비 중입니다.',
-      'Link saved. Preparing its summary.',
-    );
-  }
-  return mainT('링크 저장함에 저장됨', 'Saved to Inbox');
-};
-
-const getCaptureFailureMessage = (message: string) => {
-  if (currentUiLanguage !== 'en') return message;
-  if (message.startsWith('지원하는 브라우저의 현재 페이지를 찾지 못했습니다.')) {
-    return 'Could not find the current page in a supported browser. Try Safari, Chrome, Arc, Edge, or Brave.';
-  }
-  if (message.startsWith('브라우저 정보를 가져오지 못했습니다')) {
-    return 'Could not read the browser information.';
-  }
-  if (message === '현재 페이지 저장은 macOS에서만 지원됩니다.') {
-    return 'Saving the current page is available on macOS only.';
-  }
-  if (message === '웹페이지 주소만 저장할 수 있습니다. 브라우저 내부 페이지나 로컬 파일은 지원하지 않습니다.') {
-    return 'Only web page addresses can be saved. Browser-internal pages and local files are not supported.';
-  }
-  return message;
-};
-
-const truncateLabel = (value: string, maxLength: number) => {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
-};
-
 const buildTrayMenu = () => {
   if (!tray) {
     return;
@@ -1499,7 +1426,7 @@ const buildTrayMenu = () => {
         ? [
             {
               click: acknowledgeCaptureFailure,
-              label: `${mainT('저장하지 못함', 'Could not save')} — ${truncateLabel(getCaptureFailureMessage(lastCaptureFailure), 48)}`,
+              label: `${mainT('저장하지 못함', 'Could not save')} — ${truncateLabel(getCaptureFailureMessage(lastCaptureFailure, currentUiLanguage), 48)}`,
             },
             { type: 'separator' as const },
           ]
@@ -1564,7 +1491,7 @@ const recordInboxSave = (value: unknown) => {
   }
   buildTrayMenu();
   updateMiniRecentInbox(recentInboxItems);
-  updateMiniStatus(getInboxSaveStatusMessage(item));
+  updateMiniStatus(getInboxSaveStatusMessage(item, mainT));
 };
 
 /**

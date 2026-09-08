@@ -7,10 +7,14 @@ import {
   DEFAULT_CALENDAR_COLOR,
 } from '../features/calendar/calendarCategories';
 
-const calendarSource = readFileSync(
+const calendarSource = `${readFileSync(
   resolve(__dirname, '../features/calendar/CalendarWorkspace.tsx'),
   'utf8',
-);
+)}
+${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarCategoryPicker.tsx'),
+  'utf8',
+)}`;
 const styles = readFileSync(
   resolve(__dirname, '../styles/subnota-workspace.scss'),
   'utf8',

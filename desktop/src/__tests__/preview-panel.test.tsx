@@ -16,12 +16,28 @@ import {
   effectiveSidePanelWidth,
   NAV_RAIL_WIDTH,
 } from '../lib/previewPanelWidth';
-import type { NetworkSearchResult } from '../services/backend/networkService';
+import type { NetworkSearchResult } from '../services/local/memoSearchTypes';
 import type { MemoRow } from '../types';
 
 const CONTENT = '앞 문장입니다.\nSQLite WAL 모드 전환 후기\n뒤 문장입니다.';
 const CHUNK = 'SQLite WAL 모드 전환 후기';
 const START = CONTENT.indexOf(CHUNK);
+const appSidePanelSource = readFileSync(
+  resolve(__dirname, '../features/workspace/AppSidePanel.tsx'),
+  'utf8',
+);
+const resizeSource = readFileSync(
+  resolve(__dirname, '../features/preview/usePreviewPanelResize.ts'),
+  'utf8',
+);
+const previewActionsSource = readFileSync(
+  resolve(__dirname, '../features/preview/usePreviewPanelActions.ts'),
+  'utf8',
+);
+const viewportSource = readFileSync(
+  resolve(__dirname, '../features/workspace/useWindowViewport.ts'),
+  'utf8',
+);
 
 beforeAll(() => {
   vi.stubGlobal('navigator', { language: 'ko-KR', languages: ['ko-KR'] });
@@ -291,7 +307,10 @@ describe('사이드 패널 전환 부드러움', () => {
     resolve(__dirname, '../styles/subnota-workspace.scss'),
     'utf8',
   );
-  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+  const appSource = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${appSidePanelSource}\n${readFileSync(
+    resolve(__dirname, '../features/workspace/appShellPresentation.ts'),
+    'utf8',
+  )}\n${resizeSource}\n${previewActionsSource}\n${viewportSource}`;
 
   // 트랙 개수가 2↔3으로 바뀌면 grid-template-columns가 보간되지 않고 점프한다.
   it('사이드 패널 트랙은 닫혀 있어도 0px로 존재한다', () => {
@@ -320,5 +339,13 @@ describe('사이드 패널 전환 부드러움', () => {
     expect(appSource).toMatch(
       /exit=\{\s*shouldReduceMotion\s*\|\|\s*isSidePanelPushed\s*\n?\s*\?\s*undefined\s*\n?\s*:\s*\{ x: '100%' \}/,
     );
+  });
+
+  it('미리보기 승격은 원래 대상 이벤트와 패널 정리를 유지한다', () => {
+    expect(appSource).toContain("new CustomEvent('subnota:open-inbox-source'");
+    expect(appSource).toContain("new CustomEvent('subnota:open-memo'");
+    expect(appSource).toContain("target: beside ? 'beside' : 'focused'");
+    expect(appSource).toContain('setActiveSidePanel(null)');
+    expect(appSource).toContain('setPreviewPanel(null)');
   });
 });

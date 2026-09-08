@@ -59,13 +59,16 @@ describe('notifyClipFailed', () => {
 });
 
 describe('캡처 결과 배선', () => {
-  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+  const appSource = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${readFileSync(
+    resolve(__dirname, '../features/inbox/useInboxCaptureSubscription.ts'),
+    'utf8',
+  )}`;
 
   it('성공과 실패 모두 알림으로 이어진다', () => {
     expect(appSource).toContain('notifyClipSaved(');
     expect(appSource).toContain('notifyClipFailed(');
     // 성공 알림 클릭은 창을 띄우고 수집함으로 보낸다.
     expect(appSource).toContain('window.electronAPI?.showMainWindow?.()');
-    expect(appSource).toContain("openViewAsTabRef.current('inbox')");
+    expect(appSource).toContain("openViewAsTab('inbox')");
   });
 });

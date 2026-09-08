@@ -81,6 +81,13 @@ describe('링크 저장함 카드', () => {
     expect(styles).not.toContain('linear-gradient(135deg, var(--app-color-border)');
   });
 
+  it('요약 중이거나 실패한 링크가 카드에서 상태를 숨기지 않는다', () => {
+    expect(inboxSource).toContain("t('요약 중입니다…', 'Creating summary…')");
+    expect(inboxSource).toContain("t('요약 실패', 'Summary failed')");
+    expect(inboxSource).toContain("item.summaryStatus === 'failed'");
+    expect(inboxSource).toContain('role="status"');
+  });
+
   // 슬롯을 고정하면 요약이나 키워드가 없는 항목이 카드 중간에 구멍을 남긴다.
   // 높이는 격자 정렬 때문에 고정하되, 남는 자리는 아래 여백으로 몰아 준다.
   it('고정 슬롯 대신 자연 흐름 + 키워드 하단 정렬을 쓴다', () => {

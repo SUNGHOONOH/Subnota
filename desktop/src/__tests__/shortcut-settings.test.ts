@@ -89,6 +89,21 @@ describe('shortcut settings', () => {
       true,
     );
   });
+
+  it('recognizes the default Command/Ctrl+1 memo shortcut', () => {
+    expect(
+      matchesKeyboardShortcut(
+        keyEvent('1', { metaKey: true }),
+        DEFAULT_APP_SHORTCUT_SETTINGS.openMemos,
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        keyEvent('1', { ctrlKey: true }),
+        DEFAULT_APP_SHORTCUT_SETTINGS.openMemos,
+      ),
+    ).toBe(true);
+  });
 });
 
 const LABELS = {

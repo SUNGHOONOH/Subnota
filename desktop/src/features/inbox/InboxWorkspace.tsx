@@ -230,6 +230,12 @@ const InboxWorkspace = ({
           const duration = formatDuration(item.duration);
           const oneLiner = item.summaryOneLiner ?? item.summary;
           const excerpt = item.thumbnailUrl ? null : item.summary ?? item.summaryOneLiner;
+          const summaryStatusLabel =
+            item.summaryStatus === 'pending'
+              ? t('요약 중입니다…', 'Creating summary…')
+              : item.summaryStatus === 'failed'
+                ? t('요약 실패', 'Summary failed')
+                : null;
           const favicon = faviconUrlFor(item.domain);
           return (
             <Card
@@ -261,6 +267,10 @@ const InboxWorkspace = ({
                     />
                   ) : excerpt ? (
                     <div className="inbox-thumbnail-text">{excerpt}</div>
+                  ) : summaryStatusLabel ? (
+                    <div className="inbox-thumbnail-text" role="status">
+                      {summaryStatusLabel}
+                    </div>
                   ) : null}
                   {duration && <span className="inbox-duration">{duration}</span>}
                 </div>
@@ -298,6 +308,11 @@ const InboxWorkspace = ({
                   {oneLiner && oneLiner !== excerpt && (
                     <Text fz="xs" lineClamp={2}>
                       {oneLiner}
+                    </Text>
+                  )}
+                  {summaryStatusLabel && item.thumbnailUrl && !oneLiner && (
+                    <Text c={item.summaryStatus === 'failed' ? 'red' : 'dimmed'} fz="xs" role="status">
+                      {summaryStatusLabel}
                     </Text>
                   )}
                 </div>

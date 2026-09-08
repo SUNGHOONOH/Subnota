@@ -58,7 +58,9 @@ describe('로그인 화면 구성', () => {
   // 브랜드가 두 번 나온다.
   it('로고 락업이 로그인 카드에만 있다', () => {
     expect(screen).toContain('className="desktop-auth-brand"');
-    expect(screen).toContain('<SubnotaMark size={34} />');
+    expect(screen).toContain("import glassMarkUrl from '../../../resources/icon-glass-mark-1024.png';");
+    expect(screen).toContain('className="desktop-auth-glass-mark"');
+    expect(screen).toContain('src={glassMarkUrl}');
     expect(screen).not.toContain('auth-character-logo');
     expect(screen).not.toContain('brand-mark-logo');
     // 왼쪽 패널은 꽃밭만 담는다.

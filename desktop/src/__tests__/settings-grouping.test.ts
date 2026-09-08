@@ -4,13 +4,49 @@ import { describe, expect, it } from 'vitest';
 
 // 설정 탭이 전폭 구분선으로만 나뉜 하나의 긴 목록이었다. 이제 관련 항목만
 // 묶음 카드에 담고, 묶음 이름은 카드 밖에 둔다.
-const source = readFileSync(
+const source = `${readFileSync(
   resolve(__dirname, '../features/settings/SettingsModal.tsx'),
   'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/settings/SettingsPrimitives.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/settings/SettingsStyles.ts'),
+  'utf8',
+)}`;
+const hotkeysSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsHotkeysSection.tsx'),
+  'utf8',
 );
-// 첫 블록(REFERENCE_CSS)은 transform: none으로 덮어써진다. 실제 레이아웃을
-// 정하는 것은 SETTINGS_CSS 쪽이라 거기서만 확인한다.
-const css = source.slice(source.indexOf('const SETTINGS_CSS'));
+const aboutSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsAboutSection.tsx'),
+  'utf8',
+);
+const accountSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsAccountSection.tsx'),
+  'utf8',
+);
+const appearanceSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsAppearanceSection.tsx'),
+  'utf8',
+);
+const backupSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsBackupSection.tsx'),
+  'utf8',
+);
+const generalSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsGeneralSection.tsx'),
+  'utf8',
+);
+const syncSource = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsSyncSection.tsx'),
+  'utf8',
+);
+// 실제 레이아웃은 모달에서 import하는 별도 CSS 문자열에서 확인한다.
+const css = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsStyles.ts'),
+  'utf8',
+);
 
 describe('설정 묶음 카드', () => {
   it('모달 우측 상단에 독립적인 닫기 버튼이 있다', () => {
@@ -76,10 +112,10 @@ describe('설정 묶음 카드', () => {
 });
 
 describe('탭별 묶음 나누기', () => {
-  const generalTab = source.slice(
+  const generalTab = `${source.slice(
     source.indexOf("{active === 'general' &&"),
     source.indexOf("{active === 'appearance' &&"),
-  );
+  )}\n${generalSource}`;
 
   // 알림·업데이트·연관 문장 검색은 시작과도 창과도 관계가 없었는데
   // "시작 및 창" 한 묶음에 같이 있었다.
@@ -103,10 +139,10 @@ describe('탭별 묶음 나누기', () => {
   // 이 버튼들은 앱 단축키와 전역 단축키를 모두 저장한다. "빠른 실행" 묶음
   // 안에 있으면 그 묶음만 저장하는 것처럼 읽힌다.
   it('단축키 저장 버튼이 묶음 카드 밖에 있다', () => {
-    const hotkeysTab = source.slice(
+    const hotkeysTab = `${source.slice(
       source.indexOf("{active === 'hotkeys' &&"),
       source.indexOf("{active === 'account' &&"),
-    );
+    )}\n${hotkeysSource}`;
 
     expect(hotkeysTab).toMatch(
       /<\/Section>[\s\S]{0,200}<Group className="settings-reference-actions"/,
@@ -132,7 +168,7 @@ describe('탭별 묶음 나누기', () => {
       'Subnota',
     ]) {
       // description이 있는 묶음은 여러 줄로 쓰여 있어 title만 확인한다.
-      expect(source).toContain(
+      expect(`${source}\n${hotkeysSource}\n${aboutSource}\n${accountSource}\n${appearanceSource}\n${backupSource}\n${generalSource}\n${syncSource}`).toContain(
         title === 'Subnota' ? 'title="Subnota"' : `title={t('${title}'`,
       );
     }

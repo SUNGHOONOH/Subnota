@@ -14,7 +14,7 @@ import type {
   MemoSplitEditorState,
   MemoSplitPaneState,
 } from '../features/memo/components/MemoSplitWorkspace';
-import type { NetworkSearchResult } from '../services/backend/networkService';
+import type { NetworkSearchResult } from '../services/local/memoSearchTypes';
 
 const networkTab: MemoSplitEditorState = { id: 'tab-network', view: 'network' };
 const memoTab: MemoSplitEditorState = {

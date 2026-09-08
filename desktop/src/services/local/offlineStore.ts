@@ -2,6 +2,9 @@ import { hashText } from '../../lib/contentHash';
 import { getMemoCategory } from '../../lib/memoCategory';
 import {
   CalendarBlockRow,
+  MemoFolder,
+  MemoFolderExclusion,
+  MemoFolderMembership,
   MemoRow,
   ScheduleInboxRow,
   TopicMapData,
@@ -23,6 +26,10 @@ type RecordType =
   | 'daily_completion'
   | 'inbox'
   | 'memo'
+  | 'memo_folder'
+  | 'memo_folder_exclusion'
+  | 'memo_folder_membership'
+  | 'memo_folder_action'
   | 'memo_recovery'
   | 'schedule_inbox'
   | 'schedule_inbox_action'
@@ -657,6 +664,170 @@ export const saveLocalTopicMap = async (
   await ensureMigrated(ownerId);
   await getApi().localDbSetOwner?.(ownerKey(ownerId));
   await getApi().localDbUpsert(ownerKey(ownerId), 'topic_map', TOPIC_MAP_RECORD_ID, map);
+};
+
+export const loadLocalMemoFolders = (ownerId?: string) =>
+  list<MemoFolder>('memo_folder', ownerId);
+
+export const replaceLocalMemoFolders = async (
+  folders: MemoFolder[],
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  return getApi().localDbReplaceSynced(
+    ownerKey(ownerId),
+    'memo_folder',
+    folders,
+  ) as Promise<MemoFolder[]>;
+};
+
+export const saveLocalMemoFolder = async (
+  folder: MemoFolder,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(ownerKey(ownerId), 'memo_folder', folder.id, folder);
+  return folder;
+};
+
+export const removeLocalMemoFolder = async (folderId: string, ownerId?: string) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbDelete(ownerKey(ownerId), 'memo_folder', folderId);
+};
+
+export const loadLocalMemoFolderMemberships = (ownerId?: string) =>
+  list<MemoFolderMembership>('memo_folder_membership', ownerId);
+
+export const replaceLocalMemoFolderMemberships = async (
+  memberships: MemoFolderMembership[],
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  return getApi().localDbReplaceSynced(
+    ownerKey(ownerId),
+    'memo_folder_membership',
+    memberships.map(membership => ({
+      ...membership,
+      id: `${membership.folderId}:${membership.memoId}`,
+    })),
+  ) as Promise<MemoFolderMembership[]>;
+};
+
+export const saveLocalMemoFolderMembership = async (
+  membership: MemoFolderMembership,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  const recordId = `${membership.folderId}:${membership.memoId}`;
+  await getApi().localDbUpsert(
+    ownerKey(ownerId),
+    'memo_folder_membership',
+    recordId,
+    membership,
+  );
+  return membership;
+};
+
+export const removeLocalMemoFolderMembership = async (
+  folderId: string,
+  memoId: string,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbDelete(
+    ownerKey(ownerId),
+    'memo_folder_membership',
+    `${folderId}:${memoId}`,
+  );
+};
+
+export const loadLocalMemoFolderExclusions = (ownerId?: string) =>
+  list<MemoFolderExclusion>('memo_folder_exclusion', ownerId);
+
+export const replaceLocalMemoFolderExclusions = async (
+  exclusions: MemoFolderExclusion[],
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  return getApi().localDbReplaceSynced(
+    ownerKey(ownerId),
+    'memo_folder_exclusion',
+    exclusions.map(exclusion => ({
+      ...exclusion,
+      id: `${exclusion.folderId}:${exclusion.memoId}`,
+    })),
+  ) as Promise<MemoFolderExclusion[]>;
+};
+
+export const saveLocalMemoFolderExclusion = async (
+  exclusion: MemoFolderExclusion,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(
+    ownerKey(ownerId),
+    'memo_folder_exclusion',
+    `${exclusion.folderId}:${exclusion.memoId}`,
+    exclusion,
+  );
+  return exclusion;
+};
+
+export const removeLocalMemoFolderExclusion = async (
+  folderId: string,
+  memoId: string,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbDelete(
+    ownerKey(ownerId),
+    'memo_folder_exclusion',
+    `${folderId}:${memoId}`,
+  );
+};
+
+export interface LocalMemoFolderAction {
+  folderId: string;
+  id: string;
+  kind: 'delete_exclusion' | 'delete_folder' | 'delete_membership';
+  memoId?: string;
+  updated_at: string;
+}
+
+export const loadLocalMemoFolderActions = (ownerId?: string) =>
+  list<LocalMemoFolderAction>('memo_folder_action', ownerId);
+
+export const saveLocalMemoFolderAction = async (
+  action: LocalMemoFolderAction,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbUpsert(
+    ownerKey(ownerId),
+    'memo_folder_action',
+    action.id,
+    action,
+  );
+  return action;
+};
+
+export const removeLocalMemoFolderAction = async (
+  actionId: string,
+  ownerId?: string,
+) => {
+  await ensureMigrated(ownerId);
+  await getApi().localDbSetOwner?.(ownerKey(ownerId));
+  await getApi().localDbDelete(ownerKey(ownerId), 'memo_folder_action', actionId);
 };
 
 // Growth events (append-only). Keyed by block id / local date so re-recording

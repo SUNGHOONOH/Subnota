@@ -2,16 +2,26 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const calendarSource = readFileSync(
+const calendarSource = `${readFileSync(
   resolve(__dirname, '../features/calendar/CalendarWorkspace.tsx'),
   'utf8',
-);
-const settingsSource = readFileSync(
+)}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/components/CalendarHeader.tsx'),
+  'utf8',
+)}`;
+const settingsSource = `${readFileSync(
   resolve(__dirname, '../features/settings/SettingsModal.tsx'),
   'utf8',
-);
-const settingsCss = settingsSource.slice(
-  settingsSource.indexOf('const SETTINGS_CSS'),
+)}\n${readFileSync(
+  resolve(__dirname, '../features/settings/SettingsShortcutRecorder.tsx'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/settings/SettingsStyles.ts'),
+  'utf8',
+)}`;
+const settingsCss = readFileSync(
+  resolve(__dirname, '../features/settings/SettingsStyles.ts'),
+  'utf8',
 );
 const styles = readFileSync(
   resolve(__dirname, '../styles/subnota-workspace.scss'),
