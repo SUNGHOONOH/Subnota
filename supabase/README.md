@@ -41,12 +41,13 @@ supabase/migrations/20260707190355_topic_memo_inbox_edges.sql
 supabase/migrations/20260708000000_topic_cluster_inbox_items.sql
 supabase/migrations/20260812113011_calendar_block_category_id.sql
 supabase/migrations/20260824075337_revoke_tombstone_trigger_execute.sql
+supabase/migrations/20260908090000_retire_daily_briefing_and_server_memo_chunks.sql
 ```
 
 ## Production history
 
-Production currently has 34 recorded migrations through
-`20260824075409_revoke_tombstone_trigger_execute`. The live schema reflects the feature
+Production currently has 35 recorded migrations through
+`20260908090000`. The live schema reflects the feature
 SQL represented by the local files, but several production entries use
 generated timestamps because some SQL was executed manually before being
 recorded in migration history. The inbox-topic membership change is recorded in
@@ -55,6 +56,11 @@ production as `20260707181903_topic_cluster_inbox_items` and
 `20260708000000_topic_cluster_inbox_items.sql` is the consolidated equivalent.
 The local tombstone privilege migration is recorded in production as
 `20260824075409_revoke_tombstone_trigger_execute`.
+
+`20260908090000_retire_daily_briefing_and_server_memo_chunks.sql` was applied
+and recorded on 2026-09-08. It removes the server-side memo-chunk graph,
+Daily Briefing, and the old network-search cache; local desktop search and the
+schedule/Topics pipelines remain.
 
 Do **not** run a blanket `supabase db push` until the local filenames and
 production history mapping are deliberately reconciled. Re-applying a local
@@ -66,7 +72,6 @@ The migrations define and configure the following database structures:
 * `memos` — User memos (local-first synced rows)
 * `calendar_blocks` — Scheduled items, completion timestamps, and an optional local-category reference
 * `schedule_inbox` — Daily schedule suggestion items
-* `memo_chunks` & `chunk_embedding_cache` — Kiwi sentence splits and Hugging Face inference embeddings
 * `topic_clusters`, `topic_cluster_memos`, & `topic_memo_edges` — Graph clusters and memo edge representations
 * `inbox_sessions` & summary embeddings — Clipped URLs, YouTube transcripts, and metadata
 * `activity_completions`, `daily_completions`, & `trees` — Gamification growth-event tracking ledger and planted forest configurations

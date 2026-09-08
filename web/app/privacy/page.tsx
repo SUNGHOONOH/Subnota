@@ -84,7 +84,7 @@ export default function PrivacyPage() {
               메모 본문, 메모 생성·수정 시각, 캘린더 일정의 제목·시작 시각·종료 시각·
               메모·완료 상태·색상 및 사용자가 선택한 분류 정보
             </td>
-            <td>저장, 동기화, 검색, 일정 관리, 브리핑 및 네트워크 기능 제공</td>
+            <td>저장, 동기화, 검색 및 일정 관리 기능 제공</td>
             <td>개인정보 보호법 제15조제1항제4호(계약의 체결·이행)</td>
           </tr>
           <tr>
@@ -100,9 +100,9 @@ export default function PrivacyPage() {
             <td>서비스 생성 결과</td>
             <td>
               요약, 분류, 키워드, 토픽 라벨, 임베딩 벡터, 유사도 및 메모·수집함 간
-              연결 결과, 데일리 브리핑
+              연결 결과
             </td>
-            <td>검색, 연결, 추천, 토픽 지도 및 브리핑 기능 제공</td>
+            <td>검색, 연결, 추천 및 토픽 지도 기능 제공</td>
             <td>개인정보 보호법 제15조제1항제4호(계약의 체결·이행)</td>
           </tr>
           <tr>
@@ -285,12 +285,12 @@ export default function PrivacyPage() {
           <tr>
             <td>Hugging Face, Inc. - Hugging Face Inference</td>
             <td>BAAI/bge-m3 기반 온라인 임베딩 생성</td>
-            <td>임베딩 대상 메모 청크, 수집함 요약 텍스트 및 요청 결과</td>
+            <td>토픽 분석용 메모 본문, 수집함 요약 텍스트 및 요청 결과</td>
             <td>Hugging Face Inference의 요청 경로와 처리 지역·정책 적용</td>
           </tr>
           <tr>
             <td>Google LLC - Gemini API</td>
-            <td>수집함 요약, 토픽 라벨 및 데일리 브리핑 생성</td>
+            <td>수집함 요약 및 토픽 라벨 생성</td>
             <td>웹페이지 추출 텍스트, URL 메타데이터, 메모·일정·키워드 등 기능에 필요한 입력</td>
             <td>Google API가 정하는 처리 지역. 현재 애플리케이션에서 별도 리전을 고정하지 않음</td>
           </tr>
@@ -371,7 +371,7 @@ export default function PrivacyPage() {
               Google LLC - Gemini API<br />
               미국 및 Google API가 정하는 처리 국가, 연락처: <a href="https://cloud.google.com/terms/cloud-privacy-notice">Google Cloud 개인정보 안내</a>
             </td>
-            <td>요약·분류·브리핑에 필요한 웹페이지 텍스트, URL 메타데이터, 메모·일정·키워드</td>
+            <td>요약·분류에 필요한 웹페이지 텍스트, URL 메타데이터, 메모·일정·키워드</td>
             <td>해당 AI 기능을 실행할 때 TLS 암호화 API 요청으로 전송</td>
             <td>AI 결과 생성. Subnota가 별도 원문 요청 로그를 보관하지 않으며, Google API 프로젝트와 이용 유형에 따른 제공자 보관정책 적용</td>
           </tr>
@@ -380,8 +380,8 @@ export default function PrivacyPage() {
               Hugging Face, Inc. - Hugging Face Inference<br />
               미국 등 제공자의 처리 국가, 연락처: <a href="mailto:privacy@huggingface.co">privacy@huggingface.co</a>
             </td>
-            <td>온라인 임베딩 대상 메모 청크·수집함 요약과 임베딩 응답</td>
-            <td>온라인 검색·색인 기능 실행 시 TLS 암호화 API 요청으로 전송</td>
+            <td>토픽 분석용 메모 본문·수집함 요약과 임베딩 응답</td>
+            <td>온라인 토픽·수집함 임베딩 실행 시 TLS 암호화 API 요청으로 전송</td>
             <td>BAAI/bge-m3 기반 임베딩 생성. Hugging Face Inference의 요청 로그·보관 정책에 따른 기간</td>
           </tr>
           <tr>
@@ -452,18 +452,18 @@ export default function PrivacyPage() {
       <h2>10. 생성형 AI 및 임베딩 처리</h2>
       <p>
         AI 기능의 의도된 용례는 이용자가 저장한 메모·일정·웹페이지 정보를 요약,
-        분류, 임베딩하고 그 결과를 검색·연결·브리핑 기능에 활용하는 것입니다. AI
+        분류, 임베딩하고 그 결과를 검색·연결 기능에 활용하는 것입니다. AI
         기능은 이용자의 요청과 서비스 기능 제공을 위한 보조 수단이며, 의료·법률·
         재무 판단, 채용, 자격 심사 또는 이용자의 권리·의무에 관한 결정을 자동으로
         내리는 데 사용하지 않습니다.
       </p>
       <ul>
         <li>
-          입력: 메모 청크, 일정 정보, 사용자가 저장한 URL과 웹페이지 메타데이터·추출
+          입력: 메모 본문, 일정 정보, 사용자가 저장한 URL과 웹페이지 메타데이터·추출
           텍스트, 서비스가 생성한 키워드 등 기능에 필요한 정보
         </li>
         <li>
-          결과: 요약, 키워드, 토픽 라벨, 임베딩 벡터, 유사도·연결 결과 및 데일리 브리핑
+          결과: 요약, 키워드, 토픽 라벨, 임베딩 벡터 및 유사도·연결 결과
         </li>
         <li>
           보관: 서비스에 저장되는 결과는 계정이 유지되는 동안 보관하고 계정 삭제 시

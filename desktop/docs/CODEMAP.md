@@ -104,7 +104,7 @@ and automatic browser capture are separate capabilities.
 | `src/components/SubnotaMark.tsx` | **The only place the logo is drawn.** Petal path, the five placements and the viewBox; every other mark component imports from here. Colour comes from `--app-color-brand-mark`. |
 | `src/components/BootBrandMark.tsx` | Boot Phase A motion — scattered note cards gather and unfold into the mark (`assemble`), or a petal chase spinner for reloads (`spin`). Pure CSS; do not reintroduce a JS motion library on the boot path. |
 | `src/components/SubnotaSpinner.tsx` | Small petal-chase spinner for anything that used to rotate an icon (update popover, nav-rail update button). |
-| `src/components/SubnotaScatterMark.tsx` | The inverse of the boot motion — petals fly outward and morph into circles. Used while State B searches for nearby memos. |
+| `src/components/SubnotaScatterMark.tsx` | The inverse of the boot motion — petals fly outward and morph into circles. Used while local nearby-memo search runs. |
 | `src/features/report/**` | Monthly report: heatmap, counts, topics and knowledge growth derived from local data. Replaced the removed growing-tree feature. |
 | `src/components/EmptyState.tsx` | The only empty-state surface. `size` from the container, `tone` from the reason; the mark appears on `start` only, never in `inline`. |
 | `src/components/WorkspaceBootSkeleton.tsx` | Boot Phase B app-shell skeleton (command bar / rail / sidebar / tab bar / body). |
@@ -203,7 +203,6 @@ React Native WebView bridge.
 | `src/services/supabase/data.ts` | Remote data fetch/upsert functions. |
 | `src/services/supabase/memoSync.ts` | Memo sync and conflict behavior. |
 | `src/services/backend/inboxService.ts` | Inbox metadata/summary backend client. |
-| `src/services/backend/networkService.ts` | Network search backend client. |
 | `src/services/local/localMemoIndexer.ts` | Chunks memos and writes vectors to the local index. Filters noise chunks with `isMeaningfulChunk`. |
 | `src/services/local/localMemoSearch.ts` | Local cosine search over `local_memo_chunk_vectors`, excluding the current memo and near-duplicates. |
 | `src/services/local/localInboxIndexer.ts` | Same, for saved web summaries. |
