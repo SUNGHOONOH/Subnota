@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import account, health, inbox, maintenance, memo_chunks, network, schedule, topics
+from app.api.routes import account, health, inbox, maintenance, schedule, topics
 from app.core.config import settings
 
 app = FastAPI(
@@ -27,8 +27,6 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(account.router)
 app.include_router(topics.router)
-app.include_router(memo_chunks.router)
-app.include_router(network.router)
 app.include_router(inbox.router)
 app.include_router(schedule.router)
 app.include_router(maintenance.router)

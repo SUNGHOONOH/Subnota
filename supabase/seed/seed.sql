@@ -2,9 +2,6 @@
 -- Single-user DB (one profiles row). MCP/service-role bypasses RLS. Run in Supabase SQL editor.
 begin;
 -- 1) wipe all per-user test data (FK-safe child->parent order)
-delete from memo_chunk_edges;
-delete from memo_chunks;
-delete from chunk_embedding_cache;
 delete from topic_memo_edges;
 delete from topic_cluster_memos;
 delete from topic_memo_embedding_cache;
@@ -14,12 +11,9 @@ delete from activity_completions;
 delete from calendar_blocks;
 delete from inbox_session_embeddings;
 delete from inbox_sessions;
-delete from briefings;
 delete from memo_tombstones;
 delete from daily_completions;
 delete from trees;
-delete from network_rate_limits;
-delete from memo_chunk_index_leases;
 delete from memos;
 
 -- 2) 40 realistic Korean memos across 6 themes, spread over the past week

@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     )
     hf_timeout_seconds: float = 8.0
     log_level: str = "INFO"
-    network_rate_limit_per_minute: int = 30
-    chunk_split_rate_limit_per_minute: int = 20
 
     model_config = SettingsConfigDict(
         env_file=".env",

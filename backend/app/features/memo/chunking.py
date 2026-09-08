@@ -6,16 +6,6 @@ from kiwipiepy import Kiwi
 from pydantic import BaseModel, Field
 from pysbd import Segmenter
 
-from app.core import constants
-from app.features.topics.discovery import encode_texts
-
-
-class MemoChunkRequest(BaseModel):
-    text: str = Field(max_length=constants.MEMO_CHUNK_SPLIT_MAX_CHARS)
-    cursor_index: int | None = None
-    include_embeddings: bool = False
-
-
 class MemoChunk(BaseModel):
     id: str
     index: int
@@ -23,15 +13,6 @@ class MemoChunk(BaseModel):
     start: int
     end: int
     sentence_indices: list[int] = Field(default_factory=list)
-
-
-class MemoChunkResponse(BaseModel):
-    sentence_chunks: list[MemoChunk]
-    network_chunks: list[MemoChunk]
-    cursor_sentence_chunk: MemoChunk | None = None
-    cursor_network_chunk: MemoChunk | None = None
-    embeddings: list[list[float]] | None = None
-    embedding_model: str | None = None
 
 
 @lru_cache
@@ -48,27 +29,6 @@ def get_english_segmenter() -> Segmenter:
     sentence strings would be unsafe around repeated text or whitespace.
     """
     return Segmenter(language="en", clean=False, char_span=True)
-
-
-def split_memo_chunks(request: MemoChunkRequest) -> MemoChunkResponse:
-    sentence_chunks = split_sentences(request.text)
-    network_chunks = build_network_chunks(sentence_chunks, request.text)
-    cursor_sentence_chunk = find_chunk_at_cursor(sentence_chunks, request.cursor_index)
-    cursor_network_chunk = find_chunk_at_cursor(network_chunks, request.cursor_index)
-    embeddings = None
-
-    if request.include_embeddings and network_chunks:
-        vectors = encode_texts([chunk.text for chunk in network_chunks])
-        embeddings = [[float(value) for value in row] for row in vectors]
-
-    return MemoChunkResponse(
-        sentence_chunks=sentence_chunks,
-        network_chunks=network_chunks,
-        cursor_sentence_chunk=cursor_sentence_chunk,
-        cursor_network_chunk=cursor_network_chunk,
-        embeddings=embeddings,
-        embedding_model=constants.EMBEDDING_MODEL_SIGNATURE if embeddings is not None else None,
-    )
 
 
 LATIN_RE = re.compile(r"[A-Za-z]")
@@ -272,124 +232,6 @@ def split_sentences(text: str) -> list[MemoChunk]:
                     )
 
     return sentences
-
-
-def build_network_chunks(
-    sentence_chunks: list[MemoChunk],
-    text: str = "",
-) -> list[MemoChunk]:
-    """Group sentences into chunks, treating a line break as a block boundary
-    (Obsidian-style): only sentences written on the same line are grouped, and
-    short groups never merge across lines. Pass the source text to enable the
-    boundary check; without it, grouping is length-based only."""
-    chunks: list[MemoChunk] = []
-    pending: list[MemoChunk] = []
-    merge_with_previous = True
-
-    for sentence in sentence_chunks:
-        if pending and "\n" in text[pending[-1].end : sentence.start]:
-            append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
-            pending = []
-            merge_with_previous = False
-        pending.append(sentence)
-        if should_flush_network_chunk(pending):
-            append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
-            pending = []
-            merge_with_previous = True
-
-    if pending:
-        append_network_chunk(chunks, pending, allow_merge=merge_with_previous)
-
-    return chunks
-
-
-def should_flush_network_chunk(sentences: list[MemoChunk]) -> bool:
-    text_length = sum(len(sentence.text) for sentence in sentences)
-
-    return (
-        len(sentences) >= constants.CHUNK_MAX_SENTENCES
-        or text_length >= constants.CHUNK_TARGET_CHARS
-    )
-
-
-# 글자·숫자가 하나도 없는 조각(구분선 '─────', 빈 체크박스 '- [ ]', 표 구분행
-# 등)은 임베딩해도 의미 없는 벡터가 되어 검색 결과에 무작위로 섞인다.
-# 길이로 거르면 안 된다 — '리팩토링'처럼 짧아도 의미 있는 청크가 훨씬 많다.
-MEANINGFUL_RE = re.compile(r"[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ぀-ヿ一-鿿]")
-
-
-def is_meaningful_chunk(text: str) -> bool:
-    return bool(MEANINGFUL_RE.search(text))
-
-
-def append_network_chunk(
-    chunks: list[MemoChunk],
-    sentences: list[MemoChunk],
-    *,
-    allow_merge: bool = True,
-) -> None:
-    if not sentences:
-        return
-
-    start = sentences[0].start
-    end = sentences[-1].end
-    text = "\n".join(sentence.text for sentence in sentences).strip()
-
-    if not is_meaningful_chunk(text):
-        return
-
-    if allow_merge and len(text) < constants.CHUNK_MIN_CHARS and chunks:
-        previous = chunks[-1]
-        merged_text = f"{previous.text}\n{text}".strip()
-        chunks[-1] = previous.model_copy(
-            update={
-                "text": merged_text,
-                "end": end,
-                "sentence_indices": previous.sentence_indices
-                + [index for sentence in sentences for index in sentence.sentence_indices],
-            }
-        )
-        return
-
-    index = len(chunks)
-    chunks.append(
-        MemoChunk(
-            id=build_chunk_id("network", index, start, end),
-            index=index,
-            text=text,
-            start=start,
-            end=end,
-            sentence_indices=[
-                index for sentence in sentences for index in sentence.sentence_indices
-            ],
-        )
-    )
-
-
-def find_chunk_at_cursor(
-    chunks: list[MemoChunk],
-    cursor_index: int | None,
-) -> MemoChunk | None:
-    if not chunks or cursor_index is None:
-        return None
-
-    cursor = max(0, cursor_index)
-    containing_chunk = next(
-        (chunk for chunk in chunks if chunk.start <= cursor <= chunk.end),
-        None,
-    )
-
-    if containing_chunk:
-        return containing_chunk
-
-    return min(chunks, key=lambda chunk: distance_to_chunk(cursor, chunk))
-
-
-def distance_to_chunk(cursor_index: int, chunk: MemoChunk) -> int:
-    if chunk.start <= cursor_index <= chunk.end:
-        return 0
-
-    return min(abs(cursor_index - chunk.start), abs(cursor_index - chunk.end))
 
 
 def build_chunk_id(prefix: str, index: int, start: int, end: int) -> str:
