@@ -1,0 +1,6 @@
+allowBuilds:
+  # core-js의 postinstall은 런타임에 필요한 산출물을 만들지 않는다.
+  core-js: false
+overrides:
+  # Next 16.3.4의 허용 범위에 포함되는 보안 패치 버전.
+  baseline-browser-mapping: 2.11.0
