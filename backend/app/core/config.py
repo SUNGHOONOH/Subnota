@@ -11,13 +11,14 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     youtube_api_key: str = ""
     backend_admin_key: str = ""
-    backend_env: str = "development"
+    # Fail closed when a deployment forgets to provide BACKEND_ENV. Local
+    # development still opts in through backend/.env or .env.example.
+    backend_env: str = "production"
     allow_local_admin_bypass: bool = False
     enable_playwright_fetch: bool = False
-    cors_allow_origins: str = (
-        "http://localhost:5173,http://127.0.0.1:5173,"
-        "subnota-app://bundle,https://subnota.com"
-    )
+    # Development origins belong in a local .env, never in the production
+    # fallback used by a hosted service.
+    cors_allow_origins: str = "subnota-app://bundle,https://subnota.com"
     hf_timeout_seconds: float = 8.0
     log_level: str = "INFO"
 
