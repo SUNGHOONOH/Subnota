@@ -241,6 +241,14 @@ const config: ForgeConfig = {
           config: 'vite.preload.config.ts',
           target: 'preload',
         },
+        {
+          // onnxruntime-node는 main thread/Worker Thread가 아니라 별도 Electron
+          // Utility Process에서만 불러온다. 같은 main Vite 설정을 써야 native
+          // 의존성이 external로 남고 패키징 경로를 그대로 찾는다.
+          entry: 'src/local-embedding-worker.ts',
+          config: 'vite.main.config.ts',
+          target: 'main',
+        },
       ],
       renderer: [
         {
