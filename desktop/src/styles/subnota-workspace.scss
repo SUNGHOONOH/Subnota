@@ -8093,7 +8093,7 @@ html:not([data-desktop-platform='macos']) .fatal-render-error::before {
   justify-content: center;
   max-width: 100px;
   min-width: 52px;
-  padding: 0 11px;
+  padding: 0;
   position: relative;
   transition-duration: 140ms;
   transition-property: background-color, border-color, color, transform;
@@ -8152,6 +8152,27 @@ html:not([data-desktop-platform='macos']) .fatal-render-error::before {
   }
 }
 
+.split-tab-select {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  height: 100%;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 6px 0 11px;
+
+  &:focus-visible {
+    border-radius: 999px;
+    outline: 2px solid var(--app-color-brand-500);
+    outline-offset: -2px;
+  }
+}
+
 /* 다크에서는 워시 방향이 뒤집힌다 — 어두운 바탕에 브랜드 알파를 그대로 깔면
    더 어두워져 탭이 가라앉는다. 알파를 올려 파랑을 실제로 드러내고, 글자는
    밝은 쪽 램프로 바꾼다(brand-700은 다크 바탕에서 읽히지 않는다). */
@@ -8180,6 +8201,8 @@ html.dark .split-editor-tab:hover:not(.active) {
 
 .split-tab-close {
   align-items: center;
+  background: transparent;
+  border: 0;
   border-radius: var(--legacy-radius-card);
   color: var(--legacy-muted);
   cursor: pointer;
@@ -8187,8 +8210,9 @@ html.dark .split-editor-tab:hover:not(.active) {
   height: 16px;
   justify-content: center;
   line-height: 1;
-  margin-right: -3px;
+  margin-right: 8px;
   opacity: 0;
+  padding: 0;
   pointer-events: none;
   width: 16px;
   transition-duration: 140ms;

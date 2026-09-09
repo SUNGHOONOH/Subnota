@@ -394,10 +394,10 @@ const MiniComposer = () => {
         {showsRecentCaptures &&
           (recentInboxItems.length > 0 ? (
             <div className="mini-composer__recent-list">
-              {recentInboxItems.map((item) => (
+              {recentInboxItems.map((item, index) => (
                 <button
                   className="mini-composer__recent-item"
-                  key={item.url}
+                  key={`${item.url}:${index}`}
                   onClick={() => void window.electronAPI?.openExternal?.(item.url)}
                   title={item.title || item.url}
                   type="button"

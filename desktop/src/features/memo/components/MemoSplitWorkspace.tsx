@@ -621,7 +621,7 @@ const MemoSplitWorkspace = ({
 
   const handleTabDragStart = useCallback(
     (
-      event: React.DragEvent<HTMLButtonElement>,
+      event: React.DragEvent<HTMLElement>,
       paneId: string,
       editorId: string,
     ) => {

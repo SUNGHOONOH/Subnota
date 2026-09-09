@@ -30,6 +30,12 @@ describe('State B — 주변 메모가 없을 때', () => {
 });
 
 describe('State B — 검색이 실패했을 때', () => {
+  it('무의미한 질의의 로컬 안내 문구를 빈 화면으로 버리지 않는다', () => {
+    expect(nearbySearchSource).toContain(
+      'networkErrorMessage: response.queryChunk ? null : response.message',
+    );
+  });
+
   // 떠 있는 카드로 얹으면 토스트처럼 읽혀 빈 결과와 실패가 서로 다른 곳에 뜬다.
   it('빈 상태와 같은 자리에 마크 + 문구 + 다시 시도로 선다', () => {
     const errorBlock = nearbySource.slice(

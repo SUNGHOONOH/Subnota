@@ -134,18 +134,6 @@ export const useMemoFolderMembershipActions = ({
       return;
     }
 
-    // Overlap is only created by the explicit Topic → folder conversion. A
-    // direct assignment must be a deliberate move: remove the old folder
-    // membership first, then add this one.
-    if (
-      memoFolderMemberships.some(
-        (membership) =>
-          membership.memoId === memoId && membership.folderId !== folderId,
-      )
-    ) {
-      return;
-    }
-
     const membership: MemoFolderMembership = {
       createdAt: new Date().toISOString(),
       folderId,

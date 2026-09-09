@@ -54,7 +54,7 @@ interface MemoSplitPaneHeaderProps {
     targetIndex: number,
   ) => void;
   onHandleTabDragStart: (
-    event: DragEvent<HTMLButtonElement>,
+    event: DragEvent<HTMLElement>,
     paneId: string,
     editorId: string,
   ) => void;
@@ -130,8 +130,7 @@ const MemoSplitPaneHeader = ({
                 : viewLabel(editor.view, language);
 
             return (
-              <button
-                aria-label={tabLabel}
+              <div
                 draggable
                 key={editor.id}
                 onDragEnd={onClearTabDrag}
@@ -161,21 +160,27 @@ const MemoSplitPaneHeader = ({
                       (event.clientX > rect.left + rect.width / 2 ? 1 : 0),
                   );
                 }}
-                onClick={() => {
-                  onChangePane(pane.id, {
-                    ...mirrorEditorPatch(editor),
-                    activeEditorId: editor.id,
-                    editors,
-                  });
-                  onFocusPane?.(pane.id);
-                  if (editor.memoId) {
-                    onSelectMemoById(editor.memoId);
-                  }
-                }}
                 className={`split-editor-tab ${editor.id === activeEditor.id ? 'active' : ''}${draggedTab?.editorId === editor.id && draggedTab.paneId === pane.id ? ' dragging' : ''}${dropTarget?.paneId === pane.id && dropTarget.editorId === editor.id ? ` drop-${dropTarget.position}` : ''}`}
-                title={tabLabel}
               >
-                <span className="split-tab-label">{tabLabel}</span>
+                <button
+                  aria-label={tabLabel}
+                  className="split-tab-select"
+                  onClick={() => {
+                    onChangePane(pane.id, {
+                      ...mirrorEditorPatch(editor),
+                      activeEditorId: editor.id,
+                      editors,
+                    });
+                    onFocusPane?.(pane.id);
+                    if (editor.memoId) {
+                      onSelectMemoById(editor.memoId);
+                    }
+                  }}
+                  title={tabLabel}
+                  type="button"
+                >
+                  <span className="split-tab-label">{tabLabel}</span>
+                </button>
                 <Tooltip
                   label={formatHotkeyTooltip(
                     t('탭 닫기', 'Close tab'),
@@ -186,7 +191,7 @@ const MemoSplitPaneHeader = ({
                   openDelay={300}
                   position="bottom"
                 >
-                  <span
+                  <button
                     aria-label={t('탭 닫기', 'Close tab')}
                     className="split-tab-close"
                     draggable={false}
@@ -196,12 +201,12 @@ const MemoSplitPaneHeader = ({
                     }}
                     onDragStart={(event) => event.preventDefault()}
                     onPointerDown={(event) => event.stopPropagation()}
-                    role="button"
+                    type="button"
                   >
                     <X size={13} />
-                  </span>
+                  </button>
                 </Tooltip>
-              </button>
+              </div>
             );
           })}
           {dropTarget?.paneId === pane.id && !dropTarget.editorId && (

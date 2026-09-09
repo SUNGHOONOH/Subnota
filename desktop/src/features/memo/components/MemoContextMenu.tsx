@@ -84,14 +84,8 @@ const MemoContextMenu = ({
                 membership.folderId === folder.id &&
                 membership.memoId === memoMenu.id,
             );
-            const isAssignedElsewhere = folderMemberships.some(
-              membership =>
-                membership.memoId === memoMenu.id &&
-                membership.folderId !== folder.id,
-            );
             return (
               <Menu.Item
-                disabled={!isAssigned && isAssignedElsewhere}
                 key={folder.id}
                 leftSection={
                   isAssigned ? <Check size={15} /> : <Folder size={15} />
@@ -102,12 +96,7 @@ const MemoContextMenu = ({
                   void onToggleMemoFolder(folder.id, memoId);
                 }}
               >
-                {isAssignedElsewhere && !isAssigned
-                  ? t(
-                      `${folder.name} · 먼저 기존 폴더에서 제거`,
-                      `${folder.name} · remove from current folder first`,
-                    )
-                  : folder.name}
+                {folder.name}
               </Menu.Item>
             );
           })}

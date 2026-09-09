@@ -169,7 +169,9 @@ export const useNearbyNotesSearch = ({
           pane.id,
           targetEditor,
           {
-            networkErrorMessage: null,
+            // 무의미한 질의는 queryChunk가 없다. 이때 안내 문구까지 버리면
+            // 주변 메모 탭이 빈 화면으로 남는다.
+            networkErrorMessage: response.queryChunk ? null : response.message,
             networkIsLoading: false,
             networkQueryChunk: response.queryChunk,
             networkRequestId,
