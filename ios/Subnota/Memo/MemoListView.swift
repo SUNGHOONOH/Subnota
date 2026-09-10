@@ -7,6 +7,7 @@ struct MemoListView: View {
   @State private var openedMemo: Memo?
   @State private var showingTrash = false
   @State private var showingSettings = false
+  @Binding var deepLink: DeepLink?
 
   var body: some View {
     NavigationStack {
@@ -50,6 +51,9 @@ struct MemoListView: View {
         MemoEditorView(memo: memo) { edited in
           model?.save(edited)
         }
+        // 에디터가 열린 채 위젯 링크가 다른 메모를 열면 같은 자리의 뷰라 `@State`
+        // 텍스트가 그대로 남는다 — 옛 메모 본문이 새 메모 id 로 저장된다. 메모마다 새로 만든다.
+        .id(memo.id)
       }
       .navigationDestination(isPresented: $showingTrash) {
         if let model { TrashView(model: model) }
@@ -65,10 +69,31 @@ struct MemoListView: View {
         model = MemoListModel(ownerId: ownerId)
       }
       model?.load()
+      // 앱이 꺼져 있다가 위젯으로 열리면 모델이 이제야 생긴다. 동기화를 기다리지 않는다.
+      openPendingLink()
       await model?.syncNow()
     }
     // 에디터에서 돌아왔을 때 목록을 다시 읽는다.
     .onAppear { model?.load() }
+    .onChange(of: deepLink) { openPendingLink() }
+  }
+
+  /// 위젯에서 온 메모 링크를 연다. 캘린더 링크는 `MainTabView` 몫이라 건드리지 않는다.
+  /// 모델이 아직 없으면 그대로 두고, `.task` 가 모델을 만든 뒤 다시 부른다.
+  private func openPendingLink() {
+    guard let model else { return }
+    switch deepLink {
+    case .newMemo:
+      openedMemo = model.create()
+    case .memo(let id):
+      // 그 사이 지워졌으면 목록에 머문다.
+      openedMemo = model.memos.first { $0.id == id }
+    case .calendar, nil:
+      return
+    }
+    showingTrash = false
+    showingSettings = false
+    deepLink = nil
   }
 
   @ViewBuilder

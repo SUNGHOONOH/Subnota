@@ -1,12 +1,14 @@
+import SubnotaKit
 import SwiftUI
 import WidgetKit
 
-/// 잠금화면 `accessoryCircular` — 브랜드 마크만. 탭 대상(딥링크)은 Task 4 다.
+/// 잠금화면 `accessoryCircular` — 브랜드 마크만. 누르면 새 메모가 열린다.
 struct QuickMemoWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "QuickMemo", provider: QuickMemoProvider()) { _ in
       QuickMemoView()
         .containerBackground(.clear, for: .widget)
+        .widgetURL(DeepLink.newMemo.url)
     }
     .configurationDisplayName("빠른 메모")
     .description("잠금화면에서 새 메모로 갑니다.")

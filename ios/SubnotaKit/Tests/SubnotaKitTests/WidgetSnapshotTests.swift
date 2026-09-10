@@ -105,7 +105,8 @@ private func at(_ iso: String) -> Date {
   _ = try calendar.create(
     title: "내일 할 일", startDate: at("2026-03-02T02:00:00.000Z"), allDay: true, now: now)
   _ = try memos.create(content: "오래된 메모\n본문", category: nil, now: at("2026-02-01T00:00:00.000Z"))
-  _ = try memos.create(content: "최근 메모\n본문", category: nil, now: at("2026-02-20T00:00:00.000Z"))
+  let recent = try memos.create(
+    content: "최근 메모\n본문", category: nil, now: at("2026-02-20T00:00:00.000Z"))
 
   let snapshot = try WidgetSnapshot.capture(
     memos: memos, calendar: calendar, ownerId: "user-1", now: now)
@@ -113,6 +114,19 @@ private func at(_ iso: String) -> Date {
   #expect(snapshot.ownerId == "user-1")
   #expect(snapshot.todos.map(\.title) == ["오늘 할 일"])
   #expect(snapshot.latestMemoTitle == "최근 메모")
+  #expect(snapshot.latestMemoId == recent.id)
+}
+
+/// 이전 버전이 캐시해 둔 스냅샷에는 `latestMemoId` 가 없다. 업데이트 직후 위젯이
+/// 그걸 못 읽으면 다음 갱신까지 "잠금을 해제하면 표시됩니다"로 떨어진다.
+@Test func snapshotCachedBeforeMemoIdStillLoads() {
+  let defaults = scratchDefaults()
+  let old = #"{"ownerId":"user-1","todos":[],"latestMemoTitle":"옛 메모"}"#
+  defaults.set(Data(old.utf8), forKey: WidgetSnapshot.defaultsKey)
+
+  let loaded = WidgetSnapshot.load(from: defaults)
+  #expect(loaded?.latestMemoTitle == "옛 메모")
+  #expect(loaded?.latestMemoId == nil)
 }
 
 @Test func capturePutsUnfinishedTodosFirst() throws {

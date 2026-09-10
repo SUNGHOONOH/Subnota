@@ -7,6 +7,7 @@ struct SubnotaWidgets: WidgetBundle {
   var body: some Widget {
     TodayTodoWidget()
     QuickMemoWidget()
+    HomeWidget()
   }
 }
 

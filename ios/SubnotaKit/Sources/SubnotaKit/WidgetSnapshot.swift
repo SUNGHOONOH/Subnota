@@ -37,11 +37,17 @@ public struct WidgetSnapshot: Codable, Sendable, Equatable {
   public let ownerId: String
   public let todos: [Todo]
   public let latestMemoTitle: String?
+  /// 홈화면 위젯이 그 메모를 여는 딥링크(`DeepLink.memo`)에 쓴다. 이 필드가 생기기
+  /// 전에 캐시된 스냅샷에는 없다 — 옵셔널이라 그대로 `nil` 로 읽힌다.
+  public let latestMemoId: String?
 
-  public init(ownerId: String, todos: [Todo], latestMemoTitle: String?) {
+  public init(
+    ownerId: String, todos: [Todo], latestMemoTitle: String?, latestMemoId: String? = nil
+  ) {
     self.ownerId = ownerId
     self.todos = Array(todos.prefix(Self.maxTodos))
     self.latestMemoTitle = latestMemoTitle.map(Self.oneLine)
+    self.latestMemoId = latestMemoId
   }
 
   /// 첫 줄만 잘라 낸다. 메모 제목 규칙(`Memo.listTitle`)과 같다.
@@ -76,10 +82,12 @@ public struct WidgetSnapshot: Codable, Sendable, Equatable {
   ) throws -> WidgetSnapshot {
     let blocks = try calendar.blocks(on: now)
     let ordered = blocks.filter { !$0.isCompleted } + blocks.filter(\.isCompleted)
+    let latest = try memos.all().first
     return WidgetSnapshot(
       ownerId: ownerId,
       todos: ordered.map { Todo(id: $0.id, title: $0.title, isCompleted: $0.isCompleted) },
-      latestMemoTitle: try memos.all().first?.content
+      latestMemoTitle: latest?.content,
+      latestMemoId: latest?.id
     )
   }
 

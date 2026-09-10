@@ -3,12 +3,14 @@ import SwiftUI
 import WidgetKit
 
 /// 잠금화면 `accessoryRectangular` — 오늘 남은 일 1~2줄. 행을 누르면 체크가
-/// 바뀐다(`ToggleTodoIntent`) — 잠금 해제 없이.
+/// 바뀐다(`ToggleTodoIntent`) — 잠금 해제 없이. 행 밖을 누르면 캘린더.
 struct TodayTodoWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "TodayTodo", provider: TodayProvider()) { entry in
       TodayTodoView(entry: entry)
         .containerBackground(.clear, for: .widget)
+        // 행은 체크 버튼이다. 그 밖을 누르면 캘린더가 열린다.
+        .widgetURL(DeepLink.calendar.url)
     }
     .configurationDisplayName("오늘 할 일")
     .description("오늘 남은 일정을 잠금화면에서 봅니다.")
