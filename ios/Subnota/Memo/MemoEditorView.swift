@@ -47,8 +47,9 @@ struct MemoEditorView: View {
     // 폰트·줄간격·색은 원문에 입히는 속성이라 MarkdownStyling 이 갖는다.
     MarkdownTextView(text: $text, handle: handle)
       .safeAreaInset(edge: .bottom) { bottomBar }
-      .background(Palette.canvas)
+      // 패딩을 배경보다 먼저 — 반대면 좌우 여백이 배경 밖이라 다크에서 검게 뚫린다.
       .padding(.horizontal, 16)
+      .background(Palette.canvas)
       .navigationBarTitleDisplayMode(.inline)
       // 타이핑 중에도 주기적으로 쓴다. 아래 두 flush 만으로는 앱이 백그라운드를
       // 거치지 않고 죽을 때(크래시·강제 종료) 연 뒤 친 내용이 통째로 사라진다.
