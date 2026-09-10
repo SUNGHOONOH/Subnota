@@ -5,11 +5,17 @@ let package = Package(
   name: "SubnotaKit",
   platforms: [.iOS(.v17), .macOS(.v14)],
   products: [
-    .library(name: "SubnotaKit", targets: ["SubnotaKit"])
+    .library(name: "SubnotaKit", targets: ["SubnotaKit"]),
+    // 추론 엔진은 앱만 링크한다. 위젯·공유 확장은 SubnotaKit 을 링크하므로
+    // onnxruntime 을 거기 넣으면 확장 메모리 한도(수십 MB)를 깬다.
+    .library(name: "SubnotaSearch", targets: ["SubnotaSearch"]),
   ],
   dependencies: [
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.8.0"),
+    // 골든 벡터가 이 버전들로 고정돼 있다. 올리면 골든 테스트를 다시 돌린다.
+    .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", exact: "1.19.2"),
+    .package(url: "https://github.com/huggingface/swift-transformers.git", exact: "1.3.4"),
   ],
   targets: [
     .target(
@@ -39,6 +45,21 @@ let package = Package(
         .copy("Fixtures/report-golden.json"),
         .copy("Fixtures/chunker-golden.json"),
       ]
-    )
+    ),
+    .target(
+      name: "SubnotaSearch",
+      dependencies: [
+        "SubnotaKit",
+        .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
+        .product(name: "Tokenizers", package: "swift-transformers"),
+      ]
+    ),
+    .testTarget(
+      name: "SubnotaSearchTests",
+      dependencies: ["SubnotaSearch", "SubnotaKit"],
+      resources: [
+        .copy("Fixtures/e5-golden.json"),
+      ]
+    ),
   ]
 )

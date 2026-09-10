@@ -25,6 +25,10 @@ targets:
     dependencies:
       - package: SubnotaKit
         product: SubnotaKit
+      # 온디바이스 검색(onnxruntime·토크나이저). 앱만 링크한다 — 확장에 넣으면
+      # 위젯 메모리 한도를 깬다.
+      - package: SubnotaKit
+        product: SubnotaSearch
       - package: Supabase
         product: Supabase
       # 앱이 확장을 품는다. App Group entitlement 는 양쪽에 다 있어야 한다 —

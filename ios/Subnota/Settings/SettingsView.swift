@@ -37,6 +37,21 @@ struct SettingsView: View {
       }
       .listRowBackground(Palette.chrome)
 
+      Section("검색") {
+        NavigationLink {
+          SearchModelView()
+        } label: {
+          LabeledContent("검색 모델") {
+            Text(SearchModelStore.shared.phase.summary)
+              .font(Typography.ui(15))
+              .foregroundStyle(Palette.inkMuted)
+          }
+          .font(Typography.ui(15))
+          .foregroundStyle(Palette.ink)
+        }
+      }
+      .listRowBackground(Palette.chrome)
+
       Section {
         Button("로그아웃") {
           Task { await session.signOut() }
