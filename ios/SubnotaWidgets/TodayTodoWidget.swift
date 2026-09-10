@@ -2,9 +2,8 @@ import SubnotaKit
 import SwiftUI
 import WidgetKit
 
-/// 잠금화면 `accessoryRectangular` — 오늘 남은 일 1~2줄.
-///
-/// 체크 토글은 Task 3 이다. 지금은 표시만 한다.
+/// 잠금화면 `accessoryRectangular` — 오늘 남은 일 1~2줄. 행을 누르면 체크가
+/// 바뀐다(`ToggleTodoIntent`) — 잠금 해제 없이.
 struct TodayTodoWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "TodayTodo", provider: TodayProvider()) { entry in
@@ -41,15 +40,19 @@ struct TodayTodoView: View {
     // 잠금화면은 vibrant 렌더링이라 색을 지정해도 명도만 남는다 — 어두운
     // `Palette.ink` 를 그대로 주면 오히려 흐려진다. 시스템이 주는 전경색을 쓰고,
     // 완료는 색이 아니라 취소선과 아이콘으로 구분한다.
-    HStack(spacing: 4) {
-      Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
-        .imageScale(.small)
-      Text(todo.title)
-        .font(.system(size: 14, weight: .medium))
-        .strikethrough(todo.isCompleted)
-        .lineLimit(1)
-      Spacer(minLength: 0)
+    // 행 전체가 버튼이다 — 잠금화면 두 줄짜리에서 원 아이콘만 누르게 하면 너무 작다.
+    Button(intent: ToggleTodoIntent(blockId: todo.id)) {
+      HStack(spacing: 4) {
+        Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+          .imageScale(.small)
+        Text(todo.title)
+          .font(.system(size: 14, weight: .medium))
+          .strikethrough(todo.isCompleted)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .opacity(todo.isCompleted ? 0.6 : 1)
     }
-    .opacity(todo.isCompleted ? 0.6 : 1)
+    .buttonStyle(.plain)
   }
 }
