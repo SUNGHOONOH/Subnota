@@ -25,7 +25,12 @@ public final class EmbeddingEngine: @unchecked Sendable {
     tokenizer = try await AutoTokenizer.from(modelFolder: modelDirectory)
     env = try ORTEnv(loggingLevel: .warning)
     let weights = modelDirectory.appending(path: EmbeddingModel.weights.path)
-    session = try ORTSession(env: env, modelPath: weights.path, sessionOptions: nil)
+    // 데스크탑은 색인 세션만 스레드 2개로 묶는다(대화형 검색을 막지 않으려고).
+    // 여기는 색인과 검색이 세션 하나를 같이 쓴다 — 두 개면 가중치를 두 번 올린다 —
+    // 그래서 세션 전체를 2개로 묶는다. 색인이 도는 동안에도 UI 와 질의에 코어가 남는다.
+    let options = try ORTSessionOptions()
+    try options.setIntraOpNumThreads(2)
+    session = try ORTSession(env: env, modelPath: weights.path, sessionOptions: options)
     inputNames = Set(try session.inputNames())
   }
 

@@ -122,6 +122,11 @@ private func makeRecord(
   try store.upsert(updated)
   #expect(try store.fetch(ownerId: "user-1", type: .memo, id: "legacy")?.syncedPayloadJSON
     == #"{"content":"acked"}"#)
+
+  // Phase 8 벡터 테이블도 기존 기기에 생긴다.
+  #expect(try store.dbQueue.read { db in
+    try db.tableExists("local_memo_chunk_vectors") && db.tableExists("local_memo_vector_state")
+  })
 }
 
 /// 계정 삭제와 계정 전환의 방어선. `memo_recovery` 에는 병합에서 밀려난 메모 **본문**이

@@ -47,6 +47,11 @@ public enum EmbeddingModel {
     ),
   ]
 
+  /// 저장된 벡터가 어느 공간에 있는지. 모델·양자화·풀링 중 하나라도 바뀌면 벡터가
+  /// 달라지므로 셋 다 담는다 — 다르면 옛 벡터를 전부 버린다(`VectorStore`).
+  /// 데스크탑 `EMBEDDING_MODEL_ID` 에 풀링을 더한 모양이다.
+  public static let signature = "\(repo)@\(revision):onnx-q8:mean"
+
   public static var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
 
   public static func url(for file: File) -> URL {

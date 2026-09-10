@@ -9,6 +9,7 @@ final class MemoListModel {
   var loadError: String?
 
   private let store: MemoStore?
+  private let local: LocalStore?
   /// 위젯 스냅샷은 메모와 오늘 일정을 같이 담는다 — 한쪽만으로는 못 만든다.
   private let calendar: CalendarStore?
   private let ownerId: String
@@ -23,6 +24,7 @@ final class MemoListModel {
     self.ownerId = ownerId
     do {
       let local = try LocalStore(path: try AppGroup.databaseURL())
+      self.local = local
       let memoStore = MemoStore(store: local, ownerId: ownerId)
       store = memoStore
       // CalendarStore 는 상태가 없다 — 캘린더 화면(Phase 5 Task 3)이 같은
@@ -32,6 +34,7 @@ final class MemoListModel {
       sync = SyncService(memos: memoStore, calendar: calendarStore, userId: ownerId)
     } catch {
       store = nil
+      local = nil
       calendar = nil
       loadError = "로컬 저장소를 열지 못했습니다."
     }
@@ -45,6 +48,10 @@ final class MemoListModel {
       loadError = nil
       if let calendar {
         WidgetSnapshot.refresh(memos: store, calendar: calendar, ownerId: ownerId)
+      }
+      // 저장·휴지통·되돌리기·동기화(다른 기기의 메모)가 모두 load 로 끝난다 — 여기 한 곳.
+      if let local {
+        SearchModelStore.shared.scheduleIndexing(store: local, ownerId: ownerId)
       }
     } catch { loadError = "메모를 불러오지 못했습니다." }
   }

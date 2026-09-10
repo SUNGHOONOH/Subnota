@@ -21,7 +21,8 @@ public enum LocalStoreSuspension {
 /// 데스크탑과 같은 범용 단일 테이블. 새 종류의 레코드는 RecordType만 늘리면 되고
 /// 스키마 마이그레이션이 필요 없다.
 public final class LocalStore: Sendable {
-  private let dbQueue: DatabaseQueue
+  /// `VectorStore` 가 같은 연결·같은 직렬 쓰기를 쓴다.
+  let dbQueue: DatabaseQueue
 
   /// 앱·Share Extension·위젯 확장이 **같은 파일을 동시에** 연다. 아래 설정은
   /// 추측이 아니라 GRDB 의 `Documentation.docc/DatabaseSharing.md`("Sharing a
@@ -102,7 +103,52 @@ public final class LocalStore: Sendable {
       if !columns.contains("synced_payload_json") {
         try db.execute(sql: "ALTER TABLE local_records ADD COLUMN synced_payload_json TEXT")
       }
+      // 검색 벡터. 데스크탑 `local-database.ts` 와 같은 컬럼이고 CHECK 만 다르다 —
+      // e5-small 384차원 × float32 = 1536B (데스크탑 bge-m3 는 4096B).
+      // 새 테이블이라 기존 기기에도 IF NOT EXISTS 만으로 생긴다. 동기화하지 않는다.
+      try db.execute(sql: """
+        CREATE TABLE IF NOT EXISTS local_memo_chunk_vectors (
+          owner_id TEXT NOT NULL,
+          memo_id TEXT NOT NULL,
+          chunk_id TEXT NOT NULL,
+          chunk_index INTEGER NOT NULL,
+          chunk_text TEXT NOT NULL,
+          start_index INTEGER NOT NULL,
+          end_index INTEGER NOT NULL,
+          source_content_hash TEXT NOT NULL,
+          embedding_signature TEXT NOT NULL,
+          vector BLOB NOT NULL CHECK(length(vector) = 1536),
+          PRIMARY KEY (owner_id, memo_id, chunk_id)
+        )
+        """)
+      try db.execute(sql: """
+        CREATE INDEX IF NOT EXISTS idx_local_memo_chunk_vectors_owner_signature
+          ON local_memo_chunk_vectors (owner_id, embedding_signature)
+        """)
+      try db.execute(sql: """
+        CREATE TABLE IF NOT EXISTS local_memo_vector_state (
+          owner_id TEXT NOT NULL,
+          memo_id TEXT NOT NULL,
+          source_content_hash TEXT NOT NULL,
+          embedding_signature TEXT NOT NULL,
+          chunk_count INTEGER NOT NULL,
+          indexed_at TEXT NOT NULL,
+          PRIMARY KEY (owner_id, memo_id)
+        )
+        """)
     }
+  }
+
+  /// 휴지통·영구 삭제된 메모는 검색에 나오면 안 된다. 모든 경로(편집, 동기화 ack,
+  /// pull 이 부르는 purge, 휴지통 비우기)가 upsert/delete 를 지나므로 여기서 지운다 —
+  /// 데스크탑 `upsert` 의 `invalidateMemoVectors` 와 같은 자리다.
+  static func deleteMemoVectors(_ db: Database, ownerId: String, memoId: String) throws {
+    try db.execute(
+      sql: "DELETE FROM local_memo_chunk_vectors WHERE owner_id = ? AND memo_id = ?",
+      arguments: [ownerId, memoId])
+    try db.execute(
+      sql: "DELETE FROM local_memo_vector_state WHERE owner_id = ? AND memo_id = ?",
+      arguments: [ownerId, memoId])
   }
 
   public func upsert(_ record: LocalRecord) throws {
@@ -123,6 +169,9 @@ public final class LocalStore: Sendable {
           record.syncStatus, Self.iso8601.string(from: record.updatedAt),
           record.isArchived ? 1 : 0, record.syncedPayloadJSON
         ])
+      if record.type == .memo && record.isArchived {
+        try Self.deleteMemoVectors(db, ownerId: record.ownerId, memoId: record.id)
+      }
     }
   }
 
@@ -153,6 +202,9 @@ public final class LocalStore: Sendable {
         DELETE FROM local_records
         WHERE owner_id = ? AND record_type = ? AND record_id = ?
         """, arguments: [ownerId, type.rawValue, id])
+      if type == .memo {
+        try Self.deleteMemoVectors(db, ownerId: ownerId, memoId: id)
+      }
     }
   }
 
@@ -160,9 +212,12 @@ public final class LocalStore: Sendable {
   /// `RecordType` 을 순회하지 않는 것이 요점이다. 종류가 늘어도 이 문장은 그대로 전부
   /// 지운다. 특히 `memo_recovery` 에는 병합에서 밀려난 메모 본문이 남아 있어서, 한
   /// 종류라도 새면 다음으로 로그인한 계정이 남의 메모를 보게 된다.
+  /// 벡터 테이블도 같다 — `chunk_text` 가 메모 본문 조각이다.
   public func clearOwner(_ ownerId: String) throws {
     try dbQueue.write { db in
-      try db.execute(sql: "DELETE FROM local_records WHERE owner_id = ?", arguments: [ownerId])
+      for table in ["local_records", "local_memo_chunk_vectors", "local_memo_vector_state"] {
+        try db.execute(sql: "DELETE FROM \(table) WHERE owner_id = ?", arguments: [ownerId])
+      }
     }
   }
 

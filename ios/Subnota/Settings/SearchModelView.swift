@@ -23,6 +23,12 @@ final class SearchModelStore {
   private var task: Task<Void, Never>?
   private let monitor = NWPathMonitor()
 
+  /// 엔진은 앱에 하나 — 가중치를 한 번만 올린다. 처음 색인할 때 읽는다.
+  private var indexerLoad: Task<MemoIndexer?, Never>?
+  private var indexing: Task<Void, Never>?
+  /// 모델이 없을 때 들어온 요청. 설치가 끝나면 이걸로 전체를 한 번 색인한다.
+  private var indexTarget: (store: LocalStore, ownerId: String)?
+
   private init() {
     let installed = (try? EmbeddingModel.directory()).map { ModelDownloader.isInstalled(in: $0) } ?? false
     phase = installed ? .ready : .missing
@@ -49,6 +55,9 @@ final class SearchModelStore {
           }
         }
         phase = .ready
+        if let target = indexTarget {
+          scheduleIndexing(store: target.store, ownerId: target.ownerId, after: .zero)
+        }
       } catch is CancellationError {
         phase = .missing
       } catch {
@@ -61,6 +70,41 @@ final class SearchModelStore {
   /// 받은 만큼은 `.part` 로 남아 다음에 이어받는다.
   func cancel() {
     task?.cancel()
+  }
+
+  /// 메모가 바뀔 때마다 부른다. 조용해진 뒤 백그라운드에서 바뀐 메모만 색인한다
+  /// (데스크탑 `LOCAL_INDEX_DEBOUNCE_MS` 와 같은 5초). 모델이 없으면 조용히 대상만 기억한다.
+  func scheduleIndexing(store: LocalStore, ownerId: String, after delay: Duration = .seconds(5)) {
+    indexTarget = (store, ownerId)
+    guard phase == .ready else { return }
+    // 앞 실행은 메모 사이에서 멈춘다. 끝낸 메모는 남으므로 다음 실행이 이어서 한다.
+    indexing?.cancel()
+    indexing = Task(priority: .background) {
+      try? await Task.sleep(for: delay)
+      guard !Task.isCancelled, let indexer = await loadIndexer() else { return }
+      do {
+        try await indexer.reconcile(store: store, ownerId: ownerId)
+      } catch {
+        // 다음 load 가 다시 시도한다. 색인 실패로 사용자를 방해하지 않는다.
+        #if DEBUG
+          if !(error is CancellationError) { print("[Subnota][index] \(String(reflecting: error))") }
+        #endif
+      }
+    }
+  }
+
+  private func loadIndexer() async -> MemoIndexer? {
+    if indexerLoad == nil {
+      indexerLoad = Task {
+        guard let directory = try? EmbeddingModel.directory(),
+              let engine = try? await EmbeddingEngine(modelDirectory: directory)
+        else { return nil }
+        return MemoIndexer(engine: engine)
+      }
+    }
+    let indexer = await indexerLoad?.value
+    if indexer == nil { indexerLoad = nil }  // 다음에 다시 읽어 본다.
+    return indexer
   }
 }
 
