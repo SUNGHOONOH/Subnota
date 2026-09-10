@@ -23,8 +23,13 @@ final class SearchModelStore {
   private var task: Task<Void, Never>?
   private let monitor = NWPathMonitor()
 
-  /// 엔진은 앱에 하나 — 가중치를 한 번만 올린다. 처음 색인할 때 읽는다.
-  private var indexerLoad: Task<MemoIndexer?, Never>?
+  /// 자동 검색 토글. **기본 꺼짐** — 문턱(`AmbientSearch.zThreshold`)이 캘리브레이션 전이라
+  /// 켜 두면 엉뚱한 메모를 들이대는 실수를 사용자가 먼저 겪는다. 켜는 건 사용자 몫이다.
+  static let autoSearchKey = "subnota.search.auto"
+
+  /// 엔진은 앱에 하나 — 가중치를 한 번만 올린다. 색인과 검색이 같이 쓴다.
+  private var engineLoad: Task<EmbeddingEngine?, Never>?
+  private var indexer: MemoIndexer?
   private var indexing: Task<Void, Never>?
   /// 모델이 없을 때 들어온 요청. 설치가 끝나면 이걸로 전체를 한 번 색인한다.
   private var indexTarget: (store: LocalStore, ownerId: String)?
@@ -93,18 +98,49 @@ final class SearchModelStore {
     }
   }
 
+  /// 커서 문맥과 가까운 메모(전부, 가까운 순). 모델이 없으면 nil — 수동 🔍 는 게이트로
+  /// 안내하고 자동은 조용히 넘어간다.
+  func nearbyMemos(
+    to text: String, excluding memoId: String, store: LocalStore, ownerId: String
+  ) async throws -> [NearbyMemo]? {
+    guard phase == .ready else { return nil }
+    guard let engine = await loadEngine() else { throw EngineUnavailable() }
+    // 임베딩과 스캔은 메인 밖에서 — 타이핑을 막지 않는다.
+    let results = try await Task.detached(priority: .userInitiated) {
+      let query = try engine.embed(text, as: .query)
+      return try VectorStore(store: store, ownerId: ownerId).nearbyMemos(to: query, excluding: memoId)
+    }.value
+    #if DEBUG
+      // 문턱 캘리브레이션용 실측. 본문은 찍지 않는다.
+      let z = AmbientSearch.zScore(results.map(\.score)).map { String(format: "%.3f", $0) } ?? "nil"
+      let top = results.prefix(3).map { "\($0.memo.id.prefix(8)):\(String(format: "%.4f", $0.score))" }
+      print("[Subnota][search] n=\(results.count) z=\(z) top=\(top)")
+    #endif
+    return results
+  }
+
+  private struct EngineUnavailable: Error {}
+
   private func loadIndexer() async -> MemoIndexer? {
-    if indexerLoad == nil {
-      indexerLoad = Task {
-        guard let directory = try? EmbeddingModel.directory(),
-              let engine = try? await EmbeddingEngine(modelDirectory: directory)
-        else { return nil }
-        return MemoIndexer(engine: engine)
+    if let indexer { return indexer }
+    guard let engine = await loadEngine() else { return nil }
+    // 기다리는 사이 다른 호출이 먼저 만들었을 수 있다 — actor 가 둘이면 색인이 겹친다.
+    if let indexer { return indexer }
+    let made = MemoIndexer(engine: engine)
+    indexer = made
+    return made
+  }
+
+  private func loadEngine() async -> EmbeddingEngine? {
+    if engineLoad == nil {
+      engineLoad = Task {
+        guard let directory = try? EmbeddingModel.directory() else { return nil }
+        return try? await EmbeddingEngine(modelDirectory: directory)
       }
     }
-    let indexer = await indexerLoad?.value
-    if indexer == nil { indexerLoad = nil }  // 다음에 다시 읽어 본다.
-    return indexer
+    let engine = await engineLoad?.value
+    if engine == nil { engineLoad = nil }  // 다음에 다시 읽어 본다.
+    return engine
   }
 }
 

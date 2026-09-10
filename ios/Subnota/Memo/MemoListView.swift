@@ -48,9 +48,13 @@ struct MemoListView: View {
         }
       }
       .navigationDestination(item: $openedMemo) { memo in
-        MemoEditorView(memo: memo) { edited in
-          model?.save(edited)
-        }
+        MemoEditorView(
+          memo: memo,
+          onSave: { model?.save($0) },
+          search: { try await model?.nearbyMemos(to: $0, excluding: memo.id) },
+          // 관련 메모도 위젯 링크와 같은 길로 연다 — 아래 `.id` 가 에디터를 새로 만든다.
+          onOpen: { openedMemo = $0 }
+        )
         // 에디터가 열린 채 위젯 링크가 다른 메모를 열면 같은 자리의 뷰라 `@State`
         // 텍스트가 그대로 남는다 — 옛 메모 본문이 새 메모 id 로 저장된다. 메모마다 새로 만든다.
         .id(memo.id)

@@ -81,6 +81,45 @@ public struct VectorStore: Sendable {
       }
     }
   }
+
+  /// 질의 벡터와 가까운 메모, 가까운 순. 메모마다 가장 가까운 청크 하나만 남긴다
+  /// (데스크탑 `searchMemoVectors` 의 `resultMemoIds`). `excluding` 은 지금 쓰는 메모.
+  ///
+  /// 벡터를 만든 본문의 해시가 지금 본문과 다르면 그 메모를 **뺀다**. 색인은 편집이
+  /// 멎고 몇 초 뒤에 돌므로 그 사이의 옛 벡터가 이미 지운 문장을 근거로 메모를 들이댈
+  /// 수 있다. 데스크탑도 결과마다 같은 대조를 한다. 다음 색인이 끝나면 다시 나온다.
+  // ponytail: 선형 스캔. 청크가 수만 개를 넘어 지연이 측정되면 인덱스를 둔다.
+  public func nearbyMemos(
+    to query: [Float], excluding memoId: String?, signature: String = EmbeddingModel.signature
+  ) throws -> [NearbyMemo] {
+    let memos = try MemoStore(store: store, ownerId: ownerId).all()  // 휴지통 제외
+    let current = Dictionary(uniqueKeysWithValues: memos.map { ($0.id, (memo: $0, hash: ContentHash.hash($0.content))) })
+    let rows = try store.dbQueue.read { db in
+      try Row.fetchAll(db, sql: """
+        SELECT v.memo_id, v.chunk_text, v.source_content_hash, v.vector
+        FROM local_memo_chunk_vectors AS v
+        JOIN local_memo_vector_state AS s
+          ON s.owner_id = v.owner_id AND s.memo_id = v.memo_id
+          AND s.source_content_hash = v.source_content_hash
+          AND s.embedding_signature = v.embedding_signature
+        WHERE v.owner_id = ? AND v.embedding_signature = ?
+        """, arguments: [ownerId, signature])
+    }
+
+    var best: [String: NearbyMemo] = [:]
+    for row in rows {
+      let id: String = row["memo_id"]
+      guard id != memoId,
+        let entry = current[id], entry.hash == (row["source_content_hash"] as String),
+        let vector = EmbeddingMath.vector(fromBlob: row["vector"]), vector.count == query.count
+      else { continue }
+      let score = EmbeddingMath.cosine(query, vector)
+      if score > best[id]?.score ?? -.infinity {
+        best[id] = NearbyMemo(memo: entry.memo, chunkText: row["chunk_text"], score: score)
+      }
+    }
+    return best.values.sorted { ($0.score, $1.memo.id) > ($1.score, $0.memo.id) }
+  }
 }
 
 /// 무엇을 색인할지 — 엔진 없이 테스트하는 순수 결정.

@@ -8,6 +8,7 @@ struct SettingsView: View {
 
   @Environment(SessionStore.self) private var session
   @AppStorage(ThemeSetting.storageKey) private var theme: ThemeSetting = .system
+  @AppStorage(SearchModelStore.autoSearchKey) private var autoSearch = false
   @State private var showingDelete = false
 
   var body: some View {
@@ -37,7 +38,7 @@ struct SettingsView: View {
       }
       .listRowBackground(Palette.chrome)
 
-      Section("검색") {
+      Section {
         NavigationLink {
           SearchModelView()
         } label: {
@@ -49,6 +50,16 @@ struct SettingsView: View {
           .font(Typography.ui(15))
           .foregroundStyle(Palette.ink)
         }
+        Toggle("자동 검색", isOn: $autoSearch)
+          .font(Typography.ui(15))
+          .foregroundStyle(Palette.ink)
+          .tint(Palette.brand)
+      } header: {
+        Text("검색")
+      } footer: {
+        Text("입력을 멈추면 관련 메모가 뚜렷할 때만 조용히 보여 줍니다. 에디터의 돋보기로는 언제든 직접 찾을 수 있습니다.")
+          .font(Typography.ui(12))
+          .foregroundStyle(Palette.inkMuted)
       }
       .listRowBackground(Palette.chrome)
 

@@ -110,4 +110,11 @@ final class MemoListModel {
     await sync?.emptyTrash()
     load()
   }
+
+  /// 에디터의 🔍·자동 검색. 모델이 없으면 nil.
+  func nearbyMemos(to text: String, excluding memoId: String) async throws -> [NearbyMemo]? {
+    guard let local else { return [] }
+    return try await SearchModelStore.shared.nearbyMemos(
+      to: text, excluding: memoId, store: local, ownerId: ownerId)
+  }
 }
