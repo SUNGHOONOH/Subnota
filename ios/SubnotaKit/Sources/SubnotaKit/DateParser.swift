@@ -191,7 +191,9 @@ private extension NSTextCheckingResult {
   }
 }
 
-private let jsWhitespaceScalars: Set<UInt32> = {
+/// JS `\s` 의 코드 포인트 전부. 전부 BMP 라 UTF-16 코드 유닛 하나와 같다 —
+/// `MemoChunker` 도 이 집합을 쓴다.
+let jsWhitespaceScalars: Set<UInt32> = {
   var values: Set<UInt32> = [
     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0xa0,
     0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff,
