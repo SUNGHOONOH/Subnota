@@ -25,6 +25,28 @@ const DEFAULT_MIN_CHUNK_LENGTH = 2;
 const BOUNDARY_REGEX =
   /\r?\n+|[.!?。！？…]+["'”’」』》)\]]*(?=\s|$)|(?:해야\s*함|할\s*것|함|됨|[것중거정]임|[음슴다]|야지|[ㅋㅎㅠㅜ]{2,})(?=\s|$)/g;
 
+const TERMINAL_PUNCTUATION_REGEX =
+  /[.!?。！？…]+["'”’」』》)\]]*$/;
+
+let sentenceSegmenter: Intl.Segmenter | null | undefined;
+
+const getSentenceSegmenter = (): Intl.Segmenter | null => {
+  if (sentenceSegmenter !== undefined) {
+    return sentenceSegmenter;
+  }
+
+  try {
+    sentenceSegmenter =
+      typeof Intl.Segmenter === 'function'
+        ? new Intl.Segmenter('ko', { granularity: 'sentence' })
+        : null;
+  } catch {
+    sentenceSegmenter = null;
+  }
+
+  return sentenceSegmenter;
+};
+
 // Borrowed from the backend splitter's abbreviation list.
 const ENGLISH_ABBREVIATIONS = new Set([
   'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'vs', 'etc', 'eg', 'ie', 'ca',
@@ -91,6 +113,45 @@ const isFalseBoundary = (text: string, match: RegExpExecArray): boolean => {
   return false;
 };
 
+const isFalseIntlBoundary = (text: string, end: number): boolean => {
+  const prefix = text.slice(0, end).trimEnd();
+  const match = TERMINAL_PUNCTUATION_REGEX.exec(prefix);
+
+  if (!match) {
+    return true;
+  }
+
+  // Intl.Segmenter gives us a sentence span, while the existing exception
+  // rules operate on a punctuation match. Reuse those rules at the same
+  // source offset instead of maintaining a second abbreviation/quote list.
+  return isFalseBoundary(text, match);
+};
+
+const getIntlBoundaryEnds = (text: string): Set<number> | null => {
+  const segmenter = getSentenceSegmenter();
+
+  if (!segmenter) {
+    return null;
+  }
+
+  try {
+    const ends = new Set<number>();
+    for (const segment of segmenter.segment(text)) {
+      const end = segment.index + segment.segment.length;
+      const trimmedEnd = text.slice(0, end).trimEnd().length;
+
+      if (trimmedEnd > 0 && !isFalseIntlBoundary(text, end)) {
+        ends.add(trimmedEnd);
+      }
+    }
+    return ends;
+  } catch {
+    // An unavailable or broken native segmenter must not prevent local
+    // indexing/search. The caller falls back to the existing splitter.
+    return null;
+  }
+};
+
 export const endsAtBoundary = (text: string): boolean => {
   const trimmed = text.trimEnd();
   if (!trimmed) return false;
@@ -109,6 +170,52 @@ export const chunkMemoText = (
   options: ChunkMemoOptions = {},
 ): MemoChunk[] => {
   const minChunkLength = options.minChunkLength ?? DEFAULT_MIN_CHUNK_LENGTH;
+  const chunks: MemoChunk[] = [];
+  let chunkStart = 0;
+  let match: RegExpExecArray | null;
+
+  const intlBoundaryEnds = getIntlBoundaryEnds(text);
+
+  if (intlBoundaryEnds === null) {
+    return chunkMemoTextWithRegex(text, minChunkLength);
+  }
+
+  BOUNDARY_REGEX.lastIndex = 0;
+
+  while ((match = BOUNDARY_REGEX.exec(text)) !== null) {
+    const matchedText = match[0];
+    const isLineBreak = /^\r?\n+$/.test(matchedText);
+    const rawEnd = isLineBreak ? match.index : match.index + matchedText.length;
+
+    // Intl.Segmenter supplies punctuation boundaries. The regex remains the
+    // source of line-break and Korean note-style boundaries that the native
+    // segmenter intentionally does not infer.
+    if (
+      isFalseBoundary(text, match) ||
+      (!isLineBreak &&
+        !intlBoundaryEnds.has(text.slice(0, rawEnd).trimEnd().length) &&
+        /^[.!?。！？…]/.test(matchedText))
+    ) {
+      continue;
+    }
+
+    appendChunk(chunks, text, chunkStart, rawEnd, minChunkLength);
+    chunkStart = match.index + matchedText.length;
+  }
+
+  appendChunk(chunks, text, chunkStart, text.length, minChunkLength);
+
+  return chunks.map((chunk, index) => ({
+    ...chunk,
+    id: buildChunkId(chunk, index),
+    index,
+  }));
+};
+
+const chunkMemoTextWithRegex = (
+  text: string,
+  minChunkLength: number,
+): MemoChunk[] => {
   const chunks: MemoChunk[] = [];
   let chunkStart = 0;
   let match: RegExpExecArray | null;
