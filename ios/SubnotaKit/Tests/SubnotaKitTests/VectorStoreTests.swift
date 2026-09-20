@@ -27,9 +27,13 @@ private func stateRows(_ store: LocalStore, owner: String) throws -> Int {
 }
 
 /// 엔진 대신 차원만 맞춘 가짜 벡터. 이 파일은 SQL 만 본다.
-private func fakeChunks(_ content: String) -> [(chunk: MemoChunk, vector: [Float])] {
+private func fakeChunks(_ content: String) -> [(chunk: MemoChunk, vector: [Float], queryVector: [Float])] {
   MemoIndexPlan.indexableChunks(content).map {
-    (chunk: $0, vector: [Float](repeating: 0.5, count: EmbeddingModel.dimensions))
+    (
+      chunk: $0,
+      vector: [Float](repeating: 0.5, count: EmbeddingModel.dimensions),
+      queryVector: [Float](repeating: 0.25, count: EmbeddingModel.dimensions)
+    )
   }
 }
 
@@ -39,22 +43,68 @@ private func index(_ store: LocalStore, owner: String, _ memo: Memo, signature s
     .replace(memoId: memo.id, content: memo.content, signature: sig, chunks: fakeChunks(memo.content))
 }
 
-@Test func vectorBlobMustBeExactly1536Bytes() throws {
+@Test func bothVectorBlobsMustBeExactly1536Bytes() throws {
   let store = try makeStore()
-  func insert(bytes: Int, id: String) throws {
+  func insert(bytes: Int, queryBytes: Int = 1536, id: String) throws {
     try store.dbQueue.write { db in
       try db.execute(sql: """
         INSERT INTO local_memo_chunk_vectors
           (owner_id, memo_id, chunk_id, chunk_index, chunk_text, start_index, end_index,
-           source_content_hash, embedding_signature, vector)
-        VALUES ('a', 'm', ?, 0, 't', 0, 1, 'h', 's', ?)
-        """, arguments: [id, Data(count: bytes)])
+           source_content_hash, embedding_signature, vector, query_vector)
+        VALUES ('a', 'm', ?, 0, 't', 0, 1, 'h', 's', ?, ?)
+        """, arguments: [id, Data(count: bytes), Data(count: queryBytes)])
     }
   }
   #expect(throws: DatabaseError.self) { try insert(bytes: 1535, id: "short") }
   #expect(throws: DatabaseError.self) { try insert(bytes: 4096, id: "desktop-size") }
+  #expect(throws: DatabaseError.self) { try insert(bytes: 1536, queryBytes: 1535, id: "short-query") }
   try insert(bytes: 1536, id: "ok")
   #expect(try vectorRows(store, owner: "a") == 1)
+}
+
+/// 질의 벡터는 문서 벡터와 다른 값이다(접두사가 다르다) — 섞이거나 잘리면 안 된다.
+@Test func queryVectorsRoundTripAlongsideDocumentVectors() throws {
+  let store = try makeStore()
+  let memo = try MemoStore(store: store, ownerId: "a").create(content: "한 문장만 있는 메모.", category: nil)
+  try index(store, owner: "a", memo)
+
+  let row = try #require(try store.dbQueue.read { db in
+    try Row.fetchOne(db, sql: "SELECT vector, query_vector FROM local_memo_chunk_vectors")
+  })
+  let expected = fakeChunks(memo.content)[0]
+  #expect(EmbeddingMath.vector(fromBlob: row["vector"]) == expected.vector)
+  #expect(EmbeddingMath.vector(fromBlob: row["query_vector"]) == expected.queryVector)
+}
+
+/// `query_vector` 가 없는 Phase 8 이전 테이블은 마이그레이션이 버린다 — NOT NULL
+/// 칼럼을 ALTER 로 더할 수 없고, 서명이 올라가 어차피 전부 다시 색인된다.
+@Test func oldTableWithoutQueryVectorIsDropped() throws {
+  let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let path = dir.appendingPathComponent("test.sqlite3")
+
+  let old = try DatabaseQueue(path: path.path)
+  try old.write { db in
+    try db.execute(sql: """
+      CREATE TABLE local_memo_chunk_vectors (
+        owner_id TEXT NOT NULL, memo_id TEXT NOT NULL, chunk_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL, chunk_text TEXT NOT NULL,
+        start_index INTEGER NOT NULL, end_index INTEGER NOT NULL,
+        source_content_hash TEXT NOT NULL, embedding_signature TEXT NOT NULL,
+        vector BLOB NOT NULL CHECK(length(vector) = 1536),
+        PRIMARY KEY (owner_id, memo_id, chunk_id))
+      """)
+    try db.execute(sql: """
+      INSERT INTO local_memo_chunk_vectors VALUES ('a', 'm', 'c', 0, 't', 0, 1, 'h', 's', ?)
+      """, arguments: [Data(count: 1536)])
+  }
+  try old.close()
+
+  let store = try LocalStore(path: path)
+  #expect(try vectorRows(store, owner: "a") == 0)
+  #expect(try store.dbQueue.read { try $0.columns(in: "local_memo_chunk_vectors") }
+    .contains { $0.name == "query_vector" })
 }
 
 @Test func replaceStoresChunksAndStateThenReplacesThem() throws {
@@ -193,7 +243,12 @@ private func index(_ store: LocalStore, owner: String, _ memo: Memo, signature s
   #expect(texts == ["회의 메모", "다음 주 출시"])
 }
 
+/// 시그니처가 바뀌면 옛 벡터가 지워지고 재색인된다. 그래서 저장 형식이 바뀔 때마다
+/// 꼬리를 올려야 한다 — 질의 벡터가 추가되면서 `:v2` 가 됐다.
 @Test func signatureNamesModelRevisionAndPooling() {
   #expect(EmbeddingModel.signature.contains(EmbeddingModel.revision))
-  #expect(EmbeddingModel.signature.hasSuffix(":mean"))
+  #expect(EmbeddingModel.signature.contains(":mean"))
+  #expect(EmbeddingModel.signature.contains(":v2"))
+  // 정규화 규칙이 바뀌면 같은 본문이 다른 벡터가 된다 — 꼬리로 구분한다.
+  #expect(EmbeddingModel.signature.hasSuffix(":norm1"))
 }

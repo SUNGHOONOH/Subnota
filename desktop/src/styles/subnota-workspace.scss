@@ -1083,6 +1083,29 @@ html.dark .session-rail {
   margin-left: auto;
 }
 
+// 유사/관련 두 축. 퍼센트를 대신한다 — CSLS 점수는 0~1 이 아니라 그대로 찍으면
+// 음수나 143% 가 나온다. 유사가 앞에 서고 관련은 뒤로 물러나게 한다.
+.similarity-badge {
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  margin-left: auto;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.similarity-badge--similar {
+  background: color-mix(in srgb, var(--app-color-brand-500) 12%, transparent);
+  color: var(--app-color-brand-500);
+}
+
+.similarity-badge--related {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  opacity: 0.7;
+}
+
 .preview-panel-actions {
   display: flex;
   flex: 0 0 auto;

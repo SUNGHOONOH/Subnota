@@ -161,7 +161,7 @@ describe('PreviewPanel', () => {
     ).not.toContain('새 탭으로 열기');
   });
 
-  it('검색 결과 상세는 제목 아래에 출처, 작성·수정일과 유사도를 표시한다', () => {
+  it('검색 결과 상세는 제목 아래에 출처, 작성·수정일과 유사도 축을 표시한다', () => {
     const html = markup({
       mode: 'detail',
       result: result({
@@ -172,7 +172,10 @@ describe('PreviewPanel', () => {
     });
 
     expect(html).toContain('메모 · 작성 2일 전 · 수정 어제');
-    expect(html).toContain('유사도 80%');
+    // 퍼센트는 CSLS 점수에서 뜻을 잃었다(0~1이 아니라 대략 -0.5 ~ 1.5).
+    // 0.8은 유사 축이다(>= AMBIENT_MIN_SIMILARITY).
+    expect(html).toContain('비슷함');
+    expect(html).not.toContain('유사도 80%');
   });
 
   it('Ambient 상세는 전용 승격 문구와 결과 더보기 동선을 보여준다', () => {

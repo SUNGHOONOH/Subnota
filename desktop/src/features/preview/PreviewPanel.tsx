@@ -23,7 +23,9 @@ import TooltipIconButton from '../../components/TooltipIconButton';
 import SourceDetailPane from '../memo/components/SourceDetailPane';
 import { formatRelativeDay } from '../../lib/relativeDay';
 import { findPreviewHighlight } from '../../lib/previewHighlight';
+import { normalizeChunkText } from '../../lib/chunkText';
 import EmptyState from '../../components/EmptyState';
+import SimilarityBadge from '../../components/SimilarityBadge';
 import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 export interface PreviewPanelState {
@@ -236,7 +238,9 @@ const PreviewPanel = ({
           type="button"
         >
           <span className="preview-list-meta">{resultMetadata(item, inboxItems, language)}</span>
-          <strong className="preview-list-text">{item.chunkText}</strong>
+          <strong className="preview-list-text">
+            {normalizeChunkText(item.chunkText)}
+          </strong>
         </button>
       ))}
     </div>
@@ -277,11 +281,9 @@ const PreviewPanel = ({
                 <span className="preview-panel-metadata-text">
                   {resultMetadata(result, inboxItems, language)}
                 </span>
-                {result.similarity > 0 && (
-                  <span className="preview-panel-similarity">
-                    {t('유사도', 'Similarity')} {Math.round(result.similarity * 100)}%
-                  </span>
-                )}
+                {/* 점수가 CSLS라 퍼센트로 찍으면 음수나 143%가 나온다.
+                    사용자가 척도를 알 길이 없으므로 단계로 말해 준다. */}
+                <SimilarityBadge score={result.similarity} />
               </span>
             )}
           </div>

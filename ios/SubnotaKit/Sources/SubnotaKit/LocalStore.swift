@@ -106,6 +106,15 @@ public final class LocalStore: Sendable {
       // 검색 벡터. 데스크탑 `local-database.ts` 와 같은 컬럼이고 CHECK 만 다르다 —
       // e5-small 384차원 × float32 = 1536B (데스크탑 bge-m3 는 4096B).
       // 새 테이블이라 기존 기기에도 IF NOT EXISTS 만으로 생긴다. 동기화하지 않는다.
+      //
+      // `query_vector` 가 없는 옛 테이블은 버린다. NOT NULL 칼럼은 ALTER 로 더할 수
+      // 없고, 서명이 올라가서 어차피 `deleteOtherSignatures` 가 전부 지우고 다시
+      // 색인한다 — 옮길 값이 없다.
+      if try db.tableExists("local_memo_chunk_vectors"),
+        try !db.columns(in: "local_memo_chunk_vectors").contains(where: { $0.name == "query_vector" })
+      {
+        try db.execute(sql: "DROP TABLE local_memo_chunk_vectors")
+      }
       try db.execute(sql: """
         CREATE TABLE IF NOT EXISTS local_memo_chunk_vectors (
           owner_id TEXT NOT NULL,
@@ -118,6 +127,9 @@ public final class LocalStore: Sendable {
           source_content_hash TEXT NOT NULL,
           embedding_signature TEXT NOT NULL,
           vector BLOB NOT NULL CHECK(length(vector) = 1536),
+          -- 같은 텍스트를 `query: ` 접두사로 임베딩한 것. CSLS 의 허브 벌점 r_i 는
+          -- 코퍼스 전체의 질의 벡터가 있어야 계산된다(`EmbeddingMath.hubPenalties`).
+          query_vector BLOB NOT NULL CHECK(length(query_vector) = 1536),
           PRIMARY KEY (owner_id, memo_id, chunk_id)
         )
         """)

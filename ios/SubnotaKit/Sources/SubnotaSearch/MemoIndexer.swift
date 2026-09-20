@@ -27,8 +27,18 @@ public actor MemoIndexer {
       try Task.checkCancellation()
       // ponytail: 바뀐 메모는 청크를 전부 다시 임베딩한다. 데스크탑은 같은 chunk_text 의
       // 옛 벡터를 재사용한다 — 긴 메모 편집이 느리게 느껴지면 그 풀을 들인다.
+      // CSLS 의 허브 벌점은 코퍼스 전체의 질의 벡터가 있어야 계산된다 — 청크마다
+      // 접두사를 바꿔 두 번 임베딩한다. 색인 비용이 두 배가 되는 대신 검색 때는
+      // 추론이 질의 하나뿐이다.
+      // 임베딩에는 마크업을 벗긴 본문을 넣는다. 청크의 `text` 는 원문 그대로
+      // 저장된다 — 오프셋과 편집기 텍스트 매칭의 기준이라 손대면 안 된다.
       let chunks = try MemoIndexPlan.indexableChunks(memo.content).map {
-        (chunk: $0, vector: try engine.embed($0.text, as: .passage))
+        let searchable = ChunkText.normalized($0.text)
+        return (
+          chunk: $0,
+          vector: try engine.embed(searchable, as: .passage),
+          queryVector: try engine.embed(searchable, as: .query)
+        )
       }
       if try vectors.replace(memoId: memo.id, content: memo.content, signature: signature, chunks: chunks) {
         stored += 1

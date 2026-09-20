@@ -44,6 +44,7 @@ let package = Package(
         .copy("Fixtures/date-golden.json"),
         .copy("Fixtures/report-golden.json"),
         .copy("Fixtures/chunker-golden.json"),
+        .copy("Fixtures/chunktext-golden.json"),
       ]
     ),
     .target(

@@ -13,7 +13,7 @@ vi.mock('../local-embedding-download', () => ({
   freeDiskBytes: vi.fn(() => 1_000_000_000),
 }));
 
-// local-embedding은 electron app/ipcMain에 의존한다. 모델 로딩(569MB)이나
+// local-embedding은 electron app/ipcMain에 의존한다. 모델 로딩(470MB)이나
 // 실제 추론 없이 IPC 계약과 상태 전이만 검증한다.
 const ipcHandlers: Record<
   string,
@@ -133,7 +133,7 @@ describe('local-embedding IPC', () => {
       state: string;
     };
     expect(status.modelId).toBe(
-      'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8',
+      'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1',
     );
     expect(['absent', 'ready']).toContain(status.state);
   });
@@ -247,10 +247,11 @@ describe('local-embedding IPC', () => {
     expect(downloadMocks.downloadWeightsResumable).not.toHaveBeenCalled();
   });
 
-  // 배열을 한 번에 넘기면 패딩이 CLS 위치로 새어 들어와 벡터가 달라진다
+  // 배열을 한 번에 넘기면 패딩이 풀링에 새어 들어와 벡터가 달라진다
   // (실측: 배치 vs 단건 코사인 0.978~0.992). 속도를 이유로 배치로 바꾸면
   // 로컬 인덱스와 질의의 벡터 공간이 어긋나므로 반드시 한 건씩 불러야 한다.
-  it('텍스트를 배치가 아니라 한 건씩 임베딩한다', async () => {
+  // bge-m3 는 접두사를 쓰지 않는다 — 본문 그대로 들어가야 한다.
+  it('질의를 배치가 아니라 한 건씩, query 접두사로 임베딩한다', async () => {
     seedVerifiedWeights();
     const result = await ipcHandlers['local-embed:embed'](trustedEvent, ['가', '나', '다']);
     expect(extractCalls).toEqual([
@@ -260,6 +261,22 @@ describe('local-embedding IPC', () => {
     ]);
     expect(result).toHaveLength(3);
     expect(result[0]).toHaveLength(1024);
+  });
+
+  // 색인 경로는 문서 벡터(passage:)가 기본이고, CSLS 채점에 쓸 질의 벡터도
+  // 같은 세션에서 만들 수 있어야 한다.
+  it('색인은 기본 passage 접두사를, 요청하면 query 접두사를 쓴다', async () => {
+    seedVerifiedWeights();
+    await ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크']);
+    await ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크'], 'query');
+
+    expect(extractCalls).toEqual([
+      { mode: 'index', text: '본문 청크' },
+      { mode: 'index', text: '본문 청크' },
+    ]);
+    await expect(
+      ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크'], 'document'),
+    ).rejects.toThrow('Invalid embedding prefix');
   });
 
   it('배경 색인에만 ONNX 스레드 제한을 적용하고 완료 후 해제한다', async () => {
@@ -319,13 +336,13 @@ describe('local-embedding IPC', () => {
       ipcHandlers['local-embed:index'](trustedEvent, ['invalid-vector']),
     ).rejects.toThrow('invalid vector');
   });
-  // 570MB를 받다 실패하는 것보다 시작 전에 막는 편이 낫다.
+  // 470MB를 받다 실패하는 것보다 시작 전에 막는 편이 낫다.
   it('디스크 여유 공간과 필요한 공간을 알려 준다', () => {
     const space = ipcHandlers['local-embed:disk-space'](trustedEvent) as {
       freeBytes: number | null;
       requiredBytes: number;
     };
-    expect(space.requiredBytes).toBeGreaterThan(569_000_000);
+    expect(space.requiredBytes).toBeGreaterThan(470_000_000);
     expect(space.freeBytes === null || space.freeBytes >= 0).toBe(true);
   });
 });
@@ -340,11 +357,11 @@ describe('pruneStaleModelCache', () => {
   beforeEach(() => {
     fs.rmSync(repoRoot, { force: true, recursive: true });
     fs.mkdirSync(path.join(repoRoot, revision, 'onnx'), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, revision, 'onnx', 'model.onnx'), 'keep');
+    fs.writeFileSync(path.join(repoRoot, revision, 'onnx', 'model_quantized.onnx'), 'keep');
     fs.writeFileSync(path.join(repoRoot, revision, 'tokenizer.json'), 'keep');
     // revision 고정 이전 경로 + 중단된 다운로드 임시 파일
     fs.mkdirSync(path.join(repoRoot, 'onnx'), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, 'onnx', 'model.onnx.tmp.2170.s22kl9'), 'x'.repeat(40));
+    fs.writeFileSync(path.join(repoRoot, 'onnx', 'model_quantized.onnx.tmp.2170.s22kl9'), 'x'.repeat(40));
     fs.writeFileSync(path.join(repoRoot, 'tokenizer.json'), 'y'.repeat(10));
     fs.writeFileSync(path.join(repoRoot, '.DS_Store'), 'z');
   });
@@ -358,7 +375,7 @@ describe('pruneStaleModelCache', () => {
     const removed = pruneStaleModelCache(repoRoot, revision);
 
     expect(fs.readdirSync(repoRoot)).toEqual([revision]);
-    expect(fs.existsSync(path.join(repoRoot, revision, 'onnx', 'model.onnx'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, revision, 'onnx', 'model_quantized.onnx'))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, revision, 'tokenizer.json'))).toBe(true);
     expect(removed).toBe(51); // 40 + 10 + 1
   });

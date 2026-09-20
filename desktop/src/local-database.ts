@@ -99,6 +99,22 @@ const WORKER_SOURCE = String.raw`
   const { parentPort, workerData } = require('node:worker_threads');
   const { DatabaseSync } = require('node:sqlite');
   const db = new DatabaseSync(workerData.databasePath);
+  // 1024차원 float32 = 4096바이트. 예전 빌드는 질의 벡터 없이 저장했다.
+  const VECTOR_BYTES = 4096;
+  // CREATE TABLE IF NOT EXISTS는 칼럼이 바뀐 기존 테이블을 그대로 둔다.
+  // 벡터 공간이 달라진 이상 내용도 전부 버려야 하므로 통째로 다시 만든다.
+  const staleVectorTable = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master " +
+    "WHERE type = 'table' AND name = 'local_memo_chunk_vectors' " +
+    "AND sql NOT LIKE '%query_vector%'"
+  ).get();
+  if (staleVectorTable) {
+    db.exec(
+      'DROP TABLE IF EXISTS local_memo_chunk_vectors;' +
+      'DROP TABLE IF EXISTS local_memo_vector_state;' +
+      'DROP TABLE IF EXISTS local_inbox_vectors;'
+    );
+  }
   db.exec(
     'PRAGMA journal_mode = WAL;' +
     'PRAGMA synchronous = NORMAL;' +
@@ -126,6 +142,8 @@ const WORKER_SOURCE = String.raw`
       'source_content_hash TEXT NOT NULL,' +
       'embedding_signature TEXT NOT NULL,' +
       'vector BLOB NOT NULL CHECK(length(vector) = 4096),' +
+      // CSLS는 같은 청크의 질의 벡터("query: " 접두사)도 필요하다.
+      'query_vector BLOB NOT NULL CHECK(length(query_vector) = 4096),' +
       'PRIMARY KEY (owner_id, memo_id, chunk_id)' +
     ');' +
     'CREATE INDEX IF NOT EXISTS idx_local_memo_chunk_vectors_owner_signature ' +
@@ -478,33 +496,43 @@ const WORKER_SOURCE = String.raw`
       return { stored: false };
     }
 
+    // 재활용 풀은 문서·질의 벡터를 한 쌍으로 다룬다. 한쪽만 재활용하면
+    // 같은 청크의 두 벡터가 서로 다른 텍스트에서 나온 짝이 된다.
     const reusableVectors = new Map(
       db.prepare(
-        'SELECT chunk_text, vector FROM local_memo_chunk_vectors ' +
+        'SELECT chunk_text, vector, query_vector FROM local_memo_chunk_vectors ' +
         'WHERE owner_id = ? AND memo_id = ? AND embedding_signature = ?'
       ).all(
         args.ownerId,
         args.memoId,
         workerData.embeddingSignature
-      ).map(row => [String(row.chunk_text), row.vector])
+      ).map(row => [
+        String(row.chunk_text),
+        { queryVector: row.query_vector, vector: row.vector },
+      ])
     );
     deleteMemoVectors(args.ownerId, args.memoId);
     const insert = db.prepare(
       'INSERT INTO local_memo_chunk_vectors ' +
-      '(owner_id, memo_id, chunk_id, chunk_index, chunk_text, start_index, end_index, source_content_hash, embedding_signature, vector) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      '(owner_id, memo_id, chunk_id, chunk_index, chunk_text, start_index, end_index, source_content_hash, embedding_signature, vector, query_vector) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    for (const chunk of args.chunks) {
-      const vector = chunk.vector
-        ? Buffer.from(
-            chunk.vector.buffer,
-            chunk.vector.byteOffset,
-            chunk.vector.byteLength
-          )
-        : reusableVectors.get(chunk.text);
-      if (!(vector instanceof Uint8Array) || vector.byteLength !== 4096) {
+    const blobFor = (value, reusable) => {
+      const blob = value
+        ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+        : reusable;
+      if (!(blob instanceof Uint8Array) || blob.byteLength !== VECTOR_BYTES) {
         throw new Error('Reusable memo vector is missing.');
       }
+      return blob;
+    };
+    for (const chunk of args.chunks) {
+      const reusable = reusableVectors.get(chunk.text);
+      const vector = blobFor(chunk.vector, reusable && reusable.vector);
+      const queryVector = blobFor(
+        chunk.queryVector,
+        reusable && reusable.queryVector
+      );
       insert.run(
         args.ownerId,
         args.memoId,
@@ -515,7 +543,8 @@ const WORKER_SOURCE = String.raw`
         chunk.end,
         args.sourceContentHash,
         workerData.embeddingSignature,
-        vector
+        vector,
+        queryVector
       );
     }
     db.prepare(
@@ -615,19 +644,88 @@ const WORKER_SOURCE = String.raw`
     }));
   };
 
-  const searchMemoVectors = args => {
-    let queryMagnitudeSquared = 0;
-    for (const value of args.queryVector) {
-      queryMagnitudeSquared += value * value;
-    }
-    if (queryMagnitudeSquared === 0) return [];
+  // CSLS 이웃 수. iOS 구현과 같은 값이어야 한다.
+  const CSLS_NEIGHBORS = 10;
 
-    let rows = vectorRowsByOwner.get(args.ownerId);
-    if (!rows) {
-      rows = db.prepare(
+  const float32FromBlob = bytes => {
+    if (bytes.byteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
+      return new Float32Array(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength / Float32Array.BYTES_PER_ELEMENT
+      );
+    }
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    return new Float32Array(copy.buffer);
+  };
+
+  // 평균을 빼고 다시 L2 정규화한다. 길이가 0으로 무너지면 방향이 없다.
+  const centeredVector = (vector, mean) => {
+    const out = new Float64Array(vector.length);
+    let magnitudeSquared = 0;
+    for (let index = 0; index < vector.length; index += 1) {
+      const value = vector[index] - mean[index];
+      out[index] = value;
+      magnitudeSquared += value * value;
+    }
+    if (magnitudeSquared === 0) return null;
+    const magnitude = Math.sqrt(magnitudeSquared);
+    for (let index = 0; index < out.length; index += 1) out[index] /= magnitude;
+    return out;
+  };
+
+  const dotProductOf = (left, right) => {
+    let total = 0;
+    for (let index = 0; index < left.length; index += 1) {
+      total += left[index] * right[index];
+    }
+    return total;
+  };
+
+  // 상위 CSLS_NEIGHBORS개의 평균. 코퍼스가 더 작으면 있는 만큼만 쓴다.
+  const topNeighborMean = (values, length) => {
+    const size = Math.min(CSLS_NEIGHBORS, length);
+    if (size <= 0) return 0;
+    const top = new Float64Array(size).fill(-Infinity);
+    for (let index = 0; index < length; index += 1) {
+      const value = values[index];
+      if (value <= top[size - 1]) continue;
+      let position = size - 1;
+      while (position > 0 && top[position - 1] < value) {
+        top[position] = top[position - 1];
+        position -= 1;
+      }
+      top[position] = value;
+    }
+    let total = 0;
+    for (let index = 0; index < size; index += 1) total += top[index];
+    return total / size;
+  };
+
+  /**
+   * 중심화 + CSLS 채점에 필요한 파생값을 만든다.
+   *
+   * 왜: 임베딩 공간이 한쪽으로 쏠려 있어(anisotropy) 무관한 문장쌍의 코사인
+   * 중앙값(0.866)이 진짜 주제 연상(0.850)보다 높았고, 아무거나와 가까운 허브
+   * 문서가 상위를 차지했다(hubness). 코퍼스 평균을 빼고 허브에 벌점을 주면
+   * 순위가 바로잡힌다 — 실측 의미 연상 중앙등수 33 → 7.
+   *
+   * 파생값(muD/muQ/r_i)은 DB에 저장하지 않는다. 모든 쓰기 경로가
+   * vectorRowsByOwner를 비우므로 무효화가 공짜로 따라온다.
+   *
+   * 비용은 청크 수의 제곱이다(실측 672청크 263ms). 3,000청크를 넘으면
+   * 근사 계산을 다시 검토해야 한다 — 표본 추정은 잔차 0.08로 점수 구간
+   * 폭과 맞먹어 이미 기각했다.
+   */
+  const memoVectorIndex = ownerId => {
+    const cached = vectorRowsByOwner.get(ownerId);
+    if (cached) return cached;
+
+    const rows = db.prepare(
       'SELECT vectors.memo_id, vectors.chunk_id, vectors.chunk_text, ' +
       'vectors.start_index, vectors.end_index, vectors.source_content_hash, ' +
-      'vectors.vector ' +
+      'vectors.vector, vectors.query_vector ' +
       'FROM local_memo_chunk_vectors AS vectors ' +
       'INNER JOIN local_memo_vector_state AS state ' +
         'ON state.owner_id = vectors.owner_id ' +
@@ -638,58 +736,125 @@ const WORKER_SOURCE = String.raw`
         "ON records.owner_id = vectors.owner_id AND records.record_type = 'memo' " +
         'AND records.record_id = vectors.memo_id AND records.is_archived = 0 ' +
       'WHERE vectors.owner_id = ? AND vectors.embedding_signature = ?'
-      ).all(args.ownerId, workerData.embeddingSignature);
-      vectorRowsByOwner.set(args.ownerId, rows);
-    }
+    ).all(ownerId, workerData.embeddingSignature);
 
-    const queryMagnitude = Math.sqrt(queryMagnitudeSquared);
-    const candidates = [];
+    const entries = [];
+    const documents = [];
+    const queries = [];
     for (const row of rows) {
+      const documentBytes = row.vector;
+      const queryBytes = row.query_vector;
       if (
-        args.excludeMemoId !== null &&
-        String(row.memo_id) === args.excludeMemoId
+        !(documentBytes instanceof Uint8Array) ||
+        documentBytes.byteLength !== VECTOR_BYTES ||
+        !(queryBytes instanceof Uint8Array) ||
+        queryBytes.byteLength !== VECTOR_BYTES
       ) {
         continue;
       }
-      const bytes = row.vector;
-      if (!(bytes instanceof Uint8Array) || bytes.byteLength !== 4096) continue;
-      let vector;
-      if (bytes.byteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
-        vector = new Float32Array(
-          bytes.buffer,
-          bytes.byteOffset,
-          bytes.byteLength / Float32Array.BYTES_PER_ELEMENT
-        );
-      } else {
-        const copy = new Uint8Array(bytes.byteLength);
-        copy.set(bytes);
-        vector = new Float32Array(copy.buffer);
-      }
-
-      let dotProduct = 0;
-      let candidateMagnitudeSquared = 0;
-      for (let index = 0; index < vector.length; index += 1) {
-        dotProduct += args.queryVector[index] * vector[index];
-        candidateMagnitudeSquared += vector[index] * vector[index];
-      }
-      if (candidateMagnitudeSquared === 0) continue;
-      const similarity = Math.max(
-        -1,
-        Math.min(
-          1,
-          dotProduct / (queryMagnitude * Math.sqrt(candidateMagnitudeSquared))
-        )
-      );
-      if (similarity < args.minimumSimilarity) continue;
-
-      candidates.push({
+      entries.push({
         chunkId: String(row.chunk_id),
         chunkText: String(row.chunk_text),
         endIndex: Number(row.end_index),
         memoId: String(row.memo_id),
-        similarity,
         sourceContentHash: String(row.source_content_hash),
         startIndex: Number(row.start_index),
+      });
+      documents.push(float32FromBlob(documentBytes));
+      queries.push(float32FromBlob(queryBytes));
+    }
+
+    const dimensions = documents.length > 0 ? documents[0].length : 0;
+    const documentMean = new Float64Array(dimensions);
+    const queryMean = new Float64Array(dimensions);
+    for (let index = 0; index < documents.length; index += 1) {
+      for (let axis = 0; axis < dimensions; axis += 1) {
+        documentMean[axis] += documents[index][axis];
+        queryMean[axis] += queries[index][axis];
+      }
+    }
+    for (let axis = 0; axis < dimensions; axis += 1) {
+      documentMean[axis] /= documents.length || 1;
+      queryMean[axis] /= documents.length || 1;
+    }
+
+    const vectorIndex = { entries: [], queryMean: queryMean };
+    const centeredDocuments = [];
+    const centeredQueries = [];
+    for (let position = 0; position < entries.length; position += 1) {
+      const document = centeredVector(documents[position], documentMean);
+      const query = centeredVector(queries[position], queryMean);
+      // 평균과 똑같은 벡터는 중심화 뒤 방향이 사라진다(청크가 하나뿐인
+      // 코퍼스). 점수를 정의할 수 없으므로 검색에서 뺀다.
+      if (!document || !query) continue;
+      vectorIndex.entries.push({
+        ...entries[position],
+        document: document,
+        hubPenalty: 0,
+      });
+      centeredDocuments.push(document);
+      centeredQueries.push(query);
+    }
+
+    // r_i: 문서 i에 대한 코퍼스 전체 질의 벡터 점수의 상위 10개 평균.
+    // j === i를 빼지 않는다 — p_i와 d_i는 접두사가 달라 서로 다른 벡터다.
+    const scratch = new Float64Array(centeredQueries.length);
+    for (let position = 0; position < centeredDocuments.length; position += 1) {
+      const document = centeredDocuments[position];
+      for (let other = 0; other < centeredQueries.length; other += 1) {
+        scratch[other] = dotProductOf(centeredQueries[other], document);
+      }
+      vectorIndex.entries[position].hubPenalty = topNeighborMean(
+        scratch,
+        centeredQueries.length
+      );
+    }
+
+    vectorRowsByOwner.set(ownerId, vectorIndex);
+    return vectorIndex;
+  };
+
+  const searchMemoVectors = args => {
+    let queryMagnitudeSquared = 0;
+    for (const value of args.queryVector) {
+      queryMagnitudeSquared += value * value;
+    }
+    if (queryMagnitudeSquared === 0) return [];
+
+    const index = memoVectorIndex(args.ownerId);
+    if (index.entries.length === 0) return [];
+    // 런타임 질의는 muQ 계산에 넣지 않는다 — 코퍼스 통계는 색인된 청크의 것이다.
+    const query = centeredVector(args.queryVector, index.queryMean);
+    if (!query) return [];
+
+    const documentScores = new Float64Array(index.entries.length);
+    for (let position = 0; position < index.entries.length; position += 1) {
+      documentScores[position] = dotProductOf(
+        query,
+        index.entries[position].document
+      );
+    }
+    const queryPenalty = topNeighborMean(documentScores, documentScores.length);
+
+    const candidates = [];
+    for (let position = 0; position < index.entries.length; position += 1) {
+      const entry = index.entries[position];
+      if (args.excludeMemoId !== null && entry.memoId === args.excludeMemoId) {
+        continue;
+      }
+      // score = 2 * dot(q', d'_i) - rq - r_i.
+      // 코사인과 달리 0~1이 아니다(대략 -0.5 ~ 1.5).
+      const similarity =
+        2 * documentScores[position] - queryPenalty - entry.hubPenalty;
+      if (similarity < args.minimumSimilarity) continue;
+      candidates.push({
+        chunkId: entry.chunkId,
+        chunkText: entry.chunkText,
+        endIndex: entry.endIndex,
+        memoId: entry.memoId,
+        similarity: similarity,
+        sourceContentHash: entry.sourceContentHash,
+        startIndex: entry.startIndex,
       });
     }
 
@@ -786,7 +951,9 @@ const WORKER_SOURCE = String.raw`
         continue;
       }
       const bytes = row.vector;
-      if (!(bytes instanceof Uint8Array) || bytes.byteLength !== 4096) continue;
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength !== VECTOR_BYTES) {
+        continue;
+      }
       let vector;
       if (bytes.byteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
         vector = new Float32Array(
@@ -1372,6 +1539,12 @@ const normalizedContentHash = (contentHash: unknown) => {
   }
   return contentHash;
 };
+const isValidChunkVector = (value: unknown) =>
+  value === null ||
+  (Array.isArray(value) &&
+    value.length === EMBEDDING_DIMENSIONS &&
+    value.every(item => typeof item === 'number' && Number.isFinite(item)));
+
 const normalizedMemoVectorChunks = (chunks: unknown) => {
   if (!Array.isArray(chunks)) {
     throw new Error('Invalid memo vector chunks.');
@@ -1388,12 +1561,8 @@ const normalizedMemoVectorChunks = (chunks: unknown) => {
       Number(chunk.start) < 0 ||
       !Number.isInteger(chunk.end) ||
       Number(chunk.end) < Number(chunk.start) ||
-      (chunk.vector !== null &&
-        (!Array.isArray(chunk.vector) ||
-          chunk.vector.length !== EMBEDDING_DIMENSIONS ||
-          chunk.vector.some(
-            value => typeof value !== 'number' || !Number.isFinite(value),
-          )))
+      !isValidChunkVector(chunk.vector) ||
+      !isValidChunkVector(chunk.queryVector)
     ) {
       throw new Error('Invalid memo vector chunk.');
     }
@@ -1401,13 +1570,22 @@ const normalizedMemoVectorChunks = (chunks: unknown) => {
       chunk.vector === null
         ? null
         : Float32Array.from(chunk.vector as number[]);
-    if (vector?.some(value => !Number.isFinite(value))) {
+    const queryVector =
+      chunk.queryVector === null
+        ? null
+        : Float32Array.from(chunk.queryVector as number[]);
+    // float32 범위를 넘는 유한한 수는 변환에서 Infinity가 된다.
+    if (
+      vector?.some(value => !Number.isFinite(value)) ||
+      queryVector?.some(value => !Number.isFinite(value))
+    ) {
       throw new Error('Invalid memo vector chunk.');
     }
     return {
       end: Number(chunk.end),
       id: chunk.id,
       index: Number(chunk.index),
+      queryVector,
       start: Number(chunk.start),
       text: chunk.text,
       vector,
@@ -1440,12 +1618,15 @@ const normalizedMemoSearchLimit = (limit: unknown) => {
   }
   return Number(limit);
 };
+// 메모 검색 점수는 더 이상 코사인이 아니다(CSLS, 대략 -0.5 ~ 1.5).
+// 인박스 검색은 여전히 코사인이라 -1~1 안에 있다. 두 경로가 같은 검증을
+// 쓰므로 범위는 넓은 쪽에 맞춘다.
 const normalizedMinimumSimilarity = (minimumSimilarity: unknown) => {
   if (
     typeof minimumSimilarity !== 'number' ||
     !Number.isFinite(minimumSimilarity) ||
-    minimumSimilarity < -1 ||
-    minimumSimilarity > 1
+    minimumSimilarity < -2 ||
+    minimumSimilarity > 2
   ) {
     throw new Error('Invalid minimum similarity.');
   }

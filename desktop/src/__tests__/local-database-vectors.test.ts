@@ -48,7 +48,7 @@ const OWNER_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_SEARCH = '33333333-3333-4333-8333-333333333333';
 const OWNER_REPLACE = '44444444-4444-4444-8444-444444444444';
 const CURRENT_SIGNATURE =
-  'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8';
+  'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1';
 let databasePath = '';
 let temporaryDirectory = '';
 
@@ -84,18 +84,23 @@ const memo = (
   ...patch,
 });
 
+// bge-m3는 1024차원이다.
 const embeddingVector = (first = 1, second = 0) =>
   Array.from({ length: 1024 }, (_, index) =>
     index === 0 ? first : index === 1 ? second : 0,
   );
 
+// CSLS는 같은 청크의 질의 벡터("query: " 접두사)도 쓴다. 따로 주지 않으면
+// 문서 벡터와 같은 것을 쓴다 — 그러면 muD == muQ라 기대값을 따라가기 쉽다.
 const vectorChunk = (
   text: string,
   vector: number[] | null = embeddingVector(),
+  queryVector: number[] | null = vector,
 ) => ({
   end: text.length,
   id: `chunk-0-0-${text.length}`,
   index: 0,
+  queryVector,
   start: 0,
   text,
   vector,
@@ -1099,7 +1104,7 @@ describe('local memo vector SQLite store', () => {
     ).toThrow('Invalid preserved record id');
   });
 
-  it('searches active vectors by cosine rank, threshold, owner, and current memo exclusion', async () => {
+  it('searches active vectors by CSLS rank, threshold, owner, and current memo exclusion', async () => {
     const records = [
       {
         content: 'current content',
@@ -1156,13 +1161,15 @@ describe('local memo vector SQLite store', () => {
       [vectorChunk('foreign content', embeddingVector(1, 0))],
     );
 
+    // 점수가 CSLS라 -1이 더 이상 "전부 통과"가 아니다(대략 -0.5 ~ 1.5이고
+    // 허브 벌점 때문에 더 내려갈 수 있다). 바닥은 검증이 허용하는 -2로 둔다.
     const results = await searchVectors(
       eventSearch,
       OWNER_SEARCH,
       embeddingVector(1, 0),
       'search-current',
       10,
-      -1,
+      -2,
     );
     expect(results.map(result => result.memoId)).toEqual([
       'search-nearest',
@@ -1179,9 +1186,10 @@ describe('local memo vector SQLite store', () => {
       memoUpdatedAt: '2026-07-26T00:00:00.000Z',
       startIndex: 0,
     });
-    expect(results[0].similarity).toBeCloseTo(1);
-    expect(results[1].similarity).toBeCloseTo(0.8);
-    expect(results[2].similarity).toBeCloseTo(0);
+    // 코사인이면 1 / 0.8 / 0 이었다. CSLS는 코퍼스 전체의 허브 벌점이 섞여
+    // 손으로 적어 둘 만한 상수가 아니다 — 내림차순만 보장하면 된다.
+    expect(results[0].similarity).toBeGreaterThan(results[1].similarity);
+    expect(results[1].similarity).toBeGreaterThan(results[2].similarity);
     expect(results.some(result => result.memoId === 'search-current')).toBe(false);
     expect(results.some(result => result.memoId === 'search-foreign')).toBe(false);
 
@@ -1284,7 +1292,9 @@ describe('local memo vector SQLite store', () => {
         searchVectors(eventSearch, OWNER_SEARCH, query, null, limit, 0),
       ).toThrow('Invalid memo search limit');
     }
-    for (const minimumSimilarity of [Number.NaN, -1.1, 1.1]) {
+    // CSLS 점수는 코사인과 달리 -1~1 밖으로 나간다(대략 -0.5 ~ 1.5).
+    // 그래서 허용 범위가 -2~2 로 넓어졌다 — 1.1 은 이제 정상값이다.
+    for (const minimumSimilarity of [Number.NaN, -2.1, 2.1]) {
       expect(() =>
         searchVectors(
           eventSearch,

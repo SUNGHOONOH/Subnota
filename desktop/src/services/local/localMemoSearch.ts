@@ -1,4 +1,5 @@
 import { hashText } from '../../lib/contentHash';
+import { normalizeChunkText } from '../../lib/chunkText';
 import { isMeaningfulChunk } from '../../lib/memoChunker';
 import type { MemoChunk } from '../../lib/memoChunker';
 import type {
@@ -110,7 +111,11 @@ export const searchLocalMemoChunks = async ({
   throwIfAborted(signal);
   // 질의는 대화형 extractor를 사용한다. 배경 색인용 2-thread 세션과
   // 구현체·모델·양자화는 같고, latency를 위해 스레드 제한만 적용하지 않는다.
-  const [queryVector] = await api.localEmbed([text]);
+  //
+  // 색인이 정규화된 본문을 임베딩하므로 질의도 같은 규칙을 통과해야 한다.
+  // 한쪽만 정규화하면 마크업이 섞인 만큼 벡터가 어긋난다. `queryChunk.text`는
+  // 원문 그대로 둔다 — 편집기에서 문장 위치를 찾는 기준이다.
+  const [queryVector] = await api.localEmbed([normalizeChunkText(text)]);
   throwIfAborted(signal);
   const candidateLimit = Math.min(10, Math.max(limit * 2, 5));
   const [memoRows, inboxRows] = await Promise.all([

@@ -50,7 +50,14 @@ public enum EmbeddingModel {
   /// 저장된 벡터가 어느 공간에 있는지. 모델·양자화·풀링 중 하나라도 바뀌면 벡터가
   /// 달라지므로 셋 다 담는다 — 다르면 옛 벡터를 전부 버린다(`VectorStore`).
   /// 데스크탑 `EMBEDDING_MODEL_ID` 에 풀링을 더한 모양이다.
-  public static let signature = "\(repo)@\(revision):onnx-q8:mean"
+  ///
+  /// `v2` = 청크마다 `passage: `/`query: ` 벡터를 **둘 다** 저장한다(CSLS 에 필요).
+  /// `norm1` = 임베딩 전에 `ChunkText.normalized` 로 마크업을 벗긴다. 규칙이 바뀌면
+  /// 같은 본문이 다른 벡터가 되므로 숫자를 올려야 한다. 데스크탑 `NORMALIZATION_VERSION`
+  /// 과 같은 값을 쓴다. 채점(중심화·CSLS)은 저장된 벡터 위의 계산이라 여기 넣지 않는다 —
+  /// 넣으면 채점을 손볼 때마다 전체 재색인이 돈다.
+  /// 서명이 바뀌면 옛 벡터는 자동으로 버려지고 다시 색인된다(`VectorStore`).
+  public static let signature = "\(repo)@\(revision):onnx-q8:mean:v2:norm1"
 
   public static var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
 

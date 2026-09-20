@@ -393,6 +393,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       end: number;
       id: string;
       index: number;
+      queryVector: number[] | null;
       start: number;
       text: string;
       vector: number[] | null;
@@ -510,8 +511,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('local-embed:ensure-model'),
   localEmbed: (texts: string[]): Promise<number[][]> =>
     ipcRenderer.invoke('local-embed:embed', texts),
-  localEmbedForIndex: (texts: string[]): Promise<number[][]> =>
-    ipcRenderer.invoke('local-embed:index', texts),
+  localEmbedForIndex: (
+    texts: string[],
+    prefix: 'passage' | 'query' = 'passage',
+  ): Promise<number[][]> =>
+    ipcRenderer.invoke('local-embed:index', texts, prefix),
   localEmbedReleaseIndexModel: (): Promise<void> =>
     ipcRenderer.invoke('local-embed:release-index'),
   getDesktopPreferences: (): Promise<{

@@ -12,7 +12,7 @@
  * 전부 동일했고 어떤 옵션을 줘도 결과가 비트 단위로 같았다.
  * 자세한 근거는 docs/embedding-migration-plan.md 참고.
  *
- * 모델은 앱에 번들하지 않는다(569MB). 첫 사용 시 userData로 내려받고,
+ * 모델은 앱에 번들하지 않는다(570MB). 첫 사용 시 userData로 내려받고,
  * 이후 실행부터는 로컬 캐시를 그대로 쓴다.
  */
 import { app, ipcMain } from 'electron';
@@ -32,10 +32,21 @@ import {
 const MODEL_REPO = 'Xenova/bge-m3';
 const MODEL_REVISION = '4de13258303883538bd53b696b452bf8099f0858';
 const MODEL_DTYPE = 'q8';
+// bge-m3는 cls 풀링 + 접두사 없는 모델이다. 풀링을 틀리면 에러 없이 품질만
+// 떨어지므로 모델 ID에 넣어 벡터 공간을 식별한다.
+const MODEL_POOLING = 'cls';
 // Xenova/bge-m3 = BAAI/bge-m3의 ONNX 변환판. dtype q8은 onnx/model_quantized.onnx.
-// 로컬 인덱스 무효화 판정에 쓰므로 실제 모델·엔진·양자화에서 값을 만든다.
+// 로컬 인덱스 무효화 판정에 쓰므로 실제 모델·엔진·양자화·풀링에서 값을 만든다.
 // 이 값이 바뀌면 기존 로컬 벡터는 버리고 다시 색인해야 한다.
-export const EMBEDDING_MODEL_ID = `${MODEL_REPO}@${MODEL_REVISION}:onnx-${MODEL_DTYPE}`;
+//
+// 전처리 버전도 들어간다 — `lib/chunkText.ts`의 정규화 규칙이 바뀌면 같은
+// 본문이 다른 벡터가 되므로 옛 벡터와 섞이면 안 된다. 규칙을 고칠 때마다
+// 숫자를 올려라. 채점(중심화·CSLS)은 저장된 벡터 위에서 계산만 하므로
+// 여기 넣지 않는다 — 넣으면 채점을 손볼 때마다 전체 재색인이 돈다.
+const NORMALIZATION_VERSION = 'norm1';
+export const EMBEDDING_MODEL_ID =
+  `${MODEL_REPO}@${MODEL_REVISION}:onnx-${MODEL_DTYPE}:${MODEL_POOLING}` +
+  `:${NORMALIZATION_VERSION}`;
 const MODEL_WEIGHTS = 'onnx/model_quantized.onnx';
 const MODEL_BYTES = 569_694_530;
 const MODEL_SHA256 = '0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d';
@@ -44,6 +55,15 @@ const WEIGHTS_URL = `https://huggingface.co/${MODEL_REPO}/resolve/${MODEL_REVISI
 // 실패하는 것보다 시작 전에 알려 주는 편이 낫다.
 const REQUIRED_DISK_BYTES = MODEL_BYTES + 200_000_000;
 export const EMBEDDING_VECTOR_DIMENSIONS = 1024;
+
+/**
+ * 문서 벡터와 질의 벡터를 가르는 딱지. bge-m3는 접두사를 쓰지 않아 둘이 같은
+ * 값이 되지만, CSLS가 청크마다 질의 벡터를 따로 요구하고 iOS는 접두사 모델
+ * (e5-small)을 쓰므로 구분 자체는 남겨 둔다.
+ */
+export type EmbeddingPrefix = 'passage' | 'query';
+// ponytail: bge-m3는 접두사 없음. 접두사 모델로 바꾸면 여기만 고치면 된다.
+const prefixed = (_prefix: EmbeddingPrefix, text: string) => text;
 
 export interface LocalEmbeddingStatus {
   downloadedBytes: number;
@@ -380,14 +400,18 @@ export const ensureIndexModel = (): Promise<DisposableExtractor> => {
 const embedWith = async (
   texts: string[],
   ensure: () => Promise<DisposableExtractor>,
+  prefix: EmbeddingPrefix,
 ): Promise<number[][]> => {
   const extract = await ensure();
   const out: number[][] = [];
-  // ⚠️ 한 건씩 부른다. 배열을 한 번에 넘기면 패딩이 CLS 위치로 새어 들어와
+  // ⚠️ 한 건씩 부른다. 배열을 한 번에 넘기면 패딩이 풀링에 새어 들어와
   // 결과가 달라진다(실측: 같은 문장의 배치 vs 단건 코사인 0.978~0.992).
   // 벡터 공간 일관성이 깨지므로 속도를 위해 배치로 바꾸지 말 것.
   for (const text of texts) {
-    const { data } = await extract(text, { pooling: 'cls', normalize: true });
+    const { data } = await extract(prefixed(prefix, text), {
+      pooling: 'cls',
+      normalize: true,
+    });
     if (
       data.length !== EMBEDDING_VECTOR_DIMENSIONS ||
       Array.from(data).some(value => !Number.isFinite(value))
@@ -399,11 +423,18 @@ const embedWith = async (
   return out;
 };
 
+/** 검색 질의용. */
 export const embedTexts = (texts: string[]): Promise<number[][]> =>
-  embedWith(texts, ensureModel);
+  embedWith(texts, ensureModel, 'query');
 
-export const embedTextsForIndex = (texts: string[]): Promise<number[][]> =>
-  embedWith(texts, ensureIndexModel);
+/**
+ * 색인용. CSLS 채점이 청크마다 질의 벡터도 요구하므로 같은 색인 세션에서
+ * 질의 쪽 벡터도 만들 수 있어야 한다.
+ */
+export const embedTextsForIndex = (
+  texts: string[],
+  prefix: EmbeddingPrefix = 'passage',
+): Promise<number[][]> => embedWith(texts, ensureIndexModel, prefix);
 
 export const releaseIndexModel = async (): Promise<void> => {
   const active = indexExtractorPromise;
@@ -418,8 +449,11 @@ export const releaseIndexModel = async (): Promise<void> => {
   }
 };
 
-const enqueueIndexEmbedding = (texts: string[]): Promise<number[][]> => {
-  const result = indexEmbeddingQueue.then(() => embedTextsForIndex(texts));
+const enqueueIndexEmbedding = (
+  texts: string[],
+  prefix: EmbeddingPrefix,
+): Promise<number[][]> => {
+  const result = indexEmbeddingQueue.then(() => embedTextsForIndex(texts, prefix));
   indexEmbeddingQueue = result.then(
     () => undefined,
     () => undefined,
@@ -481,15 +515,21 @@ ipcMain.handle('local-embed:embed', async (event, texts: unknown) => {
   return embedTexts(texts as string[]);
 });
 
-ipcMain.handle('local-embed:index', async (event, texts: unknown) => {
-  assertTrustedSender(event);
-  if (!Array.isArray(texts) || texts.some(t => typeof t !== 'string')) {
-    throw new Error('Invalid embedding input.');
-  }
-  if (texts.length === 0) return [];
-  if (texts.length > 64) throw new Error('Too many texts in one embedding request.');
-  return enqueueIndexEmbedding(texts as string[]);
-});
+ipcMain.handle(
+  'local-embed:index',
+  async (event, texts: unknown, prefix: unknown = 'passage') => {
+    assertTrustedSender(event);
+    if (!Array.isArray(texts) || texts.some(t => typeof t !== 'string')) {
+      throw new Error('Invalid embedding input.');
+    }
+    if (prefix !== 'passage' && prefix !== 'query') {
+      throw new Error('Invalid embedding prefix.');
+    }
+    if (texts.length === 0) return [];
+    if (texts.length > 64) throw new Error('Too many texts in one embedding request.');
+    return enqueueIndexEmbedding(texts as string[], prefix);
+  },
+);
 
 ipcMain.handle('local-embed:release-index', async event => {
   assertTrustedSender(event);

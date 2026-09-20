@@ -3,7 +3,7 @@ import SubnotaKit
 
 struct MemoEditorView: View {
   @Environment(\.scenePhase) private var scenePhase
-  @AppStorage(SearchModelStore.autoSearchKey) private var autoSearch = false
+  @AppStorage(SearchModelStore.autoSearchKey) private var autoSearch = true
   @State private var text: String
   @State private var lastSavedContent: String
   @State private var autosave: Task<Void, Never>?
@@ -137,7 +137,7 @@ struct MemoEditorView: View {
     }
   }
 
-  /// 타이핑이 멎으면 같은 계산을 하되, 1등이 후보 분포에서 뚜렷이 튈 때만 띄운다.
+  /// 타이핑이 멎으면 같은 계산을 하되, 1등의 CSLS 점수가 문턱을 넘을 때만 띄운다.
   /// 켜져 있지 않거나 모델이 없으면 아무것도 안 한다.
   private func scheduleAmbient() {
     ambientTask?.cancel()

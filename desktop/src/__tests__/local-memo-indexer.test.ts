@@ -56,15 +56,57 @@ describe('local memo indexer', () => {
 
     await indexer.reconcile([memo], null);
 
+    // 청크마다 문서 벡터(passage)와 CSLS용 질의 벡터(query)를 따로 만든다.
     expect(api.localEmbedForIndex.mock.calls).toEqual(
-      indexableChunksForMemo(memo).map(chunk => [[chunk.text]]),
+      indexableChunksForMemo(memo).flatMap(chunk => [
+        [[chunk.text]],
+        [[chunk.text], 'query'],
+      ]),
     );
     expect(api.localDbReplaceMemoVectors).toHaveBeenCalledOnce();
     const storedChunks = api.localDbReplaceMemoVectors.mock.calls[0]?.[4];
     expect(storedChunks).toHaveLength(2);
-    expect(storedChunks?.every(chunk => chunk.vector.length === 1024)).toBe(true);
+    expect(
+      storedChunks?.every(
+        chunk =>
+          chunk.vector.length === 1024 && chunk.queryVector.length === 1024,
+      ),
+    ).toBe(true);
     expect(api.localDbSetOwner).toHaveBeenCalledWith(null);
     expect(api.localEmbedReleaseIndexModel).toHaveBeenCalledOnce();
+  });
+
+  it('마크업을 벗긴 본문을 임베딩하고, 저장되는 청크 원문은 건드리지 않는다', async () => {
+    const api = createApi();
+    const indexer = createLocalMemoIndexer({ api });
+    // 에디터가 하이라이트를 raw HTML로 직렬화해 본문에 남긴 실제 형태.
+    const raw =
+      '## <mark data-color="var(--tt-color-highlight-green)">다른 앱 아이디어</mark>';
+    const memo = makeMemo(raw);
+
+    await indexer.reconcile([memo], null);
+
+    // 임베딩에 들어간 건 태그가 벗겨진 본문이다.
+    for (const call of api.localEmbedForIndex.mock.calls) {
+      expect(call[0]).toEqual(['다른 앱 아이디어']);
+    }
+    // 저장되는 chunk_text는 원문 그대로 — 편집기 텍스트 매칭의 기준이다.
+    const storedChunks = api.localDbReplaceMemoVectors.mock.calls[0]?.[4];
+    expect(storedChunks?.[0]?.text).toBe(raw);
+  });
+
+  it('내용어가 둘 미만인 청크는 색인하지 않는다', async () => {
+    const api = createApi();
+    const indexer = createLocalMemoIndexer({ api });
+    // `&nbsp;`·`1.`·`교통`은 뜻이 없어 코퍼스 한가운데에 놓이고,
+    // 아무 질의에나 1등으로 올라온다.
+    const memo = makeMemo('&nbsp;\n1.\n교통\n전체적으로 교통의 문제가 크다.');
+
+    await indexer.reconcile([memo], null);
+
+    const storedChunks = api.localDbReplaceMemoVectors.mock.calls[0]?.[4];
+    expect(storedChunks).toHaveLength(1);
+    expect(storedChunks?.[0]?.text).toContain('전체적으로 교통의 문제');
   });
 
   it('내용 hash가 같은 메모는 다시 임베딩하지 않는다', async () => {
@@ -97,9 +139,15 @@ describe('local memo indexer', () => {
 
     expect(api.localEmbedForIndex.mock.calls).toEqual([
       [['새로 바뀐 둘째 문장입니다.']],
+      [['새로 바뀐 둘째 문장입니다.'], 'query'],
     ]);
     const storedChunks = api.localDbReplaceMemoVectors.mock.calls[0]?.[4];
+    // 재활용은 두 벡터가 한 쌍으로 움직여야 한다 — 한쪽만 null이면 짝이 어긋난다.
     expect(storedChunks?.map(chunk => chunk.vector)).toEqual([
+      null,
+      expect.arrayContaining([1]),
+    ]);
+    expect(storedChunks?.map(chunk => chunk.queryVector)).toEqual([
       null,
       expect.arrayContaining([1]),
     ]);

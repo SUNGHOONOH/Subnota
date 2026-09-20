@@ -10,6 +10,8 @@ import { format } from 'date-fns';
 import { Skeleton, Tooltip, VisuallyHidden } from '@mantine/core';
 import type { Editor } from '@tiptap/core';
 import { formatRelativeDay } from '../../../lib/relativeDay';
+import { normalizeChunkText } from '../../../lib/chunkText';
+import { similarityTierLabel } from '../../../lib/similarityBadge';
 import {
   type AppShortcutSettings,
   formatHotkeyHint,
@@ -1847,7 +1849,10 @@ const MemoSplitWorkspace = ({
         )}
         <div className="source-summary-card">
           <h5>{t('추천에 사용된 요약', 'Summary used for this recommendation')}</h5>
-          <p>{result.chunkText || t('요약이 없습니다.', 'No summary is available.')}</p>
+          <p>
+            {normalizeChunkText(result.chunkText) ||
+              t('요약이 없습니다.', 'No summary is available.')}
+          </p>
         </div>
       </div>
     );
@@ -2045,9 +2050,11 @@ const MemoSplitWorkspace = ({
                     const result = editor.networkResults?.find(
                       (item) => item.chunkId === chunkId,
                     );
-                    return result
-                      ? `${getResultTitle(result, memos, language)} · ${t('유사도', 'Similarity')} ${Math.round(result.similarity * 100)}%`
-                      : null;
+                    if (!result) return null;
+                    // 퍼센트는 CSLS 점수에서 뜻을 잃었다 — 단계로 말한다.
+                    const tier = similarityTierLabel(result.similarity, language);
+                    const title = getResultTitle(result, memos, language);
+                    return tier ? `${title} · ${tier}` : title;
                   }}
                   nodes={graph.nodes}
                   showActiveNodeControl={false}
@@ -2329,7 +2336,7 @@ const MemoSplitWorkspace = ({
                     undefined,
                     language,
                   ) || t('연결된 문장', 'Related sentence'),
-            text: ambientResult.chunkText,
+            text: normalizeChunkText(ambientResult.chunkText),
             hint: formatHotkeyHint(appShortcuts?.openAmbientDetail),
             onClick: () => openAmbientResult(ambientResult),
           }

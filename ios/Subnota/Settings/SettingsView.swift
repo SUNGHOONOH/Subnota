@@ -8,7 +8,7 @@ struct SettingsView: View {
 
   @Environment(SessionStore.self) private var session
   @AppStorage(ThemeSetting.storageKey) private var theme: ThemeSetting = .system
-  @AppStorage(SearchModelStore.autoSearchKey) private var autoSearch = false
+  @AppStorage(SearchModelStore.autoSearchKey) private var autoSearch = true
   @State private var showingDelete = false
 
   var body: some View {

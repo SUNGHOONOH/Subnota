@@ -1152,7 +1152,7 @@ const THIRD_PARTY_MODEL_URLS = {
     'https://huggingface.co/BAAI/bge-m3/tree/5617a9f61b028005a4858fdac845db406aefb181',
   desktopLicense: 'https://opensource.org/license/mit/',
   desktopModel:
-    'https://huggingface.co/Xenova/bge-m3/tree/4de13258303883538bd53b696b452bf8099f0858',
+    'https://huggingface.co/Xenova/multilingual-e5-small/tree/761b726dd34fb83930e26aab4e9ac3899aa1fa78',
 } as const;
 
 const embeddingModelText = (
@@ -2626,7 +2626,7 @@ export default function SettingsModal(props: SettingsModalProps) {
                   </RowAction>
                 </Group>
               }
-              description={t('Xenova/bge-m3 · MIT · 로컬 다운로드 · ONNX q8 · revision 4de1325', 'Xenova/bge-m3 · MIT · local download · ONNX q8 · revision 4de1325')}
+              description={t('Xenova/multilingual-e5-small · MIT · 로컬 다운로드 · ONNX fp32 · revision 761b726', 'Xenova/multilingual-e5-small · MIT · local download · ONNX fp32 · revision 761b726')}
               label={t('데스크톱 임베딩 모델', 'Desktop embedding model')}
             />
           </Section>

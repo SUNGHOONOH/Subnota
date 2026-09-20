@@ -23,8 +23,9 @@ final class SearchModelStore {
   private var task: Task<Void, Never>?
   private let monitor = NWPathMonitor()
 
-  /// 자동 검색 토글. **기본 꺼짐** — 문턱(`AmbientSearch.zThreshold`)이 캘리브레이션 전이라
-  /// 켜 두면 엉뚱한 메모를 들이대는 실수를 사용자가 먼저 겪는다. 켜는 건 사용자 몫이다.
+  /// 자동 검색 토글. **기본 켜짐** — 데스크탑(`ambientAutoSearchEnabled`)과 맞춘다.
+  /// 같은 계정으로 두 기기를 쓰는데 한쪽만 조용하면 고장으로 읽힌다.
+  /// 문턱은 실제 크기 메모로 보정했다(`AmbientSearch.scoreThreshold`).
   static let autoSearchKey = "subnota.search.auto"
 
   /// 엔진은 앱에 하나 — 가중치를 한 번만 올린다. 색인과 검색이 같이 쓴다.
@@ -107,14 +108,18 @@ final class SearchModelStore {
     guard let engine = await loadEngine() else { throw EngineUnavailable() }
     // 임베딩과 스캔은 메인 밖에서 — 타이핑을 막지 않는다.
     let results = try await Task.detached(priority: .userInitiated) {
-      let query = try engine.embed(text, as: .query)
-      return try VectorStore(store: store, ownerId: ownerId).nearbyMemos(to: query, excluding: memoId)
+      // 색인이 정규화된 본문을 임베딩하므로 질의도 같은 규칙을 통과해야 한다.
+      // 한쪽만 정규화하면 마크업이 섞인 만큼 벡터가 어긋난다.
+      let query = try engine.embed(ChunkText.normalized(text), as: .query)
+      return try await VectorStore(store: store, ownerId: ownerId)
+        .nearbyMemos(to: query, excluding: memoId)
     }.value
     #if DEBUG
       // 문턱 캘리브레이션용 실측. 본문은 찍지 않는다.
-      let z = AmbientSearch.zScore(results.map(\.score)).map { String(format: "%.3f", $0) } ?? "nil"
-      let top = results.prefix(3).map { "\($0.memo.id.prefix(8)):\(String(format: "%.4f", $0.score))" }
-      print("[Subnota][search] n=\(results.count) z=\(z) top=\(top)")
+      let top = results.prefix(AmbientSearch.candidateCount)
+        .map { "\($0.memo.id.prefix(8)):\(String(format: "%.4f", $0.score))" }
+      print("[Subnota][search] n=\(results.count) "
+        + "surface=\(AmbientSearch.shouldSurface(results.map(\.score))) top=\(top)")
     #endif
     return results
   }
