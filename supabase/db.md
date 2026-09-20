@@ -96,7 +96,8 @@ All public tables have RLS enabled.
 - `topic_memo_inbox_edges`: memo-to-inbox links inside a topic cluster.
 - `activity_completions`: append-only first-completion ledger.
 - `daily_completions`: append-only fully-completed-day ledger.
-- `trees`: immutable growth-tree snapshots by user and generation.
+- `trees`: immutable growth-tree snapshots by user and generation. Dead — the pixel-tree/forest
+  feature was cut from the product and no client or backend code reads this table.
 
 ### Backend-only, no client policy
 

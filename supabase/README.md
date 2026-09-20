@@ -69,4 +69,5 @@ The migrations define and configure the following database structures:
 * `memo_chunks` & `chunk_embedding_cache` — Kiwi sentence splits and Hugging Face inference embeddings
 * `topic_clusters`, `topic_cluster_memos`, & `topic_memo_edges` — Graph clusters and memo edge representations
 * `inbox_sessions` & summary embeddings — Clipped URLs, YouTube transcripts, and metadata
-* `activity_completions`, `daily_completions`, & `trees` — Gamification growth-event tracking ledger and planted forest configurations
+* `activity_completions` & `daily_completions` — Completion ledger behind the monthly report
+* `trees` — Left over from the pixel-tree/forest feature, which was cut from the product; nothing reads it
