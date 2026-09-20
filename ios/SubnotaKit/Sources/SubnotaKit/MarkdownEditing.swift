@@ -257,12 +257,14 @@ public enum MarkdownEditing {
     .checkbox: try! NSRegularExpression(pattern: #"^- \[[ xX]\] "#),
     // 체크박스도 `- ` 로 시작한다 — 글머리 토글이 체크박스를 반쪽 내지 않게 뺀다.
     .bulletList: try! NSRegularExpression(pattern: #"^- (?!\[[ xX]\] )"#),
-    .numberedList: try! NSRegularExpression(pattern: #"^\d+\. "#),
+    // ICU 의 `\d` 는 Nd 범주라 전각 숫자(`１`)까지 먹는다. CommonMark 의 번호 목록은
+    // ASCII 0-9 뿐이라 `１. ` 을 기호로 보면 사용자 글자를 떼어내 버린다.
+    .numberedList: try! NSRegularExpression(pattern: #"^[0-9]+\. "#),
     .quote: try! NSRegularExpression(pattern: #"^> "#),
   ]
 
   private static let listPattern = try! NSRegularExpression(
-    pattern: #"^(?:- \[[ xX]\] |- |\d+\. )"#)
+    pattern: #"^(?:- \[[ xX]\] |- |[0-9]+\. )"#)
 
   private static func isList(_ action: MarkdownEditAction) -> Bool {
     action == .bulletList || action == .numberedList || action == .checkbox

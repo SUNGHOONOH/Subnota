@@ -200,6 +200,16 @@ struct MarkdownEditingLineTests {
     #expect(result.text == "1. one\n2. two")
   }
 
+  /// ICU 의 `\d` 는 Nd 범주 전체라 전각 숫자(`１`)도 먹는다. CommonMark 의 번호 목록은
+  /// ASCII 0-9 뿐이므로 `１. ` 은 목록이 아니다 — 토글하면 떼는 게 아니라 붙여야 한다.
+  /// 한글·일본어 IME 가 전각 숫자를 만들 수 있어 실제로 닿는 경로다.
+  @Test("전각 숫자는 번호 목록이 아니다")
+  func fullwidthDigitIsNotAList() {
+    let text = "１. 항목"
+    let result = toggle(.numberedList, text, NSRange(location: 0, length: (text as NSString).length))
+    #expect(result.text == "1. １. 항목")
+  }
+
   @Test("체크박스는 `- [x]` 도 알아보고 뗀다")
   func checkedBoxIsRemoved() {
     let result = toggle(.checkbox, "- [x] done", NSRange(location: 8, length: 0))
