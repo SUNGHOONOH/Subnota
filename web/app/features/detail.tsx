@@ -151,9 +151,10 @@ export function DetailCta() {
       <p>
         {text('지금은 무료로 시작할 수 있습니다.', 'Start for free today.')}
         <br />
-        {text('필요한 순간에 적고, 나머지는 ', 'Write when you need to and leave the rest to ')}
-        <span className="wordmark-text">Subnota</span>
-        {text('에 맡겨 보세요.', '.')}
+        {text(
+          '필요한 생각이 먼저 찾아오는 작업 공간',
+          'A workspace that brings your ideas back when you need them.',
+        )}
       </p>
       <DownloadRow />
     </section>
