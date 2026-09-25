@@ -33,6 +33,12 @@ interface LocalInboxSearchRow {
 }
 
 interface LocalMemoSearchApi {
+  localDbSearchTopicMemoVectors?: (
+    ownerId: string | null,
+    queryVector: number[],
+    excludeMemoId: string | null,
+    limit: number,
+  ) => Promise<LocalMemoSearchRow[]>;
   localDbSearchMemoVectors: (
     ownerId: string | null,
     queryVector: number[],
@@ -80,7 +86,7 @@ const getApi = (): LocalMemoSearchApi => {
   return window.electronAPI;
 };
 
-const toMemoResult = (row: LocalMemoSearchRow): NetworkSearchResult => ({
+const toMemoResult = (row: LocalMemoSearchRow, matchKind: NetworkSearchResult['matchKind'] = 'similarity'): NetworkSearchResult => ({
   chunkId: row.chunkId,
   chunkText: row.chunkText,
   createdAt: null,
@@ -95,6 +101,7 @@ const toMemoResult = (row: LocalMemoSearchRow): NetworkSearchResult => ({
     ? new Date(row.memoUpdatedAt).getTime()
     : null,
   similarity: row.similarity,
+  matchKind,
   sourceKind: 'memo',
   sourceLabel: null,
   sourceType: null,
@@ -115,6 +122,7 @@ const toInboxResult = (row: LocalInboxSearchRow): NetworkSearchResult => ({
   memoId: null,
   memoUpdatedAt: null,
   similarity: row.similarity,
+  matchKind: 'similarity',
   sourceKind: 'inbox',
   sourceLabel: row.sourceLabel,
   sourceType: row.sourceType,
@@ -124,6 +132,30 @@ const toInboxResult = (row: LocalInboxSearchRow): NetworkSearchResult => ({
   title: row.title,
 });
 
+export const mergeManualSearchResults = (
+  similarity: NetworkSearchResult[],
+  relatedness: NetworkSearchResult[],
+  limit: number,
+): NetworkSearchResult[] => {
+  const first = similarity.slice(0, Math.min(5, limit));
+  const seen = new Set(first.map(result => result.memoId ?? result.inboxSessionId));
+  const related: NetworkSearchResult[] = [];
+  for (const result of relatedness) {
+    if (related.length >= Math.min(3, limit - first.length)) break;
+    if (seen.has(result.memoId)) continue;
+    related.push(result);
+    seen.add(result.memoId);
+  }
+  const selected = [...first, ...related];
+  for (const result of similarity.slice(first.length)) {
+    if (selected.length >= limit) break;
+    if (seen.has(result.memoId ?? result.inboxSessionId)) continue;
+    selected.push(result);
+    seen.add(result.memoId ?? result.inboxSessionId);
+  }
+  return selected;
+};
+
 export const searchLocalMemoChunks = async ({
   api = getApi(),
   limit = 1,
@@ -132,6 +164,7 @@ export const searchLocalMemoChunks = async ({
   ownerId,
   queryText,
   signal,
+  includeRelatedness = false,
 }: {
   api?: LocalMemoSearchApi;
   limit?: number;
@@ -140,6 +173,7 @@ export const searchLocalMemoChunks = async ({
   ownerId: string | null;
   queryText: string;
   signal?: AbortSignal;
+  includeRelatedness?: boolean;
 }): Promise<NetworkSearchResponse> => {
   throwIfAborted(signal);
   const text = queryText.trim().slice(0, 1000);
@@ -185,11 +219,26 @@ export const searchLocalMemoChunks = async ({
     ),
   ]);
   throwIfAborted(signal);
-  const memoResults = memoRows.map(toMemoResult);
+  const memoResults = memoRows.map(row => toMemoResult(row));
   const inboxResults = inboxRows.map(toInboxResult);
-  const results = [...memoResults, ...inboxResults]
-    .sort((left, right) => right.similarity - left.similarity)
-    .slice(0, limit);
+  const similarity = [...memoResults, ...inboxResults]
+    .sort((left, right) => right.similarity - left.similarity);
+  let results = similarity.slice(0, limit);
+  if (includeRelatedness && api.localDbSearchTopicMemoVectors) {
+    try {
+      const relatedRows = await api.localDbSearchTopicMemoVectors(ownerId, queryVector, memoId, candidateLimit);
+      throwIfAborted(signal);
+      results = mergeManualSearchResults(
+        similarity,
+        relatedRows.map(row => toMemoResult(row, 'relatedness')),
+        limit,
+      );
+    } catch {
+      throwIfAborted(signal);
+      // Relatedness is a supplementary manual path; a missing topic index must
+      // leave the existing similarity results usable.
+    }
+  }
 
   return {
     message: results.length === 0 ? LOCAL_SEARCH_EMPTY_MESSAGE : null,
@@ -256,7 +305,7 @@ export const searchNearbyMemos = async ({
   );
   throwIfAborted(signal);
   const results = [
-    ...rows.memos.map(toMemoResult),
+    ...rows.memos.map(row => toMemoResult(row)),
     ...rows.inbox.map(toInboxResult),
   ]
     .sort((left, right) => right.similarity - left.similarity)

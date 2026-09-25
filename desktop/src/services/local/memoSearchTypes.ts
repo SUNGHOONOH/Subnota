@@ -11,6 +11,7 @@ export interface NetworkSearchResult {
   memoId: string | null;
   memoUpdatedAt: number | null;
   similarity: number;
+  matchKind?: 'similarity' | 'relatedness';
   sourceKind: 'memo' | 'inbox';
   sourceLabel: string | null;
   sourceType: string | null;

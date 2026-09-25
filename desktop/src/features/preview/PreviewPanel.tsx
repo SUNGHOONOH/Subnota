@@ -237,7 +237,10 @@ const PreviewPanel = ({
           onClick={() => onSelectResult(item)}
           type="button"
         >
-          <span className="preview-list-meta">{resultMetadata(item, inboxItems, language)}</span>
+          <span className="preview-list-meta">
+            {resultMetadata(item, inboxItems, language)}{' '}
+            {item.matchKind && <SimilarityBadge matchKind={item.matchKind} />}
+          </span>
           <strong className="preview-list-text">
             {normalizeChunkText(item.chunkText)}
           </strong>
@@ -283,7 +286,7 @@ const PreviewPanel = ({
                 </span>
                 {/* 점수가 CSLS라 퍼센트로 찍으면 음수나 143%가 나온다.
                     사용자가 척도를 알 길이 없으므로 단계로 말해 준다. */}
-                <SimilarityBadge score={result.similarity} />
+                {result.matchKind && <SimilarityBadge matchKind={result.matchKind} />}
               </span>
             )}
           </div>

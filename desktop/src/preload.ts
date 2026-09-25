@@ -375,6 +375,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ): Promise<
     Array<{
       chunkCount: number;
+      pendingTopicCount: number;
       memoId: string;
       sourceContentHash: string;
     }>
@@ -384,6 +385,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     memoId: string,
   ): Promise<string[]> =>
     ipcRenderer.invoke('local-db:memo-vector-texts', ownerId, memoId),
+  localDbMemoTopicVectorTexts: (ownerId: string | null, memoId: string): Promise<string[]> =>
+    ipcRenderer.invoke('local-db:memo-topic-vector-texts', ownerId, memoId),
   localDbReplaceMemoVectors: (
     ownerId: string | null,
     memoId: string,
@@ -394,6 +397,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       id: string;
       index: number;
       queryVector: number[] | null;
+      topicVector?: number[] | null;
+      topicSignature?: string | null;
       start: number;
       text: string;
       vector: number[] | null;
@@ -439,6 +444,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       limit,
       minimumSimilarity,
     ),
+  localDbSearchTopicMemoVectors: (
+    ownerId: string | null,
+    queryVector: number[],
+    excludeMemoId: string | null,
+    limit: number,
+  ): ReturnType<ElectronAPI['localDbSearchMemoVectors']> =>
+    ipcRenderer.invoke('local-db:search-topic-memo-vectors', ownerId, queryVector, excludeMemoId, limit),
   localDbClassifyFolderMemos: (
     ownerId: string | null,
     request: {
@@ -566,6 +578,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     prefix: 'passage' | 'query' = 'passage',
   ): Promise<number[][]> =>
     ipcRenderer.invoke('local-embed:index', texts, prefix),
+  localEmbedTopicsForIndex: (texts: string[]): Promise<string[][]> =>
+    ipcRenderer.invoke('local-embed:topics', texts),
   localEmbedReleaseIndexModel: (): Promise<void> =>
     ipcRenderer.invoke('local-embed:release-index'),
   getDesktopPreferences: (): Promise<{

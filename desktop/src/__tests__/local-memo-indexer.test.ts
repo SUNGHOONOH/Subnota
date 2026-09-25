@@ -6,6 +6,7 @@ import {
   indexableChunksForMemo,
 } from '../services/local/localMemoIndexer';
 import { MemoRow } from '../types';
+import { TOPIC_MODEL_ID } from '../local-embedding-config';
 
 const makeMemo = (content: string, id = 'memo-1'): MemoRow => ({
   content,
@@ -19,12 +20,14 @@ const makeMemo = (content: string, id = 'memo-1'): MemoRow => ({
 const createApi = () => {
   const states: Array<{
     chunkCount: number;
+    pendingTopicCount?: number;
     memoId: string;
     sourceContentHash: string;
   }> = [];
   return {
     localDbMemoVectorState: vi.fn(async () => states),
     localDbMemoVectorTexts: vi.fn(async () => [] as string[]),
+    localDbMemoTopicVectorTexts: vi.fn(async () => [] as string[]),
     localDbReplaceMemoVectors: vi.fn(async () => ({ stored: true })),
     localDbSetOwner: vi.fn(async () => undefined),
     localEmbedForIndex: vi.fn(async () => {
@@ -33,10 +36,12 @@ const createApi = () => {
       return [vector];
     }),
     localEmbedReleaseIndexModel: vi.fn(async () => undefined),
+    localEmbedTopicsForIndex: vi.fn(async () => [['치과', '치아']]),
     localEmbedStatus: vi.fn(async () => ({
       downloadedBytes: 586_779_294,
       state: 'ready' as const,
       totalBytes: 586_779_294,
+      topicReady: false,
     })),
     states,
   };
@@ -123,6 +128,56 @@ describe('local memo indexer', () => {
 
     expect(api.localEmbedForIndex).not.toHaveBeenCalled();
     expect(api.localDbReplaceMemoVectors).not.toHaveBeenCalled();
+  });
+
+  it('주제어 모델 준비 후에는 본문을 재임베딩하지 않고 누락된 주제 벡터만 백필한다', async () => {
+    const api = createApi();
+    const memo = makeMemo('어금니가 시려서 찬물 마시기가 힘들다.');
+    api.states.push({
+      chunkCount: 1,
+      memoId: memo.id,
+      pendingTopicCount: 1,
+      sourceContentHash: String(memo.content_hash),
+    });
+    api.localEmbedStatus.mockResolvedValue({
+      downloadedBytes: 759_687_819,
+      state: 'ready',
+      totalBytes: 759_687_819,
+      topicReady: true,
+    });
+    api.localDbMemoVectorTexts.mockResolvedValue([memo.content]);
+    const indexer = createLocalMemoIndexer({ api });
+    await indexer.reconcile([memo], null);
+
+    expect(api.localEmbedTopicsForIndex).toHaveBeenCalledWith([memo.content]);
+    expect(api.localEmbedForIndex).toHaveBeenCalledTimes(1);
+    expect(api.localEmbedForIndex).toHaveBeenCalledWith(['치과, 치아']);
+    expect(api.localDbReplaceMemoVectors.mock.calls[0]?.[4][0]).toMatchObject({
+      queryVector: null,
+      topicSignature: TOPIC_MODEL_ID,
+      vector: null,
+    });
+  });
+
+  it('A.X가 실패해도 본문 벡터 색인을 완료한다', async () => {
+    const api = createApi();
+    api.localEmbedStatus.mockResolvedValue({
+      downloadedBytes: 759_687_819,
+      state: 'ready',
+      totalBytes: 759_687_819,
+      topicReady: true,
+    });
+    api.localEmbedTopicsForIndex.mockRejectedValue(new Error('A.X unavailable'));
+    const indexer = createLocalMemoIndexer({ api });
+    const progress = vi.fn();
+    indexer.subscribe(progress);
+    await indexer.reconcile([makeMemo('새로 색인할 문장입니다.')], null);
+
+    expect(api.localDbReplaceMemoVectors.mock.calls[0]?.[4][0]).toMatchObject({
+      topicSignature: null,
+      topicVector: null,
+    });
+    expect(progress.mock.calls.at(-1)?.[0].stage).toBe('complete');
   });
 
   it('위치가 달라져도 텍스트가 같은 청크 벡터는 재사용한다', async () => {

@@ -2,6 +2,7 @@ import { hashText } from '../../lib/contentHash';
 import { hasSearchableContent, normalizeChunkText } from '../../lib/chunkText';
 import { chunkMemoText, isMeaningfulChunk } from '../../lib/memoChunker';
 import { MemoRow } from '../../types';
+import { TOPIC_MODEL_ID } from '../../local-embedding-config';
 
 export const LOCAL_INDEX_DEBOUNCE_MS = 5_000;
 
@@ -30,6 +31,7 @@ export interface LocalMemoIndexProgress {
 
 interface LocalMemoVectorState {
   chunkCount: number;
+  pendingTopicCount?: number;
   memoId: string;
   sourceContentHash: string;
 }
@@ -42,6 +44,7 @@ interface LocalMemoIndexApi {
     ownerId: string | null,
     memoId: string,
   ) => Promise<string[]>;
+  localDbMemoTopicVectorTexts?: (ownerId: string | null, memoId: string) => Promise<string[]>;
   localDbReplaceMemoVectors: (
     ownerId: string | null,
     memoId: string,
@@ -52,6 +55,8 @@ interface LocalMemoIndexApi {
       id: string;
       index: number;
       queryVector: number[] | null;
+      topicVector?: number[] | null;
+      topicSignature?: string | null;
       start: number;
       text: string;
       vector: number[] | null;
@@ -63,10 +68,12 @@ interface LocalMemoIndexApi {
     prefix?: 'passage' | 'query',
   ) => Promise<number[][]>;
   localEmbedReleaseIndexModel: () => Promise<void>;
+  localEmbedTopicsForIndex?: (texts: string[]) => Promise<string[][]>;
   localEmbedStatus: () => Promise<{
     downloadedBytes: number;
     state: 'absent' | 'downloading' | 'failed' | 'loading' | 'ready';
     totalBytes: number;
+    topicReady?: boolean;
   }>;
 }
 
@@ -136,11 +143,19 @@ export const createLocalMemoIndexer = (
     emit(baseProgress);
     if (expectedGeneration !== generation) return;
 
+    let topicAvailable = false;
+    try {
+      const initialModelStatus = await api.localEmbedStatus();
+      topicAvailable = Boolean(initialModelStatus.topicReady && api.localEmbedTopicsForIndex);
+    } catch {
+      // Status lookup failure should not prevent the existing BGE index from running.
+    }
     const staleMemos = memos
       .filter(memo => !memo.is_archived)
       .filter(
         memo =>
-          existing.get(memo.id)?.sourceContentHash !== sourceContentHash(memo),
+          existing.get(memo.id)?.sourceContentHash !== sourceContentHash(memo) ||
+          (topicAvailable && (existing.get(memo.id)?.pendingTopicCount ?? 0) > 0),
       );
     const stale = await Promise.all(
       staleMemos.map(async memo => ({
@@ -149,12 +164,19 @@ export const createLocalMemoIndexer = (
         reusableTexts: new Set(
           await api.localDbMemoVectorTexts(ownerId, memo.id),
         ),
+        reusableTopicTexts: new Set(
+          api.localDbMemoTopicVectorTexts
+            ? await api.localDbMemoTopicVectorTexts(ownerId, memo.id) : [],
+        ),
       })),
     );
     const totalChunks = stale.reduce(
       (total, item) =>
         total +
-        item.chunks.filter(chunk => !item.reusableTexts.has(chunk.text)).length,
+        item.chunks.filter(chunk =>
+          !item.reusableTexts.has(chunk.text) ||
+          (topicAvailable && !item.reusableTopicTexts.has(chunk.text)),
+        ).length,
       0,
     );
 
@@ -198,36 +220,47 @@ export const createLocalMemoIndexer = (
 
     try {
       let rejectedSnapshots = 0;
-      for (const { memo, chunks, reusableTexts } of stale) {
+      for (const { memo, chunks, reusableTexts, reusableTopicTexts } of stale) {
         if (expectedGeneration !== generation) return;
         const vectors = [];
         for (const chunk of chunks) {
-          if (reusableTexts.has(chunk.text)) {
-            vectors.push({ ...chunk, queryVector: null, vector: null });
-            continue;
-          }
+          let vector: number[] | null = null;
+          let queryVector: number[] | null = null;
+          const needsBodyVector = !reusableTexts.has(chunk.text);
+          const needsTopicVector = topicAvailable && !reusableTopicTexts.has(chunk.text);
           // CSLS 채점은 청크마다 문서 벡터와 질의 벡터를 모두 요구한다.
           // 청크당 임베딩이 2회라 색인 시간이 2배지만(실측 2.3초 → 4.6초),
           // 배경 작업이라 체감되지 않는다.
           // 임베딩에는 마크업을 벗긴 본문을 넣는다. 저장되는 `chunk.text`는
           // 원문 그대로다 — 오프셋과 편집기 텍스트 매칭의 기준이라 손대면 안 된다.
           const searchable = normalizeChunkText(chunk.text);
-          const [vector] = await api.localEmbedForIndex([searchable]);
-          if (expectedGeneration !== generation) return;
-          const [queryVector] = await api.localEmbedForIndex(
-            [searchable],
-            'query',
-          );
-          if (expectedGeneration !== generation) return;
-          vectors.push({ ...chunk, queryVector, vector });
-          completedChunks += 1;
-          emit({
-            ...baseProgress,
-            ...latestStatus,
-            completedChunks,
-            stage: 'indexing',
-            totalChunks,
-          });
+          if (needsBodyVector) {
+            [vector] = await api.localEmbedForIndex([searchable]);
+            if (expectedGeneration !== generation) return;
+            [queryVector] = await api.localEmbedForIndex([searchable], 'query');
+            if (expectedGeneration !== generation) return;
+          }
+          let topicVector: number[] | null = null;
+          let topicSignature: string | null = reusableTopicTexts.has(chunk.text) ? TOPIC_MODEL_ID : null;
+          if (needsTopicVector && api.localEmbedTopicsForIndex) {
+            try {
+              const [words] = await api.localEmbedTopicsForIndex([searchable]);
+              if (expectedGeneration !== generation) return;
+              if (words.length > 0) {
+                [topicVector] = await api.localEmbedForIndex([words.join(', ')]);
+                if (expectedGeneration !== generation) return;
+              }
+              topicSignature = TOPIC_MODEL_ID;
+            } catch {
+              // A.X is optional. Keep the BGE body/query pair and retry topic backfill later.
+              topicAvailable = false;
+            }
+          }
+          if (needsBodyVector || needsTopicVector) {
+            completedChunks += 1;
+            emit({ ...baseProgress, ...latestStatus, completedChunks, stage: 'indexing', totalChunks });
+          }
+          vectors.push({ ...chunk, queryVector, topicSignature, topicVector, vector });
         }
         const result = await api.localDbReplaceMemoVectors(
           ownerId,

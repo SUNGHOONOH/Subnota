@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { hashText } from '../lib/contentHash';
+import { TOPIC_MODEL_ID } from '../local-embedding-config';
 
 const electronState = vi.hoisted(() => ({
   appHandlers: {} as Record<string, (...args: unknown[]) => void>,
@@ -48,6 +49,8 @@ const OWNER_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_SEARCH = '33333333-3333-4333-8333-333333333333';
 const OWNER_REPLACE = '44444444-4444-4444-8444-444444444444';
 const OWNER_CENTER = '55555555-5555-4555-8555-555555555555';
+const OWNER_TOPIC = '66666666-6666-4666-8666-666666666666';
+const OWNER_MIGRATION = '77777777-7777-4777-8777-777777777777';
 const CURRENT_SIGNATURE =
   'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1';
 let databasePath = '';
@@ -62,6 +65,7 @@ const eventB = eventFor(2);
 const eventSearch = eventFor(4);
 const eventReplace = eventFor(5);
 const eventCenter = eventFor(6);
+const eventTopic = eventFor(7);
 
 const invoke = (channel: string, event: unknown, ...args: unknown[]) => {
   const handler = electronState.ipcHandlers[channel];
@@ -225,8 +229,9 @@ beforeAll(async () => {
   electronState.userData = temporaryDirectory;
   databasePath = path.join(temporaryDirectory, 'subnota-local.sqlite3');
 
-  // Seed rows from a previous embedding space before the production worker
-  // starts. Its initialization must discard both tables atomically.
+  // Seed one stale signature and one current BGE row using the previous schema.
+  // Startup must delete stale vectors, ALTER in topic columns, and preserve the
+  // current BGE bytes.
   const database = new DatabaseSync(databasePath);
   database.exec(
     'CREATE TABLE local_memo_chunk_vectors (' +
@@ -235,6 +240,7 @@ beforeAll(async () => {
       'start_index INTEGER NOT NULL, end_index INTEGER NOT NULL,' +
       'source_content_hash TEXT NOT NULL, embedding_signature TEXT NOT NULL,' +
       'vector BLOB NOT NULL CHECK(length(vector) = 4096),' +
+      'query_vector BLOB NOT NULL CHECK(length(query_vector) = 4096),' +
       'PRIMARY KEY (owner_id, memo_id, chunk_id));' +
       'CREATE TABLE local_memo_vector_state (' +
       'owner_id TEXT NOT NULL, memo_id TEXT NOT NULL,' +
@@ -244,7 +250,7 @@ beforeAll(async () => {
   );
   database
     .prepare(
-      'INSERT INTO local_memo_chunk_vectors VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO local_memo_chunk_vectors VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .run(
       OWNER_A,
@@ -257,7 +263,14 @@ beforeAll(async () => {
       'old-hash',
       'old-model',
       Buffer.alloc(4096),
+      Buffer.alloc(4096),
     );
+  database.prepare(
+    'INSERT INTO local_memo_chunk_vectors VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    OWNER_MIGRATION, 'kept-memo', 'kept-chunk', 0, 'kept text', 0, 9,
+    'kept-hash', CURRENT_SIGNATURE, Buffer.alloc(4096, 1), Buffer.alloc(4096, 2),
+  );
   database
     .prepare('INSERT INTO local_memo_vector_state VALUES (?, ?, ?, ?, ?, ?)')
     .run(
@@ -294,16 +307,31 @@ describe('local memo vector SQLite store', () => {
     const counts = inspectDatabase(database => ({
       states: Number(
         database
-          .prepare('SELECT COUNT(*) AS count FROM local_memo_vector_state')
-          .get()?.count,
+          .prepare('SELECT COUNT(*) AS count FROM local_memo_vector_state WHERE owner_id = ?')
+          .get(OWNER_A)?.count,
       ),
       vectors: Number(
         database
-          .prepare('SELECT COUNT(*) AS count FROM local_memo_chunk_vectors')
-          .get()?.count,
+          .prepare('SELECT COUNT(*) AS count FROM local_memo_chunk_vectors WHERE owner_id = ?')
+          .get(OWNER_A)?.count,
       ),
     }));
     expect(counts).toEqual({ states: 0, vectors: 0 });
+  });
+
+  it('adds nullable topic columns to an existing BGE table without losing its vectors', () => {
+    const migrated = inspectDatabase(database => ({
+      columns: database.prepare('PRAGMA table_info(local_memo_chunk_vectors)').all().map(row => String(row.name)),
+      row: database.prepare(
+        'SELECT length(vector) AS body, length(query_vector) AS query, topic_vector, topic_signature FROM local_memo_chunk_vectors WHERE owner_id = ?'
+      ).get(OWNER_MIGRATION),
+    }));
+    expect(migrated.columns).toContain('topic_vector');
+    expect(migrated.columns).toContain('topic_signature');
+    expect(migrated.row).toEqual({ body: 4096, query: 4096, topic_vector: null, topic_signature: null });
+    expect(() => inspectDatabase(database => database.prepare(
+      'UPDATE local_memo_chunk_vectors SET topic_vector = zeroblob(1) WHERE owner_id = ?'
+    ).run(OWNER_MIGRATION))).toThrow();
   });
 
   it('keeps the newest acknowledged sync base across a later pending content write', async () => {
@@ -422,6 +450,7 @@ describe('local memo vector SQLite store', () => {
     expect(emptyState).toEqual({
       chunkCount: 0,
       memoId: 'empty-memo',
+      pendingTopicCount: 0,
       sourceContentHash: 'empty-hash',
     });
     expect(
@@ -1447,6 +1476,46 @@ describe('local memo vector SQLite store', () => {
         ),
       ).toThrow('Invalid minimum similarity');
     }
+  });
+
+  it('stores separate topic vectors, backfills only missing topic signatures, and searches them independently', async () => {
+    await invoke('local-db:set-owner', eventTopic, OWNER_TOPIC);
+    const records = [
+      { id: 'topic-a', body: embeddingVector(1, 0), topic: embeddingVector(0, 1) },
+      { id: 'topic-b', body: embeddingVector(0, 1), topic: embeddingVector(1, 0) },
+      { id: 'topic-c', body: embeddingVector(-1, 0), topic: embeddingVector(-1, 0) },
+    ];
+    for (const { id, body, topic } of records) {
+      const content = `${id} topic test content`;
+      const hash = hashText(content);
+      await upsertMemo(eventTopic, OWNER_TOPIC, memo(id, content, hash));
+      expect(await replaceVectors(eventTopic, OWNER_TOPIC, id, hash, content, [{
+        ...vectorChunk(content, body),
+        topicVector: topic,
+        topicSignature: TOPIC_MODEL_ID,
+      }])).toEqual({ stored: true });
+    }
+    const related = await invoke(
+      'local-db:search-topic-memo-vectors', eventTopic, OWNER_TOPIC,
+      embeddingVector(1, 0), null, 3,
+    ) as SearchResult[];
+    expect(related[0].memoId).toBe('topic-b');
+    const topicStates = await vectorState(eventTopic, OWNER_TOPIC);
+    expect(topicStates.filter(state => state.memoId.startsWith('topic-')).map(
+      state => (state as { pendingTopicCount: number }).pendingTopicCount,
+    )).toEqual([0, 0, 0]);
+
+    const content = 'topic-a topic test content';
+    const hash = hashText(content);
+    expect(await replaceVectors(eventTopic, OWNER_TOPIC, 'topic-a', hash, content, [{
+      ...vectorChunk(content, null, null),
+      topicVector: null,
+      topicSignature: TOPIC_MODEL_ID,
+    }])).toEqual({ stored: true });
+    const old = inspectDatabase(database => database.prepare(
+      'SELECT length(vector) AS body, length(topic_vector) AS topic FROM local_memo_chunk_vectors WHERE owner_id = ? AND memo_id = ?'
+    ).get(OWNER_TOPIC, 'topic-a')) as { body: number; topic: number };
+    expect(old).toEqual({ body: 4096, topic: 4096 });
   });
 
   it('rejects malformed vectors, untrusted senders, and mismatched owners', () => {

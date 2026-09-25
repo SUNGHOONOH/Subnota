@@ -95,6 +95,7 @@ const result = (patch: Partial<NetworkSearchResult> = {}): NetworkSearchResult =
   memoId: 'memo-1',
   memoUpdatedAt: null,
   similarity: 0.8,
+  matchKind: 'similarity',
   sourceKind: 'memo',
   sourceLabel: null,
   sourceType: null,
@@ -189,9 +190,19 @@ describe('PreviewPanel', () => {
 
     expect(html).toContain('메모 · 작성 2일 전 · 수정 어제');
     // 퍼센트는 CSLS 점수에서 뜻을 잃었다(0~1이 아니라 대략 -0.5 ~ 1.5).
-    // 0.8은 유사 축이다(>= AMBIENT_MIN_SIMILARITY).
+    // 검색 경로에 따라 배지를 선택한다.
     expect(html).toContain('비슷함');
     expect(html).not.toContain('유사도 80%');
+  });
+
+  it('연관 경로 결과에는 연관 배지를 표시한다', () => {
+    const html = markup({
+      mode: 'detail',
+      result: result({ matchKind: 'relatedness' }),
+      results: [],
+    });
+    expect(html).toContain('관련');
+    expect(html).not.toContain('비슷함');
   });
 
   it('Ambient 상세는 전용 승격 문구와 결과 더보기 동선을 보여준다', () => {

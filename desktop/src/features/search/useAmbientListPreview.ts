@@ -46,6 +46,7 @@ export const useAmbientListPreview = ({
       const indexed = await flushLocalMemoIndexForUser();
       if (!indexed) return;
       const response = await searchLocalMemoChunks({
+        includeRelatedness: true,
         limit: 8,
         memoId: target.memoId,
         minimumSimilarity: AMBIENT_LIST_MIN_SIMILARITY,

@@ -14,6 +14,8 @@ interface LocalEmbeddingStatusBridge {
   ready: boolean;
   state: 'absent' | 'downloading' | 'loading' | 'ready' | 'failed';
   totalBytes: number;
+  topicReady: boolean;
+  topicError?: string;
 }
 
 interface DesktopPlatformFeatures {
@@ -89,6 +91,7 @@ interface ElectronAPI {
     texts: string[],
     prefix?: 'passage' | 'query',
   ) => Promise<number[][]>;
+  localEmbedTopicsForIndex: (texts: string[]) => Promise<string[][]>;
   localEmbedReleaseIndexModel: () => Promise<void>;
   onShortcutSettingsChanged: (
     callback: (settings: {
@@ -167,6 +170,7 @@ interface ElectronAPI {
   ) => Promise<
     Array<{
       chunkCount: number;
+      pendingTopicCount: number;
       memoId: string;
       sourceContentHash: string;
     }>
@@ -175,6 +179,7 @@ interface ElectronAPI {
     ownerId: string | null,
     memoId: string,
   ) => Promise<string[]>;
+  localDbMemoTopicVectorTexts: (ownerId: string | null, memoId: string) => Promise<string[]>;
   localDbReplaceMemoVectors: (
     ownerId: string | null,
     memoId: string,
@@ -185,6 +190,8 @@ interface ElectronAPI {
       id: string;
       index: number;
       queryVector: number[] | null;
+      topicVector?: number[] | null;
+      topicSignature?: string | null;
       start: number;
       text: string;
       vector: number[] | null;
@@ -213,6 +220,12 @@ interface ElectronAPI {
       startIndex: number;
     }>
   >;
+  localDbSearchTopicMemoVectors: (
+    ownerId: string | null,
+    queryVector: number[],
+    excludeMemoId: string | null,
+    limit: number,
+  ) => ReturnType<ElectronAPI['localDbSearchMemoVectors']>;
   localDbClassifyFolderMemos: (
     ownerId: string | null,
     request: {

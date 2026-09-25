@@ -15,6 +15,7 @@ const searchRow = (
   patch: Partial<{
     chunkId: string;
     chunkText: string;
+    memoId: string;
     similarity: number;
   }> = {},
 ) => ({
@@ -33,6 +34,7 @@ const searchRow = (
 const createApi = () => ({
   localDbSearchInboxVectors: vi.fn(async () => []),
   localDbSearchMemoVectors: vi.fn(async () => [searchRow()]),
+  localDbSearchTopicMemoVectors: vi.fn(async () => [] as ReturnType<typeof searchRow>[]),
   localDbSearchSimilarMemos: vi.fn(async () => ({
     inbox: [],
     memos: [searchRow({ similarity: 0.31 })],
@@ -42,6 +44,52 @@ const createApi = () => ({
 });
 
 describe('local memo search', () => {
+  it('수동 목록만 유사성 5칸 뒤에 중복 없는 연관성 3칸을 붙이고 부족하면 유사성으로 채운다', async () => {
+    const api = createApi();
+    api.localDbSearchMemoVectors.mockResolvedValue(
+      Array.from({ length: 8 }, (_, index) => searchRow({
+        chunkId: `chunk-${index}`,
+        memoId: `memo-${index}`,
+        similarity: 1 - index / 10,
+      })),
+    );
+    api.localDbSearchTopicMemoVectors.mockResolvedValue([
+      searchRow({ chunkId: 'related-duplicate', memoId: 'memo-1', similarity: 1.4 }),
+      searchRow({ chunkId: 'related-new', memoId: 'memo-9', similarity: -0.3 }),
+    ]);
+    const response = await searchLocalMemoChunks({
+      api, includeRelatedness: true, limit: 8, memoId: null,
+      minimumSimilarity: -2, ownerId: null, queryText: '수동 검색 문장입니다.',
+    });
+    expect(response.results.map(result => [result.memoId, result.matchKind])).toEqual([
+      ['memo-0', 'similarity'], ['memo-1', 'similarity'],
+      ['memo-2', 'similarity'], ['memo-3', 'similarity'],
+      ['memo-4', 'similarity'], ['memo-9', 'relatedness'],
+      ['memo-5', 'similarity'], ['memo-6', 'similarity'],
+    ]);
+    expect(api.localEmbed).toHaveBeenCalledTimes(1);
+  });
+
+  it('자동 단건 검색은 연관 경로를 호출하지 않는다', async () => {
+    const api = createApi();
+    const response = await searchLocalMemoChunks({
+      api, memoId: null, minimumSimilarity: 0.1,
+      ownerId: null, queryText: '자동 검색 문장입니다.',
+    });
+    expect(response.results).toHaveLength(1);
+    expect(response.results[0].matchKind).toBe('similarity');
+    expect(api.localDbSearchTopicMemoVectors).not.toHaveBeenCalled();
+  });
+
+  it('연관 인덱스 오류가 있어도 수동 검색은 유사 결과를 보여준다', async () => {
+    const api = createApi();
+    api.localDbSearchTopicMemoVectors.mockRejectedValue(new Error('topic index unavailable'));
+    const response = await searchLocalMemoChunks({
+      api, includeRelatedness: true, limit: 8, memoId: null,
+      minimumSimilarity: -2, ownerId: null, queryText: '수동 검색 문장입니다.',
+    });
+    expect(response.results.map(result => result.matchKind)).toEqual(['similarity']);
+  });
   it('대화형 단건 임베딩으로 현재 메모를 제외해 로컬 벡터를 검색한다', async () => {
     const api = createApi();
     const response = await searchLocalMemoChunks({

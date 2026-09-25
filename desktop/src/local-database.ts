@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import { EMBEDDING_MODEL_ID } from './local-embedding';
+import { TOPIC_MODEL_ID } from './local-embedding-config';
 import { getDataDirectory, getStorageRoot } from './app-storage';
 
 const RECORD_TYPES = new Set([
@@ -148,6 +149,8 @@ const WORKER_SOURCE = String.raw`
       'vector BLOB NOT NULL CHECK(length(vector) = 4096),' +
       // CSLS는 같은 청크의 질의 벡터("query: " 접두사)도 필요하다.
       'query_vector BLOB NOT NULL CHECK(length(query_vector) = 4096),' +
+      'topic_vector BLOB NULL CHECK(topic_vector IS NULL OR length(topic_vector) = 4096),' +
+      'topic_signature TEXT NULL,' +
       'PRIMARY KEY (owner_id, memo_id, chunk_id)' +
     ');' +
     'CREATE INDEX IF NOT EXISTS idx_local_memo_chunk_vectors_owner_signature ' +
@@ -173,6 +176,15 @@ const WORKER_SOURCE = String.raw`
     'CREATE INDEX IF NOT EXISTS idx_local_inbox_vectors_owner_signature ' +
       'ON local_inbox_vectors (owner_id, embedding_signature);'
   );
+  // Old BGE vectors remain valid. Widen the table instead of rebuilding it.
+  const memoColumns = db.prepare('PRAGMA table_info(local_memo_chunk_vectors)').all()
+    .map(row => String(row.name));
+  if (!memoColumns.includes('topic_vector')) {
+    db.exec('ALTER TABLE local_memo_chunk_vectors ADD COLUMN topic_vector BLOB NULL CHECK(topic_vector IS NULL OR length(topic_vector) = 4096)');
+  }
+  if (!memoColumns.includes('topic_signature')) {
+    db.exec('ALTER TABLE local_memo_chunk_vectors ADD COLUMN topic_signature TEXT NULL');
+  }
 
   const transaction = operation => {
     db.exec('BEGIN IMMEDIATE');
@@ -504,7 +516,7 @@ const WORKER_SOURCE = String.raw`
     // 같은 청크의 두 벡터가 서로 다른 텍스트에서 나온 짝이 된다.
     const reusableVectors = new Map(
       db.prepare(
-        'SELECT chunk_text, vector, query_vector FROM local_memo_chunk_vectors ' +
+        'SELECT chunk_text, vector, query_vector, topic_vector, topic_signature FROM local_memo_chunk_vectors ' +
         'WHERE owner_id = ? AND memo_id = ? AND embedding_signature = ?'
       ).all(
         args.ownerId,
@@ -512,14 +524,15 @@ const WORKER_SOURCE = String.raw`
         workerData.embeddingSignature
       ).map(row => [
         String(row.chunk_text),
-        { queryVector: row.query_vector, vector: row.vector },
+        { queryVector: row.query_vector, vector: row.vector,
+          topicVector: row.topic_vector, topicSignature: row.topic_signature },
       ])
     );
     deleteMemoVectors(args.ownerId, args.memoId);
     const insert = db.prepare(
       'INSERT INTO local_memo_chunk_vectors ' +
-      '(owner_id, memo_id, chunk_id, chunk_index, chunk_text, start_index, end_index, source_content_hash, embedding_signature, vector, query_vector) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      '(owner_id, memo_id, chunk_id, chunk_index, chunk_text, start_index, end_index, source_content_hash, embedding_signature, vector, query_vector, topic_vector, topic_signature) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const blobFor = (value, reusable) => {
       const blob = value
@@ -537,6 +550,12 @@ const WORKER_SOURCE = String.raw`
         chunk.queryVector,
         reusable && reusable.queryVector
       );
+      const topicVector = chunk.topicVector
+        ? blobFor(chunk.topicVector, null)
+        : chunk.topicSignature === workerData.topicSignature &&
+          reusable && reusable.topicSignature === workerData.topicSignature
+          ? reusable.topicVector
+          : null;
       insert.run(
         args.ownerId,
         args.memoId,
@@ -548,7 +567,9 @@ const WORKER_SOURCE = String.raw`
         args.sourceContentHash,
         workerData.embeddingSignature,
         vector,
-        queryVector
+        queryVector,
+        topicVector,
+        chunk.topicSignature
       );
     }
     db.prepare(
@@ -572,13 +593,17 @@ const WORKER_SOURCE = String.raw`
 
   const memoVectorState = ownerId => {
     return db.prepare(
-      'SELECT memo_id, source_content_hash, chunk_count ' +
-      'FROM local_memo_vector_state ' +
-      'WHERE owner_id = ? AND embedding_signature = ? ORDER BY memo_id'
-    ).all(ownerId, workerData.embeddingSignature).map(row => ({
+      'SELECT state.memo_id, state.source_content_hash, state.chunk_count, ' +
+      '(SELECT COUNT(*) FROM local_memo_chunk_vectors AS vectors ' +
+      'WHERE vectors.owner_id = state.owner_id AND vectors.memo_id = state.memo_id ' +
+      'AND vectors.topic_signature IS NOT ?) AS pending_topic_count ' +
+      'FROM local_memo_vector_state AS state ' +
+      'WHERE state.owner_id = ? AND state.embedding_signature = ? ORDER BY state.memo_id'
+    ).all(workerData.topicSignature, ownerId, workerData.embeddingSignature).map(row => ({
       memoId: String(row.memo_id),
       sourceContentHash: String(row.source_content_hash),
       chunkCount: Number(row.chunk_count),
+      pendingTopicCount: Number(row.pending_topic_count),
     }));
   };
 
@@ -589,6 +614,12 @@ const WORKER_SOURCE = String.raw`
     ).all(ownerId, memoId, workerData.embeddingSignature)
       .map(row => String(row.chunk_text));
   };
+
+  const memoTopicVectorTexts = (ownerId, memoId) => db.prepare(
+    'SELECT DISTINCT chunk_text FROM local_memo_chunk_vectors ' +
+    'WHERE owner_id = ? AND memo_id = ? AND embedding_signature = ? AND topic_signature = ?'
+  ).all(ownerId, memoId, workerData.embeddingSignature, workerData.topicSignature)
+    .map(row => String(row.chunk_text));
 
   const replaceInboxVector = args => transaction(() => {
     const row = db.prepare(
@@ -776,7 +807,7 @@ const WORKER_SOURCE = String.raw`
     const rows = db.prepare(
       'SELECT vectors.memo_id, vectors.chunk_id, vectors.chunk_text, ' +
       'vectors.start_index, vectors.end_index, vectors.source_content_hash, ' +
-      'vectors.vector, vectors.query_vector ' +
+      'vectors.vector, vectors.query_vector, vectors.topic_vector, vectors.topic_signature ' +
       'FROM local_memo_chunk_vectors AS vectors ' +
       'INNER JOIN local_memo_vector_state AS state ' +
         'ON state.owner_id = vectors.owner_id ' +
@@ -810,6 +841,9 @@ const WORKER_SOURCE = String.raw`
         memoId: String(row.memo_id),
         sourceContentHash: String(row.source_content_hash),
         startIndex: Number(row.start_index),
+        topicVector: row.topic_signature === workerData.topicSignature &&
+          row.topic_vector instanceof Uint8Array && row.topic_vector.byteLength === VECTOR_BYTES
+          ? float32FromBlob(row.topic_vector) : null,
       });
       documents.push(float32FromBlob(documentBytes));
       queries.push(float32FromBlob(queryBytes));
@@ -829,7 +863,7 @@ const WORKER_SOURCE = String.raw`
       queryMean[axis] /= documents.length || 1;
     }
 
-    const vectorIndex = { documentMean: documentMean, entries: [], queryMean: queryMean };
+    const vectorIndex = { documentMean: documentMean, entries: [], queryMean: queryMean, topicEntries: [] };
     const centeredDocuments = [];
     const centeredQueries = [];
     for (let position = 0; position < entries.length; position += 1) {
@@ -859,6 +893,26 @@ const WORKER_SOURCE = String.raw`
         scratch,
         centeredQueries.length
       );
+    }
+
+    const topics = vectorIndex.entries.filter(entry => entry.topicVector);
+    if (topics.length > 0) {
+      const topicMean = new Float64Array(dimensions);
+      for (const entry of topics) {
+        for (let axis = 0; axis < dimensions; axis += 1) topicMean[axis] += entry.topicVector[axis];
+      }
+      for (let axis = 0; axis < dimensions; axis += 1) topicMean[axis] /= topics.length;
+      for (const entry of topics) {
+        const document = centeredVector(entry.topicVector, topicMean);
+        if (!document) continue;
+        for (let other = 0; other < centeredQueries.length; other += 1) {
+          scratch[other] = dotProductOf(centeredQueries[other], document);
+        }
+        vectorIndex.topicEntries.push({
+          ...entry, document,
+          hubPenalty: topNeighborMean(scratch, centeredQueries.length),
+        });
+      }
     }
 
     vectorRowsByOwner.set(ownerId, vectorIndex);
@@ -925,6 +979,38 @@ const WORKER_SOURCE = String.raw`
       const memo = lookupMemo(candidate.memoId, candidate.sourceContentHash);
       if (!memo) continue;
       resultMemoIds.add(candidate.memoId);
+      results.push(memoSearchResult(candidate, memo));
+    }
+    return results;
+  };
+
+  const searchTopicMemoVectors = args => {
+    const index = memoVectorIndex(args.ownerId);
+    const entries = index.topicEntries;
+    if (entries.length === 0) return [];
+    const query = centeredVector(args.queryVector, index.queryMean);
+    if (!query) return [];
+    const scores = Float64Array.from(entries, entry => dotProductOf(query, entry.document));
+    const queryPenalty = topNeighborMean(scores, scores.length);
+    const candidates = entries.flatMap((entry, position) =>
+      entry.memoId === args.excludeMemoId ? [] : [{
+        ...entry,
+        similarity: 2 * scores[position] - queryPenalty - entry.hubPenalty,
+      }]
+    ).sort((left, right) =>
+      right.similarity - left.similarity ||
+      left.memoId.localeCompare(right.memoId) ||
+      left.chunkId.localeCompare(right.chunkId)
+    );
+    const lookupMemo = activeMemoLookup(args.ownerId);
+    const seen = new Set();
+    const results = [];
+    for (const candidate of candidates) {
+      if (results.length >= args.limit) break;
+      if (seen.has(candidate.memoId)) continue;
+      const memo = lookupMemo(candidate.memoId, candidate.sourceContentHash);
+      if (!memo) continue;
+      seen.add(candidate.memoId);
       results.push(memoSearchResult(candidate, memo));
     }
     return results;
@@ -1312,6 +1398,8 @@ const WORKER_SOURCE = String.raw`
         result = memoVectorState(args.ownerId);
       } else if (operation === 'memo-vector-texts') {
         result = memoVectorTexts(args.ownerId, args.memoId);
+      } else if (operation === 'memo-topic-vector-texts') {
+        result = memoTopicVectorTexts(args.ownerId, args.memoId);
       } else if (operation === 'replace-memo-vectors') {
         result = replaceMemoVectors(args);
       } else if (operation === 'delete-memo-vectors') {
@@ -1320,6 +1408,8 @@ const WORKER_SOURCE = String.raw`
         });
       } else if (operation === 'search-memo-vectors') {
         result = searchMemoVectors(args);
+      } else if (operation === 'search-topic-memo-vectors') {
+        result = searchTopicMemoVectors(args);
       } else if (operation === 'inbox-vector-state') {
         result = inboxVectorState(args.ownerId);
       } else if (operation === 'replace-inbox-vector') {
@@ -1366,6 +1456,7 @@ const getWorker = () => {
     workerData: {
       databasePath: getDatabasePath(),
       embeddingSignature: EMBEDDING_MODEL_ID,
+      topicSignature: TOPIC_MODEL_ID,
     },
   });
   nextWorker.on('message', (message: { error?: string; id: number; result?: unknown }) => {
@@ -1737,7 +1828,10 @@ const normalizedMemoVectorChunks = (chunks: unknown) => {
       !Number.isInteger(chunk.end) ||
       Number(chunk.end) < Number(chunk.start) ||
       !isValidChunkVector(chunk.vector) ||
-      !isValidChunkVector(chunk.queryVector)
+      !isValidChunkVector(chunk.queryVector) ||
+      !isValidChunkVector(chunk.topicVector ?? null) ||
+      (chunk.topicSignature !== undefined && chunk.topicSignature !== null &&
+        chunk.topicSignature !== TOPIC_MODEL_ID)
     ) {
       throw new Error('Invalid memo vector chunk.');
     }
@@ -1749,10 +1843,13 @@ const normalizedMemoVectorChunks = (chunks: unknown) => {
       chunk.queryVector === null
         ? null
         : Float32Array.from(chunk.queryVector as number[]);
+    const topicVector = chunk.topicVector == null
+      ? null : Float32Array.from(chunk.topicVector as number[]);
     // float32 범위를 넘는 유한한 수는 변환에서 Infinity가 된다.
     if (
       vector?.some(value => !Number.isFinite(value)) ||
-      queryVector?.some(value => !Number.isFinite(value))
+      queryVector?.some(value => !Number.isFinite(value)) ||
+      topicVector?.some(value => !Number.isFinite(value))
     ) {
       throw new Error('Invalid memo vector chunk.');
     }
@@ -1763,6 +1860,8 @@ const normalizedMemoVectorChunks = (chunks: unknown) => {
       queryVector,
       start: Number(chunk.start),
       text: chunk.text,
+      topicSignature: chunk.topicSignature ?? null,
+      topicVector,
       vector,
     };
   });
@@ -2039,6 +2138,13 @@ ipcMain.handle(
     });
   },
 );
+ipcMain.handle('local-db:memo-topic-vector-texts', (event, ownerId: unknown, memoId: unknown) => {
+  assertTrustedSender(event);
+  return run('memo-topic-vector-texts', {
+    memoId: normalizedMemoId(memoId),
+    ownerId: ownerForRequest(event, ownerId),
+  });
+});
 ipcMain.handle(
   'local-db:replace-memo-vectors',
   (
@@ -2093,6 +2199,17 @@ ipcMain.handle(
     });
   },
 );
+ipcMain.handle('local-db:search-topic-memo-vectors', (
+  event, ownerId: unknown, queryVector: unknown, excludeMemoId: unknown, limit: unknown,
+) => {
+  assertTrustedSender(event);
+  return run('search-topic-memo-vectors', {
+    excludeMemoId: normalizedExcludedMemoId(excludeMemoId),
+    limit: normalizedMemoSearchLimit(limit),
+    ownerId: ownerForRequest(event, ownerId),
+    queryVector: normalizedMemoSearchVector(queryVector),
+  });
+});
 ipcMain.handle(
   'local-db:classify-folder-memos',
   (event, ownerId: unknown, request: unknown) => {

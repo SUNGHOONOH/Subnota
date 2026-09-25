@@ -10,6 +10,7 @@ import { localize } from './uiLanguage';
 //   related  뜻은 다르지만 이어지는 것 (wolf ↔ moon)
 // 그 외는 "나머지"라 축을 따로 두지 않는다.
 export type SimilarityTier = 'similar' | 'related';
+export type MatchKind = 'similarity' | 'relatedness';
 
 // 경계는 하나뿐이고, 자동검색 문턱과 같은 값이다. 실제 크기 메모로 재 보면
 // 완전 동일·유사함의 윗부분만 오답과 깨끗이 갈리고(틈: -0.005 ~ 0.113),
@@ -28,6 +29,14 @@ export const similarityTier = (score: number): SimilarityTier | null => {
 const LABELS: Record<SimilarityTier, [korean: string, english: string]> = {
   related: ['관련', 'Related'],
   similar: ['비슷함', 'Similar'],
+};
+
+export const matchKindTier = (kind: MatchKind): SimilarityTier =>
+  kind === 'relatedness' ? 'related' : 'similar';
+
+export const matchKindLabel = (kind: MatchKind, language: 'en' | 'ko') => {
+  const [korean, english] = LABELS[matchKindTier(kind)];
+  return localize(language, korean, english);
 };
 
 /// 그래프 툴팁처럼 JSX 가 아닌 자리에서 쓴다. 컴포넌트는 `SimilarityBadge`.
