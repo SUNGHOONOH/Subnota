@@ -7,6 +7,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import WorkspaceBootSkeleton from '../components/WorkspaceBootSkeleton';
 import InboxCardSkeleton from '../features/inbox/InboxCardSkeleton';
+import MemoFolderActionsMenu from '../features/memo/components/MemoFolderActionsMenu';
+import MemoFolderRecommendations from '../features/memo/components/MemoFolderRecommendations';
+import MemoSplitPaneMenu from '../features/memo/components/MemoSplitPaneMenu';
+import RelatedSentenceCard from '../features/memo/components/RelatedSentenceCard';
+import MemoTimeSidebar from '../features/memo/components/MemoTimeSidebar';
+import MemoSplitPaneViewPicker from '../features/memo/components/MemoSplitPaneViewPicker';
 import SourceDetailPane from '../features/memo/components/SourceDetailPane';
 import {
   BOOT_BRAND_PHASE_MS,
@@ -20,11 +26,32 @@ import type { InboxSession } from '../services/backend/inboxService';
 const read = (relativePath: string) =>
   readFileSync(resolve(__dirname, '..', relativePath), 'utf8');
 
-const appSource = read('App.tsx');
-const splitSource = read('features/memo/components/MemoSplitWorkspace.tsx');
+const appSource = `${read('App.tsx')}\n${read('features/workspace/useLocalWorkspaceHydration.ts')}\n${read('features/workspace/AppOverlayCluster.tsx')}\n${read(
+  'features/workspace/AppEntryGate.tsx',
+ )}\n${read('features/workspace/useBootLifecycle.ts')}`;
+const splitSource = `${read('features/memo/components/MemoSplitWorkspace.tsx')}
+${read('features/memo/components/MemoSplitSpecialView.tsx')}`;
+const nearbySource = read('features/memo/components/NearbyNotesPane.tsx');
+const nearbySearchSource = read('features/memo/useNearbyNotesSearch.ts');
+const topicsSource = read('features/memo/components/TopicsPane.tsx');
+const sourcePaneSource = read('features/memo/components/SourcePaneBody.tsx');
+const relatedSentenceSource = read('features/memo/components/RelatedSentenceCard.tsx');
+const paneViewPickerSource = read('features/memo/components/MemoSplitPaneViewPicker.tsx');
+const memoWorkspaceSource = `${read('features/memo/MemoWorkspace.tsx')}
+${read('features/memo/components/MemoFolderSidebar.tsx')}`;
+const memoFolderActionsSource = read('features/memo/components/MemoFolderActionsMenu.tsx');
+const memoFolderRecommendationsSource = read(
+  'features/memo/components/MemoFolderRecommendations.tsx',
+);
+const memoTimeSidebarSource = read('features/memo/components/MemoTimeSidebar.tsx');
+const memoSplitPaneMenuSource = read('features/memo/components/MemoSplitPaneMenu.tsx');
+const memoSplitPaneHeaderSource = read(
+  'features/memo/components/MemoSplitPaneHeader.tsx',
+);
 const inboxSource = read('features/inbox/InboxWorkspace.tsx');
 const miniSource = read('features/mini/MiniComposer.tsx');
-const settingsSource = read('features/settings/SettingsModal.tsx');
+const settingsSource = `${read('features/settings/SettingsModal.tsx')}
+${read('features/settings/SettingsSyncSection.tsx')}`;
 const styles = read('styles/subnota-workspace.scss');
 
 const render = (node: ReactElement) =>
@@ -127,7 +154,7 @@ describe('앱 시작 — 전체 화면 로딩', () => {
   it('브랜드 단계는 JS 모션 없이 CSS로만 움직인다', () => {
     const phaseA = appSource.slice(
       appSource.indexOf('// Phase A'),
-      appSource.indexOf('if (!session)'),
+      appSource.indexOf('if (!isSignedIn)'),
     );
 
     expect(phaseA).toContain('<BootBrandMark');
@@ -245,8 +272,8 @@ describe('수집함(Inbox)', () => {
 describe('State B — 주변 메모 검색', () => {
   // 결과 노드 수도 위치도 정해져 있지 않아 카드 스켈레톤을 쓸 수 없다.
   it('그래프 영역 안에서만, 카드 스켈레톤 없이 표시한다', () => {
-    expect(splitSource).toContain('<SubnotaScatterMark />');
-    expect(splitSource).not.toContain('net-search-skeleton');
+    expect(nearbySource).toContain('<SubnotaScatterMark />');
+    expect(nearbySource).not.toContain('net-search-skeleton');
     expect(styles).toMatch(/\.net-search-bloom \{[\s\S]*?position: absolute/);
   });
 
@@ -254,9 +281,9 @@ describe('State B — 주변 메모 검색', () => {
   // 모션이 이미 "찾는 중"을 말한다. 문구까지 겹치면 작은 그래프 영역에
   // 신호가 둘이 되어 산만하다.
   it('로딩 문구 없이 모션만 쓴다', () => {
-    const bloom = splitSource.slice(
-      splitSource.indexOf('className="net-search-bloom"'),
-      splitSource.indexOf('className="net-search-bloom"') + 260,
+    const bloom = nearbySource.slice(
+      nearbySource.indexOf('className="net-search-bloom"'),
+      nearbySource.indexOf('className="net-search-bloom"') + 260,
     );
 
     expect(bloom).toContain('<SubnotaScatterMark />');
@@ -264,7 +291,7 @@ describe('State B — 주변 메모 검색', () => {
     expect(styles).not.toContain('.net-search-bloom-label');
     // 재검색 중의 작은 pip 표시는 문구를 유지한다 — 그래프를 덮지 않으므로
     // 무엇이 도는 중인지 말해 줄 자리가 거기밖에 없다.
-    expect(splitSource).toContain('net-search-pip-label');
+    expect(nearbySource).toContain('net-search-pip-label');
   });
 
   // 잎이 바깥으로 나가면서 원이 된다. 두 path의 명령 개수가 어긋나면
@@ -283,26 +310,26 @@ describe('State B — 주변 메모 검색', () => {
   });
 
   it('재검색이면 기존 그래프를 지우지 않고 작은 표시만 얹는다', () => {
-    expect(splitSource).toContain('net-search-pip');
+    expect(nearbySource).toContain('net-search-pip');
     // 검색 시작 패치에서 결과를 비우면 그래프가 사라진다.
-    const searchStart = splitSource.slice(
-      splitSource.indexOf('networkRequestId,\n        view:'),
-      splitSource.indexOf('const response = await searchStateB'),
+    const searchStart = nearbySearchSource.slice(
+      nearbySearchSource.indexOf('networkRequestId,\n          view:'),
+      nearbySearchSource.indexOf('const response = await searchLocalMemoChunks'),
     );
     expect(searchStart).not.toContain('networkResults: []');
   });
 
   it('검색 실패의 다시 시도 동작은 그대로 둔다', () => {
-    expect(splitSource).toContain('isNetworkSearchRetryableMessage');
+    expect(nearbySource).toContain('isNetworkSearchRetryableMessage');
     expect(splitSource).toContain('void runEditorStateBSearch(pane, editor)');
   });
 
   it('정상 응답의 빈 결과는 오류 카드 대신 로고 빈 상태로 보인다', () => {
-    expect(splitSource).toContain('const isNetworkEmpty =');
-    expect(splitSource).toContain('<EmptyState');
-    expect(splitSource).toContain('className="net-empty-state"');
-    expect(splitSource).toContain('tone="start"');
-    expect(splitSource).toContain(
+    expect(nearbySource).toContain('const isNetworkEmpty =');
+    expect(nearbySource).toContain('<EmptyState');
+    expect(nearbySource).toContain('className="net-empty-state"');
+    expect(nearbySource).toContain('tone="start"');
+    expect(nearbySource).toContain(
       '연결된 메모나 저장한 링크가 아직은 없네요!',
     );
     expect(splitSource).not.toContain('response.message ?? NETWORK_SEARCH_EMPTY_MESSAGE');
@@ -311,17 +338,15 @@ describe('State B — 주변 메모 검색', () => {
 
 describe('Topics', () => {
   it('기존 clusters가 있으면 지우지 않고 제목 옆 표시만 더한다', () => {
-    expect(splitSource).toContain(
+    expect(topicsSource).toContain(
       '{isTopicsLoading && <TopicsBusyDot language={language} />}',
     );
-    expect(splitSource).not.toContain('Topics 계산 결과를 불러오는 중');
+    expect(topicsSource).not.toContain('Topics 계산 결과를 불러오는 중');
   });
 
   // 서버 계산이 오래 걸려도 로컬 카테고리 폴백은 계속 쓸 수 있어야 한다.
   it('보여 줄 것이 정말 없을 때만 자리표시자를 쓴다', () => {
-    expect(splitSource).toContain(
-      'if (isTopicsLoading && fallbackCategories.length === 0) {',
-    );
+    expect(topicsSource).toContain('isTopicsLoading && fallbackCategories.length === 0');
   });
 
   it('갱신 중이라는 신호를 App이 계속 흘려보낸다', () => {
@@ -402,6 +427,234 @@ describe('웹 요약 — SourceDetailPane', () => {
       markup.match(/<img[^>]*referrer[Pp]olicy="no-referrer"[^>]*>/g),
     ).toHaveLength(2);
   });
+
+  it('분할 화면의 출처 본문은 결과 없음·Inbox 상세·요약 폴백을 한 경계에서 유지한다', () => {
+    expect(splitSource).toContain('<SourcePaneBody');
+    expect(splitSource).not.toContain('const renderSourceBody');
+    expect(sourcePaneSource).toContain('className="empty-source"');
+    expect(sourcePaneSource).toContain('<SourceDetailPane');
+    expect(sourcePaneSource).toContain('className="source-pane-content"');
+    expect(sourcePaneSource).toContain('getSourceLabel(result, language)');
+  });
+
+  it('관련 문장 카드는 하이라이트가 없으면 렌더링하지 않는다', () => {
+    expect(
+      render(
+        <RelatedSentenceCard
+          highlight={null}
+          language="ko"
+          onClose={() => undefined}
+          value="원문"
+        />,
+      ),
+    ).not.toContain('highlight-card');
+    expect(splitSource).toContain('<RelatedSentenceCard');
+    expect(splitSource).not.toContain('const renderHighlight');
+    expect(relatedSentenceSource).toContain('className="highlight-card"');
+  });
+
+  it('관련 문장 카드는 chunk를 우선하고 없으면 원문 범위를 사용한다', () => {
+    const withChunk = render(
+      <RelatedSentenceCard
+        highlight={{ chunkText: '선택된 문장', endIndex: 2, startIndex: 0 }}
+        language="ko"
+        onClose={() => undefined}
+        value="원문"
+      />,
+    );
+    const withRange = render(
+      <RelatedSentenceCard
+        highlight={{ endIndex: 4, startIndex: -2 }}
+        language="ko"
+        onClose={() => undefined}
+        value="원문입니다"
+      />,
+    );
+
+    expect(withChunk).toContain('선택된 문장');
+    expect(withChunk).not.toContain('원문</p>');
+    expect(withRange).toContain('원문');
+    expect(relatedSentenceSource).toContain('Math.max(0, highlight.startIndex)');
+    expect(relatedSentenceSource).toContain('value.slice(startIndex, Math.min(value.length, endIndex))');
+  });
+
+  it('새 탭 보기 선택기는 공용 보기 목록과 기존 선택 UI를 유지한다', () => {
+    const markup = render(
+      <MemoSplitPaneViewPicker language="ko" onSelectView={() => undefined} />,
+    );
+
+    expect(markup).toContain('split-view-picker-stage');
+    expect(markup).toContain('새 탭에서 열기');
+    expect(markup.match(/split-view-picker-item/g)).toHaveLength(4);
+    expect(splitSource).toContain('<MemoSplitPaneViewPicker');
+    expect(splitSource).not.toContain('className="split-view-picker-stage"');
+    expect(paneViewPickerSource).toContain(
+      "export const MENU_VIEWS: MemoSplitPaneView[] = ['memo', 'inbox', 'calendar', 'topics'];",
+    );
+    expect(paneViewPickerSource).toContain('autoFocus={index === 0}');
+    expect(paneViewPickerSource).toContain('type="button"');
+  });
+
+  it('폴더 작업 메뉴는 기존 작업 네 가지와 삭제 확인을 유지한다', () => {
+    const markup = render(
+      <MemoFolderActionsMenu
+        folder={{
+          classifierTerms: [],
+          createdAt: '2026-09-06T00:00:00.000Z',
+          description: '',
+          id: 'folder-1',
+          mode: 'manual',
+          name: '작업',
+          sourceTopicId: null,
+          updatedAt: '2026-09-06T00:00:00.000Z',
+        }}
+        onCreateMemoInFolder={() => Promise.resolve()}
+        onDeleteFolder={() => Promise.resolve()}
+        onEditFolder={() => undefined}
+        onUpdateFolderMode={() => Promise.resolve()}
+        t={(korean) => korean}
+      />,
+    );
+
+    expect(markup).toContain('작업 폴더 메뉴');
+    expect(memoFolderActionsSource).toContain('이 폴더에 새 메모');
+    expect(memoFolderActionsSource).toContain('자동 폴더로 변경');
+    expect(memoFolderActionsSource).toContain('이름과 설명 변경');
+    expect(memoFolderActionsSource).toContain('폴더 삭제');
+    expect(memoWorkspaceSource).toContain('<MemoFolderActionsMenu');
+    expect(memoWorkspaceSource).not.toContain('<Menu position="bottom-end"');
+  });
+
+  it('폴더 제안 UI는 미리보기와 수동·자동 검토 폼을 유지한다', () => {
+    const markup = render(
+      <MemoFolderRecommendations
+        folderRecommendations={[{
+          description: 'SQLite · sync',
+          memoIds: ['memo-1', 'memo-2'],
+          name: 'Databases',
+          topicId: 'topic-1',
+        }]}
+        language="ko"
+        memos={[
+          {
+            category: null,
+            content: '첫 번째 메모',
+            content_hash: null,
+            created_at: '2026-09-06T00:00:00.000Z',
+            id: 'memo-1',
+            is_archived: false,
+            updated_at: '2026-09-06T00:00:00.000Z',
+          },
+          {
+            category: null,
+            content: '두 번째 메모',
+            content_hash: null,
+            created_at: '2026-09-06T00:00:00.000Z',
+            id: 'memo-2',
+            is_archived: false,
+            updated_at: '2026-09-06T00:00:00.000Z',
+          },
+        ]}
+        onBeginReview={() => undefined}
+        onCancel={() => undefined}
+        onDraftChange={() => undefined}
+        onSubmit={() => undefined}
+        recommendationDraft={{
+          description: 'SQLite · sync',
+          memoIds: ['memo-1', 'memo-2'],
+          mode: 'automatic',
+          name: 'Databases',
+          topicId: 'topic-1',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('폴더 제안');
+    expect(markup).toContain('Databases');
+    expect(markup).toContain('2개 메모');
+    expect(markup).toContain('첫 번째 메모 · 두 번째 메모');
+    expect(markup).toContain('수동');
+    expect(markup).toContain('자동');
+    expect(markup).toContain('폴더 만들기');
+    expect(memoWorkspaceSource).toContain('<MemoFolderRecommendations');
+    expect(memoWorkspaceSource).not.toContain('className="memo-folder-recommendations"');
+    expect(memoFolderRecommendationsSource).toContain('aria-pressed={recommendationDraft.mode === \'manual\'}');
+    expect(memoFolderRecommendationsSource).toContain('disabled={!recommendationDraft.name.trim()}');
+  });
+
+  it('시간순 메모 사이드바는 섹션 접힘·활성 메모·메뉴 좌표 전달을 유지한다', () => {
+    const markup = render(
+      <MemoTimeSidebar
+        activeMemoId="memo-1"
+        collapsedSections={new Set()}
+        language="ko"
+        onOpenMemoMenu={() => undefined}
+        onSelectMemo={() => undefined}
+        onToggleSection={() => undefined}
+        sections={[{
+          data: [{
+            category: null,
+            content: '사이드바 메모',
+            content_hash: null,
+            created_at: '2026-09-06T00:00:00.000Z',
+            id: 'memo-1',
+            is_archived: false,
+            updated_at: '2026-09-06T00:00:00.000Z',
+          }],
+          title: '오늘',
+        }]}
+      />,
+    );
+
+    expect(markup).toContain('session-list');
+    expect(markup).toContain('session-section-toggle');
+    expect(markup).toContain('memo-row active');
+    expect(markup).toContain('사이드바 메모');
+    expect(memoWorkspaceSource).toContain('<MemoTimeSidebar');
+    expect(memoWorkspaceSource).not.toContain('className="session-list"');
+    expect(memoTimeSidebarSource).toContain('onOpenMemoMenu(memo.id, event.clientX, event.clientY)');
+  });
+
+  it('시간순 메모가 없으면 기존 첫 메모 빈 상태를 보여 준다', () => {
+    const markup = render(
+      <MemoTimeSidebar
+        activeMemoId={null}
+        collapsedSections={new Set()}
+        language="ko"
+        onOpenMemoMenu={() => undefined}
+        onSelectMemo={() => undefined}
+        onToggleSection={() => undefined}
+        sections={[]}
+      />,
+    );
+
+    expect(markup).toContain('첫 메모를 시작해 보세요');
+    expect(memoTimeSidebarSource).toContain('sections.length === 0');
+  });
+
+  it('분할 패널 탭 메뉴는 전체 닫기와 활성 보기 표시를 유지한다', () => {
+    const markup = render(
+      <MemoSplitPaneMenu
+        activeView="calendar"
+        editorCount={2}
+        language="ko"
+        onCloseAllEditors={() => undefined}
+        onDropdownElementChange={() => undefined}
+        onSelectView={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('split-pane-menu-dropdown');
+    expect(markup).toContain('2개의 탭 모두 닫기');
+    expect(markup.match(/split-menu-view-item active/g)).toHaveLength(1);
+    expect(markup).toContain('캘린더');
+    expect(splitSource).toContain('<MemoSplitPaneHeader');
+    expect(splitSource).not.toContain('className="split-pane-menu-dropdown"');
+    expect(memoSplitPaneHeaderSource).toContain('<MemoSplitPaneMenu');
+    expect(memoSplitPaneMenuSource).toContain('ref={onDropdownElementChange}');
+    expect(memoSplitPaneMenuSource).toContain('onCloseAllEditors');
+    expect(memoSplitPaneMenuSource).toContain('activeView === view ? \'active\' : \'\'');
+  });
 });
 
 describe('Mini 저장', () => {
@@ -470,7 +723,7 @@ describe('모션 · 접근성 기준', () => {
   // 모델 안내 모달과 진행 토스트가 같은 작업을 두 번 알리면 안 된다.
   it('모델 다운로드는 안내 모달을 닫고 진행 토스트 하나만 남긴다', () => {
     expect(appSource).toMatch(
-      /onDownload=\{\(\) => \{\s*\n\s*setEmbeddingGateOpen\(false\);\s*\n\s*void startModelDownload\(\);/,
+      /onDownload(?:=|:)\s*\{?\(\) => \{\s*\n\s*setEmbeddingGateOpen\(false\);\s*\n\s*void startModelDownload\(\);/,
     );
   });
 });

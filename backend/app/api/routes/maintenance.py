@@ -4,10 +4,8 @@ from app.api.dependencies.auth import require_admin_key
 from app.features.maintenance.service import (
     DailyMaintenanceAllRequest,
     DailyMaintenanceRequest,
-    DirtyMemoChunkIndexUsersRequest,
     DirtyScheduleInboxScanUsersRequest,
     DirtyTopicDiscoveryUsersRequest,
-    index_dirty_memo_chunks_for_dirty_users,
     run_daily_maintenance,
     run_daily_maintenance_for_all,
     run_topic_discovery_for_dirty_users,
@@ -25,16 +23,6 @@ def run_daily_maintenance_endpoint(request: DailyMaintenanceRequest) -> dict:
 @router.post("/maintenance/daily-all", dependencies=[Depends(require_admin_key)])
 def run_daily_maintenance_for_all_endpoint(request: DailyMaintenanceAllRequest) -> dict:
     return run_daily_maintenance_for_all(request).model_dump()
-
-
-@router.post(
-    "/maintenance/memo-chunks/index-dirty-users",
-    dependencies=[Depends(require_admin_key)],
-)
-def index_dirty_memo_chunks_for_dirty_users_endpoint(
-    request: DirtyMemoChunkIndexUsersRequest,
-) -> dict:
-    return index_dirty_memo_chunks_for_dirty_users(request).model_dump()
 
 
 @router.post(

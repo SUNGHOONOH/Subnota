@@ -46,7 +46,7 @@ export default function AccountDeletionPage() {
       <h2>삭제되는 데이터</h2>
       <ul>
         <li>Supabase 인증 계정과 계정 프로필</li>
-        <li>서버에 동기화된 메모, 일정, 수집함, 브리핑, 검색·토픽·임베딩 결과</li>
+        <li>서버에 동기화된 메모, 일정, 수집함, 검색·토픽·임베딩 결과</li>
         <li>앱이 기기에 저장한 계정별 로컬 콘텐츠와 로컬 임베딩</li>
       </ul>
       <p>

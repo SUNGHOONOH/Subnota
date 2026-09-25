@@ -2,7 +2,31 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const app = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+const app = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${readFileSync(
+  resolve(__dirname, '../features/inbox/useInboxLikeActions.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/inbox/useInboxCaptureSubscription.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/inbox/useInboxRefresh.ts'),
+  'utf8',
+ )}\n${readFileSync(
+  resolve(__dirname, '../features/inbox/useInboxItemActions.ts'),
+  'utf8',
+ )}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/useCalendarCompletionActions.ts'),
+  'utf8',
+ )}\n${readFileSync(
+  resolve(__dirname, '../features/calendar/useDeleteCalendarBlock.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/memo/useDeleteMemo.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '../features/workspace/useWorkspaceLoader.ts'),
+  'utf8',
+)}`;
 
 describe('사용자가 누른 것이 실패하면 그 자리에서 알린다', () => {
   // 낙관적 업데이트라 화면은 성공한 것처럼 보이고, 실패하면 조용히 원복된다.

@@ -17,7 +17,7 @@ import { useEffect, useRef } from 'react';
 
 import type { MemoRow } from '../../types';
 import type { InboxSession } from '../../services/backend/inboxService';
-import type { NetworkSearchResult } from '../../services/backend/networkService';
+import type { NetworkSearchResult } from '../../services/local/memoSearchTypes';
 import { PanelRightClose } from '../../components/icons';
 import TooltipIconButton from '../../components/TooltipIconButton';
 import SourceDetailPane from '../memo/components/SourceDetailPane';

@@ -35,7 +35,7 @@ else is shared and must look and behave the same.
 
 | Capability | macOS | Windows |
 | --- | --- | --- |
-| Main memo/calendar/inbox/briefing UI | Yes | Yes, identical shared UI |
+| Main memo/calendar/inbox UI | Yes | Yes, identical shared UI |
 | Manual URL entry in Inbox | Yes | Yes |
 | Existing Inbox sync/read/open flows | Yes | Yes |
 | Quick Subnota quick memo | Yes | Yes |

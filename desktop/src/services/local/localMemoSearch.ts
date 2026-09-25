@@ -5,7 +5,7 @@ import type { MemoChunk } from '../../lib/memoChunker';
 import type {
   NetworkSearchResponse,
   NetworkSearchResult,
-} from '../backend/networkService';
+} from './memoSearchTypes';
 
 interface LocalMemoSearchRow {
   chunkId: string;

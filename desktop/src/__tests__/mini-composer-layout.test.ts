@@ -24,7 +24,8 @@ describe('Quick Subnota — 단축키는 표시만 한다', () => {
   });
 
   it('설정 쪽 단축키 편집은 그대로 남아 있다', () => {
-    const settings = read('features/settings/SettingsModal.tsx');
+    const settings = `${read('features/settings/SettingsModal.tsx')}
+${read('features/settings/SettingsHotkeysSection.tsx')}`;
 
     expect(settings).toContain('suspendGlobalShortcuts');
     expect(settings).toContain('ShortcutRecorder');
@@ -66,6 +67,11 @@ describe('Quick Subnota — 단축키는 표시만 한다', () => {
 });
 
 describe('Quick Subnota — 두 저장 버튼', () => {
+  it('같은 URL을 여러 번 저장해도 캡처 목록 key가 충돌하지 않는다', () => {
+    expect(composer).toContain('key={`${item.url}:${index}`}');
+    expect(composer).not.toContain('key={item.url}');
+  });
+
   it('최근 링크 머리글과 같은 줄, 오른쪽 끝에 선다', () => {
     const actions = composer.slice(
       composer.indexOf('<div className="mini-composer__actions">'),

@@ -167,19 +167,31 @@ describe('완료·실패 처리', () => {
 
 describe('모델 다운로드 관문 배선', () => {
   const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+  const lifecycleSource = readFileSync(
+    resolve(__dirname, '../features/search/useLocalIndexingLifecycle.ts'),
+    'utf8',
+  );
+  const flushSource = readFileSync(
+    resolve(__dirname, '../features/search/useLocalMemoIndexFlush.ts'),
+    'utf8',
+  );
+  const ambientInteractionSource = readFileSync(
+    resolve(__dirname, '../features/search/useAmbientSearchInteraction.ts'),
+    'utf8',
+  );
 
   // 색인기가 임베딩을 부르면 관문을 건너뛰고 570MB를 조용히 받아 버린다.
   it('모델이 없으면 첫 색인을 미루고 관문을 띄운다', () => {
-    expect(appSource).toContain('setEmbeddingGateOpen(true)');
-    expect(appSource).toContain('if (!status?.ready) return;');
+    expect(lifecycleSource).toContain('setEmbeddingGateOpen(true)');
+    expect(lifecycleSource).toContain('if (!status?.ready) return;');
   });
 
   // 신규 사용자는 로그인 시점에 메모가 0개다. 안내를 memos에 묶으면
   // "첫 글자를 입력하는 순간" 570MB 팝업이 뜬다 — 아무도 고르지 않은 시점.
   it('다운로드 안내는 메모 수를 기다리지 않는다', () => {
-    const gateEffect = appSource.slice(
-      appSource.indexOf('const owner = localIndexOwnerId'),
-      appSource.indexOf('// 로그인 뒤의 첫 전체 색인'),
+    const gateEffect = lifecycleSource.slice(
+      lifecycleSource.indexOf('const owner = localIndexOwnerId'),
+      lifecycleSource.indexOf('useEffect(() => {', lifecycleSource.indexOf('const owner = localIndexOwnerId') + 1),
     );
 
     expect(gateEffect).toContain('setEmbeddingGateOpen(true)');
@@ -187,8 +199,8 @@ describe('모델 다운로드 관문 배선', () => {
   });
 
   it('실패 상태에서도 검색을 누르면 다시 권한다', () => {
-    expect(appSource).toContain('if (!modelStatus?.ready)');
-    expect(appSource).toContain('if (isVisible) setEmbeddingGateOpen(true);');
+    expect(flushSource).toContain('if (!modelStatus?.ready)');
+    expect(flushSource).toContain('if (isVisible) setEmbeddingGateOpen(true);');
   });
 
   it('다운로드가 끝나면 미뤄 둔 색인을 이어서 돌린다', () => {
@@ -198,8 +210,8 @@ describe('모델 다운로드 관문 배선', () => {
   });
 
   it('로그인 뒤 자동 첫 색인은 조용히 실행한다', () => {
-    const startupEffect = appSource.match(
-      /\/\/ 로그인 뒤의 첫 전체 색인[\s\S]*?scheduleLocalMemoIndexReconcile\(memos, localIndexOwnerId\);/,
+    const startupEffect = lifecycleSource.match(
+      /const startupOwner = localIndexOwnerId[\s\S]*?scheduleLocalMemoIndexReconcile\(memos, localIndexOwnerId\);/,
     )?.[0];
 
     expect(startupEffect).toBeDefined();
@@ -211,10 +223,10 @@ describe('모델 다운로드 관문 배선', () => {
   // 자동 트리거(blur·자동 ambient)는 isVisible을 넘기지 않아 조용히 돈다.
   // 버튼 경로만 true를 실어 보낸다.
   it('버튼이 부른 색인만 표시 대상으로 표시된다', () => {
-    expect(appSource).toContain(
+    expect(flushSource).toContain(
       '() => flushLocalMemoIndex(undefined, true),',
     );
-    expect(appSource).toContain(
+    expect(ambientInteractionSource).toContain(
       'void flushLocalMemoIndex(undefined, Boolean(manualTarget))',
     );
     // blur는 인자를 주지 않는다 — 기본값 false.

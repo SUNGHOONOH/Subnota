@@ -18,6 +18,10 @@ const RECORD_TYPES = new Set([
   'schedule_inbox',
   'schedule_inbox_action',
   'topic_map',
+  'memo_folder',
+  'memo_folder_membership',
+  'memo_folder_exclusion',
+  'memo_folder_action',
 ]);
 const PENDING_TIMEOUT_MS = 10_000;
 const EMBEDDING_DIMENSIONS = 1024;

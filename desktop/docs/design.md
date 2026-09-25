@@ -437,7 +437,7 @@ never drift between surfaces.
 | Boot, cold start | `BootBrandMark` (`assemble`) | Scattered note cards gather and unfold into the mark, then colour fills petal by petal. Plays to the end (1.19s) — a truncated assembly reads as a fault. |
 | Boot, reload / reopened window | `BootBrandMark` (`spin`) | Petal chase. An endless loop, so cutting it at any frame is fine; the screen is never held. |
 | Any spinner | `SubnotaSpinner` | The same chase, small. Replaced every rotating icon. |
-| State B search | `SubnotaScatterMark` | The inverse of the boot motion: petals fly outward and morph into circles. Search is spreading out; boot is tidying up. |
+| Local nearby-memo search | `SubnotaScatterMark` | The inverse of the boot motion: petals fly outward and morph into circles. Search is spreading out; boot is tidying up. |
 
 All of it is CSS `@keyframes`, including the card->petal and petal->circle shape
 morphs (Chromium interpolates SVG `d` when both paths share the same command

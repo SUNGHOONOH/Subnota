@@ -80,8 +80,8 @@ describe('빈 상태 통합 — 7개 클래스가 하나로', () => {
   it('모든 빈 상태가 공용 컴포넌트를 쓴다', () => {
     const sites = [
       'features/inbox/InboxWorkspace.tsx',
-      'features/memo/MemoWorkspace.tsx',
-      'features/memo/components/MemoSplitWorkspace.tsx',
+      'features/memo/components/MemoFolderSidebar.tsx',
+      'features/memo/components/NearbyNotesPane.tsx',
       'features/memo/components/KnowledgeGraphView.tsx',
       'features/calendar/components/DayTodoPanel.tsx',
       'features/schedule/ScheduleInboxWorkspace.tsx',
@@ -108,7 +108,7 @@ describe('문구 — 내부 용어와 부정문 걷어내기', () => {
   // "그래프"·"야간 토픽 배치"는 내부 사정이다.
   it('그래프와 Topics에서 내부 용어를 쓰지 않는다', () => {
     const graph = read('features/memo/components/KnowledgeGraphView.tsx');
-    const split = read('features/memo/components/MemoSplitWorkspace.tsx');
+    const split = read('features/memo/components/TopicsPane.tsx');
 
     expect(graph).toContain('연결된 메모가 아직 없습니다');
     expect(graph).not.toContain('표시할 그래프가 없습니다');

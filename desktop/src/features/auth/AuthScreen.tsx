@@ -12,7 +12,7 @@ import {
   verifyRecoveryOtp,
   verifySignupOtp,
 } from '../../services/supabase/data';
-import SubnotaMark from '../../components/SubnotaMark';
+import glassMarkUrl from '../../../resources/icon-glass-mark-1024.png';
 import { isSupabaseConfigured, supabase } from '../../services/supabase/client';
 import AuthCharacters from './AuthCharacters';
 import PasswordConfirmInput from './PasswordConfirmInput';
@@ -377,7 +377,11 @@ const AuthScreen = ({
                 왼쪽 꽃밭 패널에는 마크를 두지 않는다 — 한 화면에 브랜드는
                 한 번이다. */}
             <div className="desktop-auth-brand">
-              <SubnotaMark size={34} />
+              <img
+                alt=""
+                className="desktop-auth-glass-mark"
+                src={glassMarkUrl}
+              />
               <span className="desktop-auth-brand-name">Subnota</span>
             </div>
             <h2>{isSignUp ? t('Subnota 시작하기', 'Get started with Subnota') : t('다시 만나서 반가워요', 'Welcome back')}</h2>

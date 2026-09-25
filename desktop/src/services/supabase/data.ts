@@ -4,6 +4,9 @@ import { hashText } from '../../lib/contentHash';
 import { getMemoCategory } from '../../lib/memoCategory';
 import {
   CalendarBlockRow,
+  MemoFolder,
+  MemoFolderExclusion,
+  MemoFolderMembership,
   MemoRow,
   ScheduleInboxRow,
   TopicCluster,
@@ -644,4 +647,171 @@ export const fetchTopicMap = async (
     memberships,
     updatedAt,
   };
+};
+
+interface MemoFolderRow {
+  classifier_terms: string[] | null;
+  created_at: string;
+  description: string;
+  id: string;
+  name: string;
+  organization_mode: MemoFolder['mode'];
+  source_topic_id: string | null;
+  updated_at: string;
+}
+
+interface MemoFolderMembershipRow {
+  assignment_source: MemoFolderMembership['source'];
+  created_at: string;
+  folder_id: string;
+  memo_id: string;
+  score: number | null;
+}
+
+export const fetchMemoFolders = async (
+  session: Session,
+): Promise<{
+  exclusions: MemoFolderExclusion[];
+  folders: MemoFolder[];
+  memberships: MemoFolderMembership[];
+}> => {
+  const [folderResult, membershipResult, exclusionResult] = await Promise.all([
+    supabase
+      .from('memo_folders')
+      .select(
+        'id, name, description, classifier_terms, organization_mode, source_topic_id, created_at, updated_at',
+      )
+      .eq('user_id', session.user.id)
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('memo_folder_memberships')
+      .select('folder_id, memo_id, assignment_source, score, created_at')
+      .eq('user_id', session.user.id),
+    supabase
+      .from('memo_folder_exclusions')
+      .select('folder_id, memo_id, created_at')
+      .eq('user_id', session.user.id),
+  ]);
+
+  if (folderResult.error) throw folderResult.error;
+  if (membershipResult.error) throw membershipResult.error;
+  if (exclusionResult.error) throw exclusionResult.error;
+
+  return {
+    exclusions: (exclusionResult.data ?? []).map(row => ({
+      createdAt: row.created_at,
+      folderId: row.folder_id,
+      memoId: row.memo_id,
+    })),
+    folders: ((folderResult.data ?? []) as MemoFolderRow[]).map(row => ({
+      classifierTerms: row.classifier_terms ?? [],
+      createdAt: row.created_at,
+      description: row.description ?? '',
+      id: row.id,
+      mode: row.organization_mode,
+      name: row.name,
+      sourceTopicId: row.source_topic_id,
+      updatedAt: row.updated_at,
+    })),
+    memberships: (
+      (membershipResult.data ?? []) as MemoFolderMembershipRow[]
+    ).map(row => ({
+      createdAt: row.created_at,
+      folderId: row.folder_id,
+      memoId: row.memo_id,
+      score: row.score,
+      source: row.assignment_source,
+    })),
+  };
+};
+
+export const upsertMemoFolder = async (
+  session: Session,
+  folder: MemoFolder,
+) => {
+  const { error } = await supabase.from('memo_folders').upsert({
+    classifier_terms: folder.classifierTerms,
+    created_at: folder.createdAt,
+    description: folder.description,
+    id: folder.id,
+    name: folder.name,
+    organization_mode: folder.mode,
+    source_topic_id: folder.sourceTopicId,
+    updated_at: folder.updatedAt,
+    user_id: session.user.id,
+  });
+  if (error) throw error;
+};
+
+export const deleteMemoFolder = async (session: Session, folderId: string) => {
+  const { error } = await supabase
+    .from('memo_folders')
+    .delete()
+    .eq('user_id', session.user.id)
+    .eq('id', folderId);
+  if (error) throw error;
+};
+
+export const upsertMemoFolderMemberships = async (
+  session: Session,
+  memberships: MemoFolderMembership[],
+  options: { ignoreExisting?: boolean } = {},
+) => {
+  if (memberships.length === 0) return;
+  const { error } = await supabase.from('memo_folder_memberships').upsert(
+    memberships.map(membership => ({
+      assignment_source: membership.source,
+      created_at: membership.createdAt,
+      folder_id: membership.folderId,
+      memo_id: membership.memoId,
+      score: membership.score,
+      user_id: session.user.id,
+    })),
+    {
+      ignoreDuplicates: options.ignoreExisting,
+      onConflict: 'folder_id,memo_id',
+    },
+  );
+  if (error) throw error;
+};
+
+export const deleteMemoFolderMembership = async (
+  session: Session,
+  folderId: string,
+  memoId: string,
+) => {
+  const { error } = await supabase
+    .from('memo_folder_memberships')
+    .delete()
+    .eq('user_id', session.user.id)
+    .eq('folder_id', folderId)
+    .eq('memo_id', memoId);
+  if (error) throw error;
+};
+
+export const upsertMemoFolderExclusion = async (
+  session: Session,
+  exclusion: MemoFolderExclusion,
+) => {
+  const { error } = await supabase.from('memo_folder_exclusions').upsert({
+    created_at: exclusion.createdAt,
+    folder_id: exclusion.folderId,
+    memo_id: exclusion.memoId,
+    user_id: session.user.id,
+  });
+  if (error) throw error;
+};
+
+export const deleteMemoFolderExclusion = async (
+  session: Session,
+  folderId: string,
+  memoId: string,
+) => {
+  const { error } = await supabase
+    .from('memo_folder_exclusions')
+    .delete()
+    .eq('user_id', session.user.id)
+    .eq('folder_id', folderId)
+    .eq('memo_id', memoId);
+  if (error) throw error;
 };

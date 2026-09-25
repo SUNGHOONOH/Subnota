@@ -28,14 +28,6 @@ def fetch_profile_time_zone(user_id: str) -> str:
     return str(value) if value else DEFAULT_TIME_ZONE
 
 
-def fetch_profile_ids_with_dirty_chunk_memos(
-    *,
-    user_limit: int,
-    row_scan_limit: int,
-) -> list[str]:
-    return fetch_dirty_user_ids("chunks", user_limit, row_scan_limit)
-
-
 def fetch_profile_ids_with_dirty_schedule_memos(
     *,
     user_limit: int,

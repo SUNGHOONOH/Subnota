@@ -26,7 +26,43 @@ import {
   setInboxLiked,
 } from '../services/backend/inboxService';
 
-const appSource = readFileSync(resolve(__dirname, '..', 'App.tsx'), 'utf8');
+const appSource = `${readFileSync(resolve(__dirname, '..', 'App.tsx'), 'utf8')}\n${readFileSync(
+  resolve(__dirname, '..', 'features/workspace/useLocalWorkspaceHydration.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '..', 'features/inbox/syncPendingInboxItems.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxItemActions.ts'),
+  'utf8',
+)}\n${readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxTombstoneActions.ts'),
+  'utf8',
+)}`;
+const workspaceHydrationSource = readFileSync(
+  resolve(__dirname, '..', 'features/workspace/useLocalWorkspaceHydration.ts'),
+  'utf8',
+);
+const inboxItemActionsSource = readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxItemActions.ts'),
+  'utf8',
+);
+const inboxTombstoneActionsSource = readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxTombstoneActions.ts'),
+  'utf8',
+);
+const likeSource = readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxLikeActions.ts'),
+  'utf8',
+);
+const refreshSource = readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxRefresh.ts'),
+  'utf8',
+);
+const summarySource = readFileSync(
+  resolve(__dirname, '..', 'features/inbox/useInboxSummaryActions.ts'),
+  'utf8',
+);
 const makeSession = (ownerId: string, accessToken: string) =>
   ({
     access_token: accessToken,
@@ -297,16 +333,13 @@ describe('Inbox backend requests', () => {
 
 describe('Inbox optimistic mutation guards', () => {
   it('does not leave refresh loading stuck when the same owner rotates tokens', () => {
-    const refresh = appSource.slice(
-      appSource.indexOf('const refreshInbox'),
-      appSource.indexOf('const inboxSourceLabel'),
-    );
+    const refresh = refreshSource;
 
     expect(refresh).toContain(
-      'sessionRef.current?.user.id === ownerId',
+      'currentSessionRef.current?.user.id === ownerId',
     );
     expect(refresh).toContain(
-      'inboxRefreshSequenceRef.current === requestSequence',
+      'refreshSequenceRef.current === requestSequence',
     );
     expect(refresh).toContain(
       'if (isCurrentInboxRequest()) {\n        setInboxLoading(false);',
@@ -316,7 +349,7 @@ describe('Inbox optimistic mutation guards', () => {
   it('suppresses and deletes a server response for a pending item the user deleted', () => {
     const saveHandler = appSource.slice(
       appSource.indexOf('const saveInboxUrl'),
-      appSource.indexOf('const toggleInboxLike'),
+      appSource.indexOf('const deleteInboxItem'),
     );
 
     expect(saveHandler).toContain(
@@ -329,17 +362,11 @@ describe('Inbox optimistic mutation guards', () => {
   });
 
   it('restores a persisted delete tombstone and removes it only after server deletion', () => {
-    const hydration = appSource.slice(
-      appSource.indexOf('const applyLocalWorkspace'),
-      appSource.indexOf('const syncPendingLocalWorkspace'),
-    );
-    const discard = appSource.slice(
-      appSource.indexOf('const discardDeletedPendingInboxItem'),
-      appSource.indexOf('const retryDeletedPendingInboxItems'),
-    );
-    const deleteHandler = appSource.slice(
-      appSource.indexOf('const deleteInboxItem'),
-      appSource.indexOf('const saveInboxUrlRef'),
+    const hydration = workspaceHydrationSource;
+    const discard = inboxTombstoneActionsSource;
+    const deleteHandler = inboxItemActionsSource.slice(
+      inboxItemActionsSource.indexOf('const deleteInboxItem'),
+      inboxItemActionsSource.length,
     );
 
     expect(hydration).toContain("item.local_sync_status === 'pending_delete'");
@@ -355,13 +382,26 @@ describe('Inbox optimistic mutation guards', () => {
   });
 
   it('only lets the latest like callback update UI or local cache', () => {
-    const likeHandler = appSource.slice(
-      appSource.indexOf('const toggleInboxLike'),
-      appSource.indexOf('const deleteInboxItem'),
-    );
+    const likeHandler = likeSource;
 
-    expect(likeHandler).toContain('inboxLikeRevisionsRef.current.set(id, revision)');
+    expect(likeHandler).toContain('revisionsRef.current.set(id, revision)');
     expect(likeHandler.match(/if \(!isLatest\(\)\)/g)).toHaveLength(2);
     expect(likeHandler).toContain('cached && isLatest()');
+    expect(appSource).toContain('invalidateInboxLike(id);');
+  });
+
+  it('keeps summary retry scoped to the current owner and selected item', () => {
+    expect(summarySource).toContain(
+      'retryInboxSessionSummary(currentSession, item.id)',
+    );
+    expect(summarySource).toContain(
+      'await cacheLocalInboxItem(updated, ownerId);',
+    );
+    expect(summarySource.indexOf('retryInboxSessionSummary')).toBeLessThan(
+      summarySource.indexOf('cacheLocalInboxItem(updated, ownerId)'),
+    );
+    expect(summarySource).toContain(
+      'previousItem.id === updated.id ? updated : previousItem',
+    );
   });
 });

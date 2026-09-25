@@ -335,16 +335,34 @@ describe('결과 없음·오류의 mode 전달', () => {
 });
 
 describe('App의 mode 분기', () => {
-  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+  const ambientHandlersSource = readFileSync(
+    resolve(__dirname, '../features/search/ambientSearchHandlers.ts'),
+    'utf8',
+  );
+  const ambientInteractionSource = readFileSync(
+    resolve(__dirname, '../features/search/useAmbientSearchInteraction.ts'),
+    'utf8',
+  );
+  const appSource = `${readFileSync(resolve(__dirname, '../App.tsx'), 'utf8')}\n${ambientHandlersSource}\n${ambientInteractionSource}\n${readFileSync(
+    resolve(__dirname, '../features/workspace/AppOverlayCluster.tsx'),
+    'utf8',
+  )}`;
 
   it('자동 검색은 없음·오류를 그리지 않는다', () => {
-    const handlers = appSource.slice(
-      appSource.indexOf('const ambientSearchHandlers = {'),
-      appSource.indexOf('const runAmbientSearchNow'),
-    );
+    const handlers = ambientHandlersSource;
 
     // onEmpty·onError 각각에 "수동일 때만 표시" 분기가 있어야 한다.
     expect(handlers.match(/if \(mode !== 'manual'\)/g)).toHaveLength(2);
     expect(handlers).toContain('setAmbientError(message)');
+    expect(appSource).toContain(
+      'const ambientSearchHandlers = createAmbientSearchHandlers({',
+    );
+  });
+
+  it('수동 검색은 색인 유무와 관계없이 매번 최소 시간 진행 토스트를 띄운다', () => {
+    expect(appSource).toContain('showManualAmbientSearchNotice()');
+    expect(appSource).toContain('MANUAL_AMBIENT_SEARCH_NOTICE_MIN_MS');
+    expect(appSource).toContain('manual-ambient-search-progress');
+    expect(appSource).toContain('유사한 문장을 검색 중입니다');
   });
 });

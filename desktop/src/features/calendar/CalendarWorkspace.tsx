@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from 'framer-motion';
 import {
   addDays,
   addMonths,
@@ -15,23 +15,10 @@ import {
   endOfWeek,
   format,
   isSameDay,
-  isSameMonth,
   isToday,
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  Inbox,
-  List,
-  Plus,
-  Trash2,
-  ChartBar,
-} from '@/components/icons';
-import TooltipIconButton from '../../components/TooltipIconButton';
-import { ColorPicker, Popover } from '@mantine/core';
 
 import { createUuid } from '../../lib/contentHash';
 import {
@@ -51,27 +38,56 @@ import {
   CALENDAR_BLOCK_DRAG_TYPE,
   type CalendarResizeEdge,
   DRAG_SNAP_MINUTES,
-  DEFAULT_CALENDAR_EVENT_DURATION_MS,
+  DEFAULT_COLOR,
+  EVENT_COMPACT_HEIGHT_PX,
+  EVENT_MIN_HEIGHT_PX,
+  EVENT_SINGLE_LINE_TIME_HEIGHT_PX,
+  EVENT_TIME_HEIGHT_PX,
+  formatPreviewDuration,
+  formatCalendarDate as formatCalendarDateValue,
+  formatCalendarTime as formatCalendarTimeValue,
+  findAvailableDropStart as findAvailableDropStartFromBlocks,
+  getCalendarDayLabels,
+  getCalendarTitle,
+  getCalendarWeekStartsOn,
+  getDayEvents,
+  getDayScheduleSuggestions,
+  getRange,
+  getRangeForBlock,
+  getScheduleSuggestionTitle,
+  getTone,
+  getTimedEventsForDay,
+  type CalendarDropPreview,
+  type CalendarResizePreview,
+  HOUR_HEIGHT,
+  HOUR_MS,
+  HOURS,
+  layoutTimedItems,
+  MIN_EVENT_MINUTES,
+  MONTH_CELL_CHROME_HEIGHT,
+  MONTH_ITEM_ROW_HEIGHT,
+  MONTH_MAX_VISIBLE_ITEM_LIMIT,
+  RESIZE_STEP_MINUTES,
+  snapResizeMinutes,
   SCHEDULE_INBOX_DRAG_TYPE,
-  calendarSpanDisplayRange,
+  timeGridOffset,
+  type TimedCalendarItem,
+  toLocalInputDate,
   dateAtDropOffset,
   movedStartMinutes,
   withMinutesOfDay,
-  findPreviousAvailableTime,
   getBlockStart,
   resizeRangeAtEdge,
 } from './calendarUtils';
-import DateScheduleField from '../memo/components/DateScheduleField';
-import DayTodoPanel from './components/DayTodoPanel';
+import CalendarHeader, { type CalendarView } from './components/CalendarHeader';
+import CalendarMonthTodoArea from './components/CalendarMonthTodoArea';
+import CalendarMonthView from './components/CalendarMonthView';
+import CalendarEventEditorModal from './components/CalendarEventEditorModal';
 import { hasScheduledTime } from '../schedule/scheduleInboxUtils';
 import {
   ANCHORED_MODAL_MIN_HEIGHT,
   getAnchoredPlacement,
 } from '../../lib/anchoredPlacement';
-import {
-  CALENDAR_COLOR_PRESETS,
-  DEFAULT_CALENDAR_COLOR,
-} from './calendarCategories';
 import { getUiDateLocale, localize, useUiLanguage } from '../../lib/uiLanguage';
 
 interface CalendarWorkspaceProps {
@@ -102,204 +118,6 @@ interface CalendarWorkspaceProps {
   scheduleSuggestions?: ScheduleInboxRow[];
 }
 
-type ViewType = 'week' | 'month';
-
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const HOUR_HEIGHT = 40;
-const DEFAULT_COLOR = DEFAULT_CALENDAR_COLOR;
-const HOUR_MS = DEFAULT_CALENDAR_EVENT_DURATION_MS;
-// 일정 길이는 데이터 그대로 저장한다. 30분은 "블록이 너무 납작해 글자가 안
-// 들어간다"는 렌더 문제였을 뿐이라, 최소 높이(px)로만 남긴다.
-// 13px = 제목 한 줄(line-height 13)이 들어가는 최소값. 18px이던 시절에는
-// 15분(실제 8px)과 30분(18px)이 화면에서 똑같아 보였다.
-const EVENT_MIN_HEIGHT_PX = 13;
-// 공간은 제목이 먼저 가져간다. 시간은 남을 때만 붙는 정보다 — 제목을 잘라
-// 가며 보여 줄 값이 아니다. 45·60분 카드는 제목이 한 줄일 때만 시간을
-// 붙이고, 제목이 두 줄이면 제목을 우선한다.
-//
-//   ~24px   제목 한 줄            15·30분
-//   ~43px   제목 두 줄 / 한 줄 + 시간 45·60분
-//   44px~   제목 두 줄 + 시간     90분 이상
-//
-// 두 줄은 2 + 13 × 2 = 28px를 쓰므로 45분(28px)에 꼭 맞고,
-// 제목 한 줄과 시간은 2 + 13 + 11 = 26px라 45분부터 가능하다.
-const EVENT_COMPACT_HEIGHT_PX = 24;
-const EVENT_SINGLE_LINE_TIME_HEIGHT_PX = 28;
-const EVENT_TIME_HEIGHT_PX = 44;
-// 리사이즈로 만들 수 있는 최소 길이. 0/역방향만 막는다.
-const MIN_EVENT_MINUTES = 5;
-const MONTH_CELL_CHROME_HEIGHT = 34;
-const MONTH_ITEM_ROW_HEIGHT = 19;
-const MONTH_MAX_VISIBLE_ITEM_LIMIT = 5;
-const RESIZE_STEP_MINUTES = DRAG_SNAP_MINUTES;
-
-// Soft Apple-like tints: light fill + same-hue text + accent bar.
-const TONE_STYLE: Record<string, { accent: string; bg: string; text: string }> =
-  {
-    '#20B76A': { accent: '#20b76a', bg: '#d9f8e6', text: '#127343' },
-    '#2E8FE5': { accent: '#2e8fe5', bg: '#dceeff', text: '#1763ab' },
-    '#7650E6': { accent: '#7650e6', bg: '#e7dfff', text: '#5131b4' },
-    '#E24782': { accent: '#e24782', bg: '#fce1ec', text: '#ad2758' },
-    '#FF5357': { accent: '#ff5357', bg: '#ffe0e0', text: '#b62e34' },
-    '#FFB31A': { accent: '#ffb31a', bg: '#fff0c9', text: '#a86c00' },
-    '#2F3437': { accent: '#3b4045', bg: '#eceef0', text: '#2f3437' },
-    '#A75C4A': { accent: '#c2593f', bg: '#f7e8e3', text: '#8a4636' },
-    '#66705A': { accent: '#6f7a61', bg: '#ecefe6', text: '#4b5741' },
-    '#5D6A73': { accent: '#5d6a73', bg: '#e8ecee', text: '#46535b' },
-    '#7A6688': { accent: '#7a6688', bg: '#eee9f0', text: '#594565' },
-    '#A47A36': { accent: '#a47a36', bg: '#f4eddf', text: '#76541d' },
-  };
-
-const clampColorChannel = (value: number) => Math.max(0, Math.min(255, value));
-
-const mixHex = (source: string, target: string, amount: number) => {
-  const channel = (index: number) =>
-    clampColorChannel(
-      Math.round(
-        Number.parseInt(source.slice(index, index + 2), 16) * (1 - amount) +
-          Number.parseInt(target.slice(index, index + 2), 16) * amount,
-      ),
-    )
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(1)}${channel(3)}${channel(5)}`;
-};
-
-const hexToRgba = (color: string) => {
-  const normalized = color.replace('#', '');
-  const red = Number.parseInt(normalized.slice(0, 2), 16);
-  const green = Number.parseInt(normalized.slice(2, 4), 16);
-  const blue = Number.parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, 1)`;
-};
-
-const getTone = (color: string | null) => {
-  const normalized = (color ?? '').toUpperCase();
-  const preset = TONE_STYLE[normalized];
-  if (preset) return preset;
-  if (!/^#[0-9A-F]{6}$/.test(normalized)) return TONE_STYLE[DEFAULT_COLOR];
-  return {
-    accent: normalized,
-    bg: mixHex(normalized, '#FFFFFF', 0.8),
-    text: mixHex(normalized, '#1D1D1F', 0.48),
-  };
-};
-
-const getRange = (block: CalendarBlockRow) => {
-  const start = getBlockStart(block);
-  const end = block.end_date
-    ? new Date(block.end_date)
-    : new Date(start.getTime() + HOUR_MS);
-  return { end, start };
-};
-
-const getScheduleSuggestionTitle = (
-  item: ScheduleInboxRow,
-  language: 'en' | 'ko',
-) =>
-  item.title.trim() ||
-  item.source_text.trim() ||
-  localize(language, '일정 제안', 'Schedule suggestion');
-
-const toLocalInputDate = (date: Date) => format(date, 'yyyy-MM-dd');
-// Shift를 누르고 있으면 스냅을 끄고 1분 단위로 조정한다 (Fantastical 관례).
-const snapResizeMinutes = (pixelDelta: number, step = RESIZE_STEP_MINUTES) =>
-  Math.round(((pixelDelta / HOUR_HEIGHT) * 60) / step) * step;
-
-const timeGridOffset = (date: Date) =>
-  (date.getHours() + date.getMinutes() / 60) * HOUR_HEIGHT;
-
-const formatPreviewDuration = (durationMs: number, language: 'en' | 'ko') => {
-  const minutes = Math.max(1, Math.round(durationMs / 60_000));
-  return minutes % 60 === 0
-    ? localize(language, `${minutes / 60}시간`, `${minutes / 60} hr`)
-    : localize(language, `${minutes}분`, `${minutes} min`);
-};
-
-interface CalendarDropPreview {
-  dateKey: string;
-  durationMs: number;
-  isAvailable: boolean;
-  start: Date;
-  title: string;
-}
-
-interface CalendarResizePreview {
-  blockId: string;
-  end: Date;
-  start: Date;
-}
-
-// New drops do not create overlaps. This fallback keeps an old conflicting
-// record from expanding into many unreadable rows until the user adjusts it.
-interface TimedCalendarItem {
-  block: CalendarBlockRow | null;
-  daySpan: number;
-  end: Date;
-  suggestion: ScheduleInboxRow | null;
-  start: Date;
-}
-
-interface LaidOutEvent extends TimedCalendarItem {
-  overflowCount: number;
-  stackCount: number;
-  stackIndex: number;
-  stackRowHeight: number;
-  stackStart: Date;
-}
-
-const layoutTimedItems = (items: TimedCalendarItem[]): LaidOutEvent[] => {
-  const sorted = items
-    .slice()
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
-  const groups: TimedCalendarItem[][] = [];
-  let currentGroup: TimedCalendarItem[] = [];
-  let currentGroupEnd = 0;
-
-  sorted.forEach((item) => {
-    const itemStart = item.start.getTime();
-    if (currentGroup.length === 0 || itemStart >= currentGroupEnd) {
-      currentGroup = [item];
-      groups.push(currentGroup);
-      currentGroupEnd = item.end.getTime();
-      return;
-    }
-
-    currentGroup.push(item);
-    currentGroupEnd = Math.max(currentGroupEnd, item.end.getTime());
-  });
-
-  return groups.flatMap((group) => {
-    const isStacked = group.length > 1;
-    const stackStart = group[0].start;
-    const stackEnd = Math.max(...group.map((item) => item.end.getTime()));
-    const stackRowHeight = isStacked
-      ? Math.max(
-          HOUR_HEIGHT / 2,
-          ((stackEnd - stackStart.getTime()) / 3_600_000) * HOUR_HEIGHT,
-        )
-      : 0;
-    const representative = group
-      .slice()
-      .sort(
-        (a, b) =>
-          a.start.getTime() - b.start.getTime() ||
-          Number(Boolean(b.block)) - Number(Boolean(a.block)),
-      )[0];
-
-    return [
-      {
-        ...representative,
-        overflowCount: Math.max(0, group.length - 1),
-        stackCount: group.length,
-        stackIndex: 0,
-        stackRowHeight,
-        stackStart,
-      },
-    ];
-  });
-};
-
 const CalendarWorkspace = ({
   blocks,
   categories,
@@ -320,43 +138,23 @@ const CalendarWorkspace = ({
   const language = useUiLanguage();
   const t = (korean: string, english: string) => localize(language, korean, english);
   const dateLocale = getUiDateLocale(language);
-  const weekStartsOn = useMemo(() => {
-    const locale = new Intl.Locale(dateLocale) as Intl.Locale & {
-      getWeekInfo?: () => { firstDay: number };
-    };
-    const firstDay = locale.getWeekInfo?.().firstDay;
-    return (firstDay === undefined ? (language === 'en' ? 1 : 0) : firstDay % 7) as
-      | 0
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5
-      | 6;
-  }, [dateLocale, language]);
-  const dayLabels = useMemo(() => {
-    const formatter = new Intl.DateTimeFormat(dateLocale, { weekday: 'short' });
-    return Array.from({ length: 7 }, (_, index) =>
-      formatter.format(new Date(2024, 0, 7 + ((weekStartsOn + index) % 7))),
-    );
-  }, [dateLocale, weekStartsOn]);
+  const weekStartsOn = useMemo(
+    () => getCalendarWeekStartsOn(dateLocale, language),
+    [dateLocale, language],
+  );
+  const dayLabels = useMemo(
+    () => getCalendarDayLabels(dateLocale, weekStartsOn),
+    [dateLocale, weekStartsOn],
+  );
   const formatCalendarTime = useCallback(
-    (date: Date) =>
-      new Intl.DateTimeFormat(dateLocale, {
-        hour: 'numeric',
-        minute: '2-digit',
-      }).format(date),
+    (date: Date) => formatCalendarTimeValue(dateLocale, date),
     [dateLocale],
   );
   const formatCalendarDate = useCallback(
-    (date: Date) =>
-      new Intl.DateTimeFormat(dateLocale, {
-        day: 'numeric',
-        month: 'long',
-      }).format(date),
+    (date: Date) => formatCalendarDateValue(dateLocale, date),
     [dateLocale],
   );
-  const [view, setView] = useState<ViewType>('week');
+  const [view, setView] = useState<CalendarView>('week');
   const [anchor, setAnchor] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [isMonthTodoOverlayOpen, setMonthTodoOverlayOpen] = useState(false);
@@ -428,19 +226,7 @@ const CalendarWorkspace = ({
   );
 
   const title_ = useMemo(() => {
-    if (view === 'month') {
-      return new Intl.DateTimeFormat(dateLocale, {
-        month: 'long',
-        year: 'numeric',
-      }).format(anchor);
-    }
-    const start = startOfWeek(anchor, { weekStartsOn });
-    const end = endOfWeek(anchor, { weekStartsOn });
-    const formatter = new Intl.DateTimeFormat(dateLocale, {
-      day: 'numeric',
-      month: 'short',
-    });
-    return `${formatter.format(start)} – ${formatter.format(end)}`;
+    return getCalendarTitle(anchor, view, dateLocale, weekStartsOn);
   }, [anchor, dateLocale, view, weekStartsOn]);
 
   // Scroll the time grid to the morning when entering the week view.
@@ -791,58 +577,25 @@ const CalendarWorkspace = ({
     setDeleteCategoryId(null);
   };
 
-  const dayEvents = (date: Date) =>
-    blocks
-      .filter((block) => isSameDay(getBlockStart(block), date))
-      .sort((a, b) => getBlockStart(a).getTime() - getBlockStart(b).getTime());
-
+  // Keep these local wrappers so event handlers and JSX retain their existing
+  // closure shape while the data projection rules live in calendarUtils.
+  const dayEvents = (date: Date) => getDayEvents(blocks, date);
   const rangeForBlock = (block: CalendarBlockRow) =>
-    calendarResizePreview?.blockId === block.id
-      ? {
-          end: calendarResizePreview.end,
-          start: calendarResizePreview.start,
-        }
-      : getRange(block);
-
+    getRangeForBlock(block, calendarResizePreview);
   const timedEventsForDay = (date: Date): TimedCalendarItem[] =>
-    blocks
-      .filter((block) => !block.all_day)
-      .flatMap((block) => {
-        const range = rangeForBlock(block);
-        if (!isSameDay(range.start, date)) return [];
-
-        return [
-          {
-            block,
-            suggestion: null,
-            ...calendarSpanDisplayRange(range.start, range.end),
-          },
-        ];
-      });
-
+    getTimedEventsForDay(blocks, date, calendarResizePreview);
   const dayScheduleSuggestions = (date: Date) =>
-    scheduleSuggestions
-      .filter((item) => {
-        const scheduledAt = toValidDate(item.scheduled_at);
-        return scheduledAt ? isSameDay(scheduledAt, date) : false;
-      })
-      .sort((a, b) => {
-        const aDate = toValidDate(a.scheduled_at);
-        const bDate = toValidDate(b.scheduled_at);
-        return (aDate?.getTime() ?? 0) - (bDate?.getTime() ?? 0);
-      });
-
+    getDayScheduleSuggestions(scheduleSuggestions, date);
   const findAvailableDropStart = (
     requestedStart: Date,
     durationMs: number,
     excludeBlockId?: string,
   ) =>
-    findPreviousAvailableTime(
+    findAvailableDropStartFromBlocks(
+      blocks,
       requestedStart,
       durationMs,
-      blocks
-        .filter((block) => !block.all_day && block.id !== excludeBlockId)
-        .map((block) => getRange(block)),
+      excludeBlockId,
     );
 
   // Week-view drag-and-drop: native HTML5 drag moves an event to the dropped
@@ -1124,183 +877,6 @@ const CalendarWorkspace = ({
     window.addEventListener('pointercancel', cleanup);
     window.addEventListener('blur', cleanup);
   };
-
-  const renderMonth = () => (
-    <div className="cal-month">
-      <div className="cal-weekday-row">
-        {dayLabels.map((label, index) => (
-          <span
-            className={
-              (weekStartsOn + index) % 7 === 0
-                ? 'sunday'
-                : (weekStartsOn + index) % 7 === 6
-                  ? 'saturday'
-                  : ''
-            }
-            key={label}
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-      <div className="cal-month-grid" ref={monthGridRef}>
-        {monthDays.map((date) => {
-          const events = dayEvents(date);
-          const suggestions = dayScheduleSuggestions(date);
-          const monthItems = [
-            ...events.map((block) => ({
-              allDay: Boolean(block.all_day),
-              block,
-              kind: 'block' as const,
-              sortTime: getBlockStart(block).getTime(),
-            })),
-            ...suggestions.flatMap((suggestion) => {
-              const scheduledAt = toValidDate(suggestion.scheduled_at);
-              return scheduledAt
-                ? [
-                    {
-                      allDay: !hasScheduledTime(suggestion),
-                      kind: 'suggestion' as const,
-                      scheduledAt,
-                      sortTime: scheduledAt.getTime(),
-                      suggestion,
-                    },
-                  ]
-                : [];
-            }),
-          ].sort(
-            (a, b) =>
-              Number(b.allDay) - Number(a.allDay) || a.sortTime - b.sortTime,
-          );
-          const visibleItems =
-            monthItems.length > monthVisibleItemLimit
-              ? monthItems.slice(0, Math.max(1, monthVisibleItemLimit - 1))
-              : monthItems;
-          const hiddenCount = monthItems.length - visibleItems.length;
-          const inMonth = isSameMonth(date, anchor);
-          const isSelected = isSameDay(date, selectedDay);
-          return (
-            <div
-              aria-label={t(
-                `${formatCalendarDate(date)}, ${monthItems.length}개 일정`,
-                `${formatCalendarDate(date)}, ${monthItems.length} events`,
-              )}
-              className={`cal-month-cell${inMonth ? '' : ' muted'}${
-                isSelected ? ' selected' : ''
-              }`}
-              key={date.toISOString()}
-              onClick={() => selectDay(date)}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) return;
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  selectDay(date);
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className="cal-month-meta">
-                {hiddenCount > 0 && (
-                  <button
-                    aria-label={t(
-                      `${formatCalendarDate(date)}의 나머지 일정 ${hiddenCount}개`,
-                      `${hiddenCount} more events on ${formatCalendarDate(date)}`,
-                    )}
-                    className="cal-month-more"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      selectDay(date);
-                    }}
-                    type="button"
-                  >
-                    {t(`+${hiddenCount}개`, `+${hiddenCount}`)}
-                  </button>
-                )}
-                <span
-                  className={`cal-daynum${isToday(date) ? ' today' : ''}${
-                    date.getDay() === 0 ? ' sunday' : ''
-                  }`}
-                >
-                  {date.getDate()}
-                </span>
-              </div>
-              <div className="cal-month-items">
-                {visibleItems.map((item) => {
-                  if (item.kind === 'block') {
-                    const { block } = item;
-                    const start = getBlockStart(block);
-                    const tone = getTone(block.color);
-                    return (
-                      <button
-                        aria-label={`${block.title}, ${block.all_day ? t('종일', 'All day') : formatCalendarTime(start)}`}
-                        className={`cal-month-item${block.is_completed ? ' completed' : ''}`}
-                        key={block.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openEditor(start, block, event.currentTarget);
-                        }}
-                        style={{ backgroundColor: tone.bg, color: tone.text }}
-                        type="button"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="cal-month-item-dot"
-                          style={{ backgroundColor: tone.accent }}
-                        />
-                        <span
-                          className="cal-month-item-title"
-                          title={block.title}
-                        >
-                          {block.title}
-                        </span>
-                        {!block.all_day && (
-                          <span className="cal-month-item-time">
-                            {format(start, 'HH:mm')}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  }
-
-                  const { scheduledAt, suggestion } = item;
-                  const suggestionTitle =
-                    getScheduleSuggestionTitle(suggestion, language);
-                  return (
-                    <button
-                      aria-label={t(
-                        `${suggestionTitle} 일정 제안, ${item.allDay ? '시간 미정' : formatCalendarTime(scheduledAt)}`,
-                        `${suggestionTitle} schedule suggestion, ${item.allDay ? 'time not set' : formatCalendarTime(scheduledAt)}`,
-                      )}
-                      className="cal-month-item cal-month-suggestion"
-                      key={`suggestion:${suggestion.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openSuggestionEditor(suggestion, event.currentTarget);
-                      }}
-                      type="button"
-                    >
-                      <span
-                        className="cal-month-item-title"
-                        title={suggestionTitle}
-                      >
-                        {suggestionTitle}
-                      </span>
-                      {!item.allDay && (
-                        <span className="cal-month-item-time">
-                          {format(scheduledAt, 'HH:mm')}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   const renderTimeGrid = () => {
     const now = new Date();
@@ -1760,576 +1336,132 @@ const CalendarWorkspace = ({
   return (
     <div className={`cal-layout view-${view}`}>
       <div className="cal-root">
-        <div className="cal-header">
-          <h2 className="cal-title">{title_}</h2>
+        <CalendarHeader
+          hasNewReport={hasNewReport}
+          isScheduleInboxOpen={isScheduleInboxOpen}
+          language={language}
+          onChangeView={key => {
+            setView(key);
+            if (key !== 'month') setMonthTodoOverlayOpen(false);
+          }}
+          onNext={() => move(1)}
+          onOpenReport={onOpenReport}
+          onPrevious={() => move(-1)}
+          onToday={() => {
+            setAnchor(new Date());
+            setSelectedDay(new Date());
+          }}
+          onToggleScheduleInbox={onToggleScheduleInbox}
+          title={title_}
+          view={view}
+        />
 
-          <div className="cal-toolbar">
-            <div aria-label={t('캘린더 보기', 'Calendar view')} className="cal-views" role="group">
-              {(['week', 'month'] as ViewType[]).map((key) => (
-                <button
-                  aria-pressed={view === key}
-                  className={view === key ? 'active' : ''}
-                  key={key}
-                  onClick={() => {
-                    setView(key);
-                    if (key !== 'month') setMonthTodoOverlayOpen(false);
-                  }}
-                  type="button"
-                >
-                  {key === 'week' ? t('주', 'Week') : t('월', 'Month')}
-                </button>
-              ))}
-            </div>
-
-            <div aria-label={t('캘린더 이동', 'Calendar navigation')} className="cal-nav" role="group">
-              <button
-                aria-label={t('이전', 'Previous')}
-                className="cal-nav-icon"
-                onClick={() => move(-1)}
-                type="button"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                className="cal-today"
-                onClick={() => {
-                  setAnchor(new Date());
-                  setSelectedDay(new Date());
-                }}
-                type="button"
-              >
-                {t('오늘', 'Today')}
-              </button>
-              <button
-                aria-label={t('다음', 'Next')}
-                className="cal-nav-icon"
-                onClick={() => move(1)}
-                type="button"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          </div>
-          {/* 아이콘만 있는 버튼이라 이름이 필요하다. 네이티브 title은 1초쯤
-              지나서야 뜨고 OS 모양이라, 앱 공용 툴팁으로 통일한다. */}
-          {onToggleScheduleInbox && (
-            <TooltipIconButton
-              aria-label={t('일정 저장함', 'Schedule inbox')}
-              aria-pressed={isScheduleInboxOpen}
-              className={`cal-inbox-button${isScheduleInboxOpen ? ' active' : ''}`}
-              onClick={onToggleScheduleInbox}
-              tooltip={
-                isScheduleInboxOpen
-                  ? t('일정 저장함 닫기', 'Close schedule inbox')
-                  : t('일정 저장함', 'Schedule inbox')
-              }
-            >
-              <Inbox size={18} />
-            </TooltipIconButton>
-          )}
-          {onOpenReport && (
-            <TooltipIconButton
-              aria-label={t('월간 기록', 'Monthly report')}
-              className={`cal-report-button${hasNewReport ? ' has-new' : ''}`}
-              onClick={onOpenReport}
-              tooltip={
-                hasNewReport
-                  ? t('월간 기록 · 새 기록 있음', 'Monthly report · new report available')
-                  : t('월간 기록', 'Monthly report')
-              }
-            >
-              <ChartBar size={18} />
-              {hasNewReport && <span aria-hidden className="cal-report-dot" />}
-            </TooltipIconButton>
-          )}
-        </div>
-
-        {view === 'month' ? renderMonth() : renderTimeGrid()}
+        {view === 'month' ? (
+          <CalendarMonthView
+            anchor={anchor}
+            dayEvents={dayEvents}
+            dayLabels={dayLabels}
+            dayScheduleSuggestions={dayScheduleSuggestions}
+            formatCalendarDate={formatCalendarDate}
+            formatCalendarTime={formatCalendarTime}
+            language={language}
+            monthDays={monthDays}
+            monthGridRef={monthGridRef}
+            monthVisibleItemLimit={monthVisibleItemLimit}
+            onOpenEditor={openEditor}
+            onOpenSuggestionEditor={openSuggestionEditor}
+            onSelectDay={selectDay}
+            selectedDay={selectedDay}
+            t={t}
+            weekStartsOn={weekStartsOn}
+          />
+        ) : (
+          renderTimeGrid()
+        )}
       </div>
 
       {view === 'month' && (
-        <aside className="cal-side">
-          <DayTodoPanel
-            blocks={dayEvents(selectedDay)}
-            date={selectedDay}
-            isDetailOpen={isMonthTodoOverlayOpen}
-            onAdd={() => openEditor(selectedDay)}
-            onEdit={(block) => openEditor(getBlockStart(block), block)}
-            onToggleDetail={() => setMonthTodoOverlayOpen((isOpen) => !isOpen)}
-            onToggle={onToggleCompleted}
-          />
-        </aside>
+        <CalendarMonthTodoArea
+          blocks={dayEvents(selectedDay)}
+          date={selectedDay}
+          detailAriaLabel={t(
+            `${formatCalendarDate(selectedDay)} 할 일 상세`,
+            `${formatCalendarDate(selectedDay)} to-do details`,
+          )}
+          isDetailOpen={isMonthTodoOverlayOpen}
+          onAdd={() => openEditor(selectedDay)}
+          onEdit={(block) => openEditor(getBlockStart(block), block)}
+          onToggleDetail={() => setMonthTodoOverlayOpen((isOpen) => !isOpen)}
+          onToggle={onToggleCompleted}
+          shouldReduceMotion={shouldReduceMotion}
+        />
       )}
 
-      <AnimatePresence initial={false}>
-        {view === 'month' && isMonthTodoOverlayOpen && (
-          <motion.aside
-            animate={{ opacity: 1, y: 0 }}
-            aria-label={t(
-              `${formatCalendarDate(selectedDay)} 할 일 상세`,
-              `${formatCalendarDate(selectedDay)} to-do details`,
-            )}
-            className="cal-month-todo-overlay"
-            exit={
-              shouldReduceMotion
-                ? undefined
-                : { opacity: 0, transition: { duration: 0.15 }, y: 8 }
-            }
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-            key="month-todo-overlay"
-            transition={
-              shouldReduceMotion
-                ? { duration: 0 }
-                : { bounce: 0, duration: 0.3, type: 'spring' }
-            }
-          >
-            <DayTodoPanel
-              blocks={dayEvents(selectedDay)}
-              date={selectedDay}
-              isDetailOpen
-              onAdd={() => openEditor(selectedDay)}
-              onEdit={(block) => openEditor(getBlockStart(block), block)}
-              onToggleDetail={() => setMonthTodoOverlayOpen(false)}
-              onToggle={onToggleCompleted}
-            />
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      {/* 바깥 클릭으로 닫지 않는다. 저장을 명시적으로 받는 창이라 닫는 것도
-          명시적이어야 한다 — 실수로 스친 클릭에 쓰던 내용이 사라지면 안 된다.
-          나가는 길은 취소 버튼과 Esc 둘뿐이고, 둘 다 일부러 누르는 것이다. */}
-      <AnimatePresence>
-        {isEditorOpen && (
-          <motion.div
-            animate={{ opacity: 1 }}
-            className={`modal-backdrop${anchoredPlacement ? ' anchored' : ''}`}
-            exit={{ opacity: 0 }}
-            initial={{ opacity: 0 }}
-            role="presentation"
-            transition={
-              shouldReduceMotion
-                ? { duration: 0 }
-                : { duration: 0.14, ease: 'easeOut' }
-            }
-          >
-            {/* 앵커가 있으면 누른 일정 옆에서, 없으면 가운데에서 자란다.
-                자라는 방향(transform-origin)이 어디를 눌렀는지 말해 준다 —
-                페이드만으로는 출처를 알 수 없다. */}
-            <motion.form
-              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-              className={
-                anchoredPlacement
-                  ? `cal-modal anchored ${anchoredPlacement.side}`
-                  : 'cal-modal'
-              }
-              exit={
-                anchoredPlacement
-                  ? { opacity: 0, scale: 0.96 }
-                  : { opacity: 0, scale: 0.99, y: -6 }
-              }
-              initial={
-                anchoredPlacement
-                  ? {
-                      opacity: 0,
-                      scale: 0.94,
-                      x: anchoredPlacement.side === 'right' ? -6 : 6,
-                    }
-                  : { opacity: 0, scale: 0.99, y: -8 }
-              }
-              onSubmit={submit}
-              ref={anchoredModalRef}
-              style={
-                anchoredPlacement
-                  ? {
-                      left: anchoredPlacement.left,
-                      position: 'fixed',
-                      top: anchoredPlacement.top,
-                      width: anchoredPlacement.width,
-                      ['--cal-modal-tail-top' as string]:
-                        `${anchoredPlacement.tailTop}px`,
-                    }
-                  : undefined
-              }
-              transition={
-                shouldReduceMotion
-                  ? { duration: 0 }
-                  : { duration: 0.18, ease: 'easeOut' }
-              }
-            >
-            {/* 제목 입력이 헤더를 대신한다. "새 일정"이라는 제목줄과 "제목"
-                라벨과 입력칸이 따로 있으면 같은 말을 세 번 하면서 세로를
-                세 줄 먹는다. 무엇을 하려고 연 창인지는 이미 알고 열었다. */}
-            <header className="cal-modal-head">
-              <input
-                aria-label={t('일정 제목', 'Event title')}
-                autoFocus
-                className="cal-modal-title"
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder={
-                  editingSuggestion
-                    ? t('일정 제안', 'Schedule suggestion')
-                    : editingBlock
-                      ? t('일정 수정', 'Edit event')
-                      : t('새 일정', 'New event')
-                }
-                value={title}
-              />
-              <div className="cal-modal-head-actions">
-                {!editingSuggestion && (
-                  <div className="cal-category-picker" ref={categoryPickerRef}>
-                    <button
-                      aria-expanded={isCategoryMenuOpen}
-                      aria-haspopup="menu"
-                      aria-label={t('일정 색상 및 카테고리', 'Event color and category')}
-                      className="cal-category-trigger"
-                      onClick={() => {
-                        setCategoryMenuOpen((open) => !open);
-                        setCategoryMenuMode('list');
-                        setDeleteCategoryId(null);
-                      }}
-                      type="button"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="cal-category-color-dot"
-                        style={{
-                          backgroundColor: selectedCategoryId
-                            ? selectedColor
-                            : DEFAULT_COLOR,
-                        }}
-                      />
-                      <ChevronDown size={14} />
-                    </button>
-
-                    {isCategoryMenuOpen && (
-                      <div
-                        aria-label={t('카테고리 및 색상', 'Categories and colors')}
-                        className="cal-category-menu"
-                        role="menu"
-                      >
-                        {categoryMenuMode === 'list' ? (
-                          <>
-                            <div className="cal-category-menu-head">
-                              <strong>{t('카테고리', 'Categories')}</strong>
-                              <button
-                                aria-label={t('새 카테고리', 'New category')}
-                                className="cal-category-add-icon"
-                                onClick={() => {
-                                  setCategoryMenuMode('create');
-                                  setCustomColorPickerOpen(false);
-                                  setDeleteCategoryId(null);
-                                }}
-                                type="button"
-                              >
-                                <Plus size={15} />
-                              </button>
-                            </div>
-                            <button
-                              className={`cal-category-option${selectedCategoryId === null ? ' selected' : ''}`}
-                              onClick={() => selectCategory(null)}
-                              role="menuitemradio"
-                              aria-checked={selectedCategoryId === null}
-                              type="button"
-                            >
-                              <span
-                                aria-hidden="true"
-                                className="cal-category-color-dot"
-                                style={{ backgroundColor: DEFAULT_COLOR }}
-                              />
-                              <span>{t('기본', 'Default')}</span>
-                              {selectedCategoryId === null && (
-                                <b aria-hidden="true">✓</b>
-                              )}
-                            </button>
-                            {categories.map((category) => (
-                              <div
-                                className="cal-category-row"
-                                key={category.id}
-                              >
-                                <button
-                                  className={`cal-category-option${selectedCategoryId === category.id ? ' selected' : ''}`}
-                                  onClick={() => selectCategory(category)}
-                                  role="menuitemradio"
-                                  aria-checked={
-                                    selectedCategoryId === category.id
-                                  }
-                                  type="button"
-                                >
-                                  <span
-                                    aria-hidden="true"
-                                    className="cal-category-color-dot"
-                                    style={{ backgroundColor: category.color }}
-                                  />
-                                  <span>{category.name}</span>
-                                  {selectedCategoryId === category.id && (
-                                    <b aria-hidden="true">✓</b>
-                                  )}
-                                </button>
-                                <button
-                                  aria-label={t(
-                                    `${category.name} 카테고리 삭제`,
-                                    `Delete ${category.name} category`,
-                                  )}
-                                  className="cal-category-delete"
-                                  onClick={() =>
-                                    setDeleteCategoryId(category.id)
-                                  }
-                                  type="button"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ))}
-                            {deleteCategoryId && (
-                              <div
-                                className="cal-category-delete-confirm"
-                                role="alert"
-                              >
-                                <p>
-                                  {t(
-                                    '삭제하면 해당 일정은 기본 초록색으로 바뀝니다.',
-                                    'Deleting it changes its events to the default green.',
-                                  )}
-                                </p>
-                                <div>
-                                  <button
-                                    className="cal-category-confirm-cancel"
-                                    onClick={() => setDeleteCategoryId(null)}
-                                    type="button"
-                                  >
-                                    {t('취소', 'Cancel')}
-                                  </button>
-                                  <button
-                                    className="cal-category-confirm-delete"
-                                    onClick={() => void deleteCategory()}
-                                    type="button"
-                                  >
-                                    {t('삭제', 'Delete')}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="cal-category-create">
-                            <div className="cal-category-menu-head">
-                              <button
-                                className="cal-category-back"
-                                onClick={() => setCategoryMenuMode('list')}
-                                type="button"
-                              >
-                                ←
-                              </button>
-                              <strong>{t('새 카테고리', 'New category')}</strong>
-                            </div>
-                            <input
-                              aria-label={t('카테고리 이름', 'Category name')}
-                              autoFocus
-                              className="cal-category-name-input"
-                              maxLength={40}
-                              onChange={(event) =>
-                                setNewCategoryName(event.target.value)
-                              }
-                              onKeyDown={(event) => {
-                                if (event.key !== 'Enter') return;
-                                event.preventDefault();
-                                void createCategory();
-                              }}
-                              placeholder={t('카테고리 이름', 'Category name')}
-                              value={newCategoryName}
-                            />
-                            <div
-                              className="cal-category-color-grid"
-                              aria-label={t('카테고리 색상', 'Category color')}
-                            >
-                              {CALENDAR_COLOR_PRESETS.map((preset) => (
-                                <button
-                                  aria-label={t(
-                                    `${preset.label} 색상`,
-                                    `${preset.labelEn} color`,
-                                  )}
-                                  className={`cal-category-swatch${newCategoryColor === preset.color ? ' selected' : ''}`}
-                                  key={preset.color}
-                                  onClick={() => {
-                                    setNewCategoryColor(preset.color);
-                                    setCustomColorPickerOpen(false);
-                                  }}
-                                  style={{ backgroundColor: preset.color }}
-                                  type="button"
-                                />
-                              ))}
-                              <Popover
-                                onChange={setCustomColorPickerOpen}
-                                opened={isCustomColorPickerOpen}
-                                position="bottom-end"
-                                shadow="md"
-                                withinPortal={false}
-                              >
-                                <Popover.Target>
-                                  <button
-                                    aria-expanded={isCustomColorPickerOpen}
-                                    aria-haspopup="dialog"
-                                    aria-label={t('사용자 지정 색상', 'Custom color')}
-                                    className="cal-category-custom-swatch"
-                                    onClick={() =>
-                                      setCustomColorPickerOpen((open) => !open)
-                                    }
-                                    type="button"
-                                  />
-                                </Popover.Target>
-                                <Popover.Dropdown className="cal-category-color-popover">
-                                  <ColorPicker
-                                    format="hex"
-                                    hueLabel={t('색조', 'Hue')}
-                                    onChange={(color) =>
-                                      setNewCategoryColor(color.toUpperCase())
-                                    }
-                                    saturationLabel={t('채도와 명도', 'Saturation and lightness')}
-                                    size="sm"
-                                    value={newCategoryColor}
-                                  />
-                                  <div className="cal-category-color-controls">
-                                    <span
-                                      aria-label={t('선택한 색상 미리보기', 'Selected color preview')}
-                                      className="cal-category-color-preview"
-                                      role="img"
-                                      style={{
-                                        backgroundColor: newCategoryColor,
-                                      }}
-                                    />
-                                    <input
-                                      aria-label={t('선택한 RGBA 색상', 'Selected RGBA color')}
-                                      className="cal-category-color-rgba"
-                                      readOnly
-                                      value={hexToRgba(newCategoryColor)}
-                                    />
-                                    <button
-                                      className="cal-category-color-confirm"
-                                      onClick={() =>
-                                        setCustomColorPickerOpen(false)
-                                      }
-                                      type="button"
-                                    >
-                                      {t('확인', 'Done')}
-                                    </button>
-                                  </div>
-                                </Popover.Dropdown>
-                              </Popover>
-                            </div>
-                            <button
-                              className="cal-category-create-submit"
-                              disabled={!newCategoryName.trim()}
-                              onClick={() => void createCategory()}
-                              type="button"
-                            >
-                              {t('추가', 'Add')}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </header>
-
-            {/* 라벨 대신 아이콘. 배경도 나누지 않고 hairline으로만 끊는다 —
-                칸마다 배경+테두리+곡률을 주면 상자가 여러 개로 읽힌다. */}
-            <div className="cal-modal-rows">
-              <div className="cal-modal-row">
-                <DateScheduleField
-                  allDay={!time}
-                  date={new Date(`${selectedDate}T${time || '00:00'}:00`)}
-                  label={null}
-                  onChange={(date, allDay) => {
-                    setSelectedDate(toLocalInputDate(date));
-                    setTime(allDay ? '' : format(date, 'HH:mm'));
-                  }}
-                />
-              </div>
-              <div className="cal-modal-row">
-                <List aria-hidden="true" className="cal-modal-row-icon" size={15} />
-                <textarea
-                  aria-label={t('메모', 'Note')}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder={t('메모 추가', 'Add a note')}
-                  value={note}
-                />
-              </div>
-            </div>
-            {sourceMemoId && (
-              <button
-                className="cal-btn ghost cal-source-note-btn"
-                onClick={() => {
-                  // 캘린더를 보면서 출처를 확인하는 흐름이라 미리보기로 연다.
-                  window.dispatchEvent(
-                    new CustomEvent('subnota:preview-memo', {
-                      detail: { memoId: sourceMemoId },
-                    }),
-                  );
-                  setEditorOpen(false);
-                }}
-                type="button"
-              >
-                {t('원본 노트 열기', 'Open source memo')}
-              </button>
-            )}
-            {/* 삭제는 헤더가 아니라 여기, 저장 반대편에 둔다. 되돌릴 수 없는
-                동작이 색 고르는 버튼 옆에 있을 이유가 없다. */}
-            <footer className="cal-modal-foot">
-              {editingSuggestion ? (
-                <button
-                  className="cal-modal-delete-text"
-                  onClick={() => {
-                    onDeleteScheduleSuggestion?.(editingSuggestion);
-                    setEditorOpen(false);
-                    setEditingSuggestion(null);
-                  }}
-                  type="button"
-                >
-                  {t('삭제', 'Delete')}
-                </button>
-              ) : editingBlock ? (
-                <button
-                  className="cal-modal-delete-text"
-                  onClick={() => {
-                    onDeleteBlock(editingBlock.id);
-                    setEditorOpen(false);
-                  }}
-                  type="button"
-                >
-                  {t('삭제', 'Delete')}
-                </button>
-              ) : null}
-              <p className="cal-modal-hint">
-                {editingSuggestion
-                  ? t(
-                      '시간을 비우면 종일 · 원본 메모는 그대로',
-                      'Clear the time for all day · source memo stays unchanged',
-                    )
-                  : t('시간을 비우면 종일', 'Clear the time for all day')}
-              </p>
-              <div className="cal-modal-actions">
-                <button
-                  className="cal-btn ghost"
-                  onClick={() => {
-                    setEditorOpen(false);
-                    setEditingSuggestion(null);
-                  }}
-                  type="button"
-                >
-                  {t('취소', 'Cancel')}
-                </button>
-                <button className="cal-btn primary" type="submit">
-                  {editingSuggestion ? t('등록', 'Add') : t('저장', 'Save')}
-                </button>
-              </div>
-            </footer>
-            </motion.form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <CalendarEventEditorModal
+        anchoredModalRef={anchoredModalRef}
+        anchoredPlacement={anchoredPlacement}
+        categories={categories}
+        categoryMenuMode={categoryMenuMode}
+        categoryPickerRef={categoryPickerRef}
+        deleteCategoryId={deleteCategoryId}
+        editingBlock={editingBlock}
+        editingSuggestion={editingSuggestion}
+        isCategoryMenuOpen={isCategoryMenuOpen}
+        isCustomColorPickerOpen={isCustomColorPickerOpen}
+        isEditorOpen={isEditorOpen}
+        newCategoryColor={newCategoryColor}
+        newCategoryName={newCategoryName}
+        note={note}
+        onCancel={() => {
+          setEditorOpen(false);
+          setEditingSuggestion(null);
+        }}
+        onChangeCategoryMenuMode={setCategoryMenuMode}
+        onChangeCustomColorPickerOpen={setCustomColorPickerOpen}
+        onChangeDateTime={(date, allDay) => {
+          setSelectedDate(toLocalInputDate(date));
+          setTime(allDay ? '' : format(date, 'HH:mm'));
+        }}
+        onChangeDeleteCategoryId={setDeleteCategoryId}
+        onChangeNewCategoryColor={setNewCategoryColor}
+        onChangeNewCategoryName={setNewCategoryName}
+        onChangeNote={setNote}
+        onChangeTitle={setTitle}
+        onCreateCategory={() => void createCategory()}
+        onDeleteBlock={block => {
+          onDeleteBlock(block.id);
+          setEditorOpen(false);
+        }}
+        onDeleteCategory={() => void deleteCategory()}
+        onDeleteSuggestion={suggestion => {
+          onDeleteScheduleSuggestion?.(suggestion);
+          setEditorOpen(false);
+          setEditingSuggestion(null);
+        }}
+        onOpenSourceMemo={memoId => {
+          window.dispatchEvent(
+            new CustomEvent('subnota:preview-memo', {
+              detail: { memoId },
+            }),
+          );
+          setEditorOpen(false);
+        }}
+        onSelectCategory={selectCategory}
+        onSubmit={submit}
+        onToggleCategoryMenu={() => {
+          setCategoryMenuOpen(open => !open);
+          setCategoryMenuMode('list');
+          setDeleteCategoryId(null);
+        }}
+        selectedCategoryId={selectedCategoryId}
+        selectedColor={selectedColor}
+        selectedDate={selectedDate}
+        shouldReduceMotion={shouldReduceMotion}
+        sourceMemoId={sourceMemoId}
+        time={time}
+        title={title}
+        translate={t}
+      />
     </div>
   );
 };

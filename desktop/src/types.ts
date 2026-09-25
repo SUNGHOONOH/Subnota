@@ -17,6 +17,38 @@ export interface MemoRow {
   updated_at: string;
 }
 
+export type MemoFolderMode = 'automatic' | 'manual';
+
+export interface MemoFolder {
+  classifierTerms: string[];
+  createdAt: string;
+  description: string;
+  id: string;
+  local_sync_status?: 'failed' | 'pending' | 'synced';
+  mode: MemoFolderMode;
+  name: string;
+  sourceTopicId: string | null;
+  updatedAt: string;
+}
+
+export type MemoFolderAssignmentSource = 'automatic' | 'topic_import' | 'user';
+
+export interface MemoFolderMembership {
+  createdAt: string;
+  folderId: string;
+  memoId: string;
+  local_sync_status?: 'failed' | 'pending' | 'synced';
+  score: number | null;
+  source: MemoFolderAssignmentSource;
+}
+
+export interface MemoFolderExclusion {
+  createdAt: string;
+  folderId: string;
+  memoId: string;
+  local_sync_status?: 'failed' | 'pending' | 'synced';
+}
+
 export type MemoSaveState =
   | 'failed'
   | 'idle'

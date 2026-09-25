@@ -352,9 +352,10 @@ export function SiteFooter() {
         <div>
           <Brand />
           <p className="footer-slogan">
-            {text('적기만 하세요. 나머지는 ', 'Just write. ')}
-            <span className="wordmark-text">Subnota</span>
-            {text('가 합니다', ' takes care of the rest.')}
+            {text(
+              '필요한 생각이 먼저 찾아오는 작업 공간',
+              'A workspace that brings your ideas back when you need them.',
+            )}
           </p>
           <p className="footer-copyright">
             © {new Date().getFullYear()} Subnota. All rights reserved.

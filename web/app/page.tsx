@@ -176,16 +176,9 @@ export default function Home() {
 
           <div className="hero-inner shell">
             <h1>
-              {text('적기만 하세요.', 'Just write.')}
-              <br />
-              {text('나머지는', 'Subnota')}
-              <br aria-hidden="true" className="hero-mobile-title-break" />{' '}
-              {language === 'ko' ? (
-                <>
-                  <span className="wordmark-text">Subnota</span>가 합니다
-                </>
-              ) : (
-                'takes care of the rest.'
+              {text(
+                '필요한 생각이 먼저 찾아오는 작업 공간',
+                'A workspace that brings your ideas back when you need them.',
               )}
             </h1>
             <DownloadRow />
@@ -297,9 +290,10 @@ export default function Home() {
           <p>
             {text('지금은 무료로 시작할 수 있습니다.', 'Start for free today.')}
             <br />
-            {text('필요한 순간에 적고, 나머지는 ', 'Write when you need to and leave the rest to ')}
-            <span className="wordmark-text">Subnota</span>
-            {text('에 맡겨 보세요.', '.')}
+            {text(
+              '필요한 생각이 먼저 찾아오는 작업 공간',
+              'A workspace that brings your ideas back when you need them.',
+            )}
           </p>
           <DownloadRow />
         </section>

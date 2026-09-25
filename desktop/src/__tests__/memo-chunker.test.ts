@@ -133,7 +133,7 @@ describe('memoChunker line-block window', () => {
 
 // 구분선/빈 체크박스는 임베딩해도 의미 없는 벡터가 되어 검색을 오염시킨다.
 // 반대로 '리팩토링' 같은 짧은 실제 단어는 반드시 살아야 한다 — 그래서
-// 길이가 아니라 "글자·숫자가 있는가"로 판정한다. 백엔드 is_meaningful_chunk와 동일.
+// 길이가 아니라 "글자·숫자가 있는가"로 판정한다.
 describe('memoChunker meaningless chunk filter', () => {
   it('rejects separators and empty markdown skeletons', () => {
     for (const noise of ['─────────', '---', '***', '- [ ]', '| --- |', '   ', '...']) {

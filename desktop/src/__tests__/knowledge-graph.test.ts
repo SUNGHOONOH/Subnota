@@ -7,13 +7,13 @@ import {
   buildKnowledgeGraph,
   capCrossTopicBridges,
   capIntraTopicEdges,
+  createCommunityMemoGroups,
   createEdgeReducer,
   createNodeReducer,
   getSimilarityMapGeometry,
   GRAPH_COLORS,
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
-  LINK_NODE_ICON,
   NOTE_NODE_ICON,
 } from '../features/memo/components/knowledgeGraph';
 
@@ -102,18 +102,18 @@ describe('selection reducers', () => {
   it('node reducer mutes unrelated nodes while hovering', () => {
     const graph = buildKnowledgeGraph(
       [
-        { id: 'topic:t1', kind: 'topic', label: 'T1', topicId: 't1', x: 0, y: 0 },
-        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 1, y: 0 },
-        { id: 'topic:t2', kind: 'topic', label: 'T2', topicId: 't2', x: 2, y: 0 },
+        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 0, y: 0 },
+        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't1', x: 1, y: 0 },
+        { id: 'memo:m3', kind: 'memo', label: 'M3', topicId: 't2', x: 2, y: 0 },
       ],
-      [{ source: 'topic:t1', target: 'memo:m1' }],
+      [{ source: 'memo:m1', target: 'memo:m2' }],
     );
-    const reduce = createNodeReducer(graph, () => null, () => 'topic:t1');
+    const reduce = createNodeReducer(graph, () => null, () => 'memo:m1');
 
-    expect(reduce('memo:m1', { kind: 'memo', topicId: 't1', size: 8 })).toMatchObject({
+    expect(reduce('memo:m2', { kind: 'memo', topicId: 't1', size: 8 })).toMatchObject({
       forceLabel: true,
     });
-    expect(reduce('topic:t2', { kind: 'topic', topicId: 't2', size: 8 })).toMatchObject({
+    expect(reduce('memo:m3', { kind: 'memo', topicId: 't2', size: 8 })).toMatchObject({
       color: GRAPH_COLORS.mutedNode,
       forceLabel: false,
     });
@@ -143,21 +143,21 @@ describe('selection reducers', () => {
   it('node and edge reducers focus one topic and mute the rest', () => {
     const graph = buildKnowledgeGraph(
       [
-        { id: 'topic:t1', kind: 'topic', label: 'T1', topicId: 't1', x: 0, y: 0 },
-        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 1, y: 0 },
-        { id: 'topic:t2', kind: 'topic', label: 'T2', topicId: 't2', x: 2, y: 0 },
-        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't2', x: 3, y: 0 },
+        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 0, y: 0 },
+        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't1', x: 1, y: 0 },
+        { id: 'memo:m3', kind: 'memo', label: 'M3', topicId: 't2', x: 2, y: 0 },
+        { id: 'memo:m4', kind: 'memo', label: 'M4', topicId: 't2', x: 3, y: 0 },
       ],
       [
-        { id: 't1-m1', source: 'topic:t1', target: 'memo:m1' },
-        { id: 't2-m2', source: 'topic:t2', target: 'memo:m2' },
         { id: 'm1-m2', source: 'memo:m1', target: 'memo:m2' },
+        { id: 'm3-m4', source: 'memo:m3', target: 'memo:m4' },
+        { id: 'm2-m3', source: 'memo:m2', target: 'memo:m3' },
       ],
     );
     const reduceNode = createNodeReducer(graph, () => null, () => null, () => 't1');
     const reduceEdge = createEdgeReducer(graph, () => null, () => null, () => 't1');
-    const focusedEdge = 't1-m1';
-    const mutedEdge = 'm1-m2';
+    const focusedEdge = 'm1-m2';
+    const mutedEdge = 'm2-m3';
 
     expect(
       reduceNode('memo:m1', { color: '#cc785c', kind: 'memo', size: 8, topicId: 't1' }),
@@ -165,7 +165,7 @@ describe('selection reducers', () => {
       color: '#cc785c',
     });
     expect(
-      reduceNode('memo:m2', { color: '#cc785c', kind: 'memo', size: 8, topicId: 't2' }),
+      reduceNode('memo:m3', { color: '#cc785c', kind: 'memo', size: 8, topicId: 't2' }),
     ).toMatchObject({
         color: GRAPH_COLORS.mutedNode,
         forceLabel: false,
@@ -174,6 +174,37 @@ describe('selection reducers', () => {
       color: '#cc785c',
     });
     expect(reduceEdge(mutedEdge, { color: '#cc785c', size: 1 })).toMatchObject({
+      color: GRAPH_COLORS.defaultEdge,
+      size: 0.35,
+    });
+  });
+
+  it('uses a boundary hover to emphasize its memo community before it is pinned', () => {
+    const graph = buildKnowledgeGraph(
+      [
+        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 0, y: 0 },
+        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't1', x: 1, y: 0 },
+        { id: 'memo:m3', kind: 'memo', label: 'M3', topicId: 't2', x: 2, y: 0 },
+      ],
+      [
+        { id: 'm1-m2', source: 'memo:m1', target: 'memo:m2' },
+        { id: 'm2-m3', source: 'memo:m2', target: 'memo:m3' },
+      ],
+    );
+    const reduceNode = createNodeReducer(graph, () => null, () => null, () => null, () => 't1');
+    const reduceEdge = createEdgeReducer(graph, () => null, () => null, () => null, () => 't1');
+
+    expect(reduceNode('memo:m1', { kind: 'memo', size: 8, topicId: 't1' })).toMatchObject({
+      size: 8,
+    });
+    expect(reduceNode('memo:m3', { kind: 'memo', size: 8, topicId: 't2' })).toMatchObject({
+      color: GRAPH_COLORS.mutedNode,
+      size: 7,
+    });
+    expect(reduceEdge('m1-m2', { color: '#cc785c', size: 1 })).toMatchObject({
+      color: '#cc785c',
+    });
+    expect(reduceEdge('m2-m3', { color: '#cc785c', size: 1 })).toMatchObject({
       color: GRAPH_COLORS.defaultEdge,
       size: 0.35,
     });
@@ -243,17 +274,12 @@ describe('graph node hover details', () => {
 describe('applyTopicNetworkLayout', () => {
   // Two seeded clusters: t1 owns m1/m2 (densely linked), t2 owns m3.
   const clusterNodes: KnowledgeGraphNode[] = [
-    { id: 'topic:t1', kind: 'topic', label: 'T1', topicId: 't1', x: 10, y: 0 },
     { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 11, y: 1 },
     { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't1', x: 12, y: 0 },
-    { id: 'topic:t2', kind: 'topic', label: 'T2', topicId: 't2', x: -10, y: 0 },
     { id: 'memo:m3', kind: 'memo', label: 'M3', topicId: 't2', x: -11, y: 1 },
   ];
   const clusterEdges: KnowledgeGraphEdge[] = [
-    { source: 'topic:t1', target: 'memo:m1', weight: 0.7 },
-    { source: 'topic:t1', target: 'memo:m2', weight: 0.6 },
     { source: 'memo:m1', target: 'memo:m2', weight: 0.9 },
-    { source: 'topic:t2', target: 'memo:m3', weight: 0.7 },
   ];
 
   const layout = () => {
@@ -262,13 +288,12 @@ describe('applyTopicNetworkLayout', () => {
     return graph;
   };
 
-  it('sizes memo nodes by weighted degree and leaves topic nodes alone', () => {
+  it('sizes memo nodes by weighted degree', () => {
     const graph = layout();
 
     const m1 = graph.getNodeAttribute('memo:m1', 'size') as number;
     const m3 = graph.getNodeAttribute('memo:m3', 'size') as number;
     expect(m1).toBeGreaterThan(m3);
-    expect(graph.getNodeAttribute('topic:t1', 'size')).toBe(8);
   });
 
   it('is deterministic and moves nodes away from their seed positions', () => {
@@ -372,21 +397,38 @@ describe('capIntraTopicEdges', () => {
   });
 });
 
-describe('topic node border', () => {
-  it('gives topic nodes a border type and dark ring, memo nodes none', () => {
+describe('memo-only topic maps', () => {
+  it('keeps topic membership as metadata instead of creating Topic hub nodes', () => {
     const graph = buildKnowledgeGraph(
       [
-        { id: 'topic:t1', kind: 'topic', label: 'T', x: 0, y: 0 },
-        { id: 'memo:m1', kind: 'memo', label: 'M', x: 1, y: 1 },
+        { id: 'memo:m1', kind: 'memo', label: 'M1', topicId: 't1', x: 0, y: 0 },
+        { id: 'memo:m2', kind: 'memo', label: 'M2', topicId: 't1', x: 1, y: 1 },
       ],
-      [],
+      [{ source: 'memo:m1', target: 'memo:m2' }],
     );
 
-    expect(graph.getNodeAttribute('topic:t1', 'type')).toBe('border');
-    expect(graph.getNodeAttribute('topic:t1', 'borderColor')).toBe(
-      GRAPH_COLORS.active,
+    expect(graph.nodes()).toEqual(['memo:m1', 'memo:m2']);
+    expect(graph.getNodeAttribute('memo:m1', 'topicId')).toBe('t1');
+  });
+
+  it('excludes inbox and root helpers from a community boundary', () => {
+    const groups = createCommunityMemoGroups(
+      [
+        { id: 'memo:a', kind: 'memo', label: 'A', topicId: 't1', x: 0, y: 0 },
+        { id: 'inbox:x', kind: 'inbox', label: 'Link', topicId: 't1', x: 1, y: 0 },
+        { id: 'root', kind: 'root', label: 'Root', topicId: 't1', x: 2, y: 0 },
+      ],
+      [{ color: '#cc785c', id: 't1', label: 'Topic one' }],
     );
-    expect(graph.getNodeAttribute('memo:m1', 'type')).toBeUndefined();
+
+    expect(groups).toEqual([
+      {
+        color: '#cc785c',
+        id: 't1',
+        label: 'Topic one',
+        memoNodeIds: ['memo:a'],
+      },
+    ]);
   });
 });
 
@@ -406,12 +448,12 @@ describe('node icons', () => {
     expect(graph.getNodeAttribute('network:b', 'type')).toBeUndefined();
   });
 
-  it('keeps the border type on topic hubs even when an image is set', () => {
+  it('keeps memo pictograms independent of topic metadata', () => {
     const graph = buildKnowledgeGraph(
-      [{ id: 'topic:t', image: LINK_NODE_ICON, kind: 'topic', label: 'T', x: 0, y: 0 }],
+      [{ id: 'memo:t', image: NOTE_NODE_ICON, kind: 'memo', label: 'T', topicId: 't', x: 0, y: 0 }],
       [],
     );
 
-    expect(graph.getNodeAttribute('topic:t', 'type')).toBe('border');
+    expect(graph.getNodeAttribute('memo:t', 'type')).toBe('icon');
   });
 });

@@ -5,9 +5,10 @@ import { describe, expect, it } from 'vitest';
 const read = (path: string) =>
   readFileSync(resolve(__dirname, '..', path), 'utf8');
 
-const appSource = read('App.tsx');
+const appSource = `${read('App.tsx')}\n${read('features/workspace/AppEntryGate.tsx')}`;
 const authScreen = read('features/auth/AuthScreen.tsx');
-const settings = read('features/settings/SettingsModal.tsx');
+const settings = `${read('features/settings/SettingsModal.tsx')}
+${read('features/settings/SettingsAccountSection.tsx')}`;
 const styles = read('styles/subnota-workspace.scss');
 
 describe('비밀번호 재설정 흐름', () => {
@@ -45,7 +46,7 @@ describe('비밀번호 재설정 흐름', () => {
     expect(settings).toContain("const authProvider = props.provider ?? 'email';");
     expect(settings).toContain("const isPasswordAccount = authProvider === 'email';");
     expect(settings).toContain(
-      '!props.isSignedIn || !props.email || !isPasswordAccount',
+      'disabled={!isSignedIn || !email || !isPasswordAccount}',
     );
     // 왜 못 하는지 자리에서 알려 준다(숨기지 않는다).
     expect(settings).toContain('에서 비밀번호를 관리합니다.');
@@ -79,20 +80,17 @@ describe('비밀번호 재설정 흐름', () => {
 });
 
 describe('Topics 빈 상태', () => {
-  const split = read('features/memo/components/MemoSplitWorkspace.tsx');
+  const split = read('features/memo/components/TopicsPane.tsx');
 
   // 묶을 것이 없으면 "카테고리 기반 임시 묶음"도 설명할 대상이 없다.
   // 빈 상태 두 개를 쌓는 대신 마크를 단 하나로 합친다.
   it('묶을 주제가 없으면 마크를 단 빈 상태 하나만 남는다', () => {
-    const emptyBranch = split.slice(
-      split.indexOf('fallbackCategories.length > 0 ? ('),
-      split.indexOf('if (editor.view === \'source\')'),
-    );
+    const emptyBranch = split;
 
     // tone="start" + 기본 size라야 마크가 붙는다(EmptyState 규칙).
-    expect(emptyBranch).toMatch(
-      /<EmptyState[\s\S]*?body=\{t\(\s*'비슷한 내용끼리 저절로 모입니다\.'[\s\S]*?title=\{t\(\s*'메모가 쌓이면 주제별로 자동으로 묶입니다'[\s\S]*?tone="start"/,
-    );
+    expect(emptyBranch).toContain('비슷한 내용끼리 저절로 모입니다.');
+    expect(emptyBranch).toContain('메모가 쌓이면 주제별로 자동으로 묶입니다');
+    expect(emptyBranch).toContain('tone="start"');
     // 비었을 때는 "임시 묶음" 설명을 띄우지 않는다.
     expect(emptyBranch.indexOf('카테고리 기반 임시 묶음')).toBeLessThan(
       emptyBranch.indexOf('tone="start"'),

@@ -62,6 +62,7 @@ publishes the Squirrel Setup EXE.
 
 - Mini Subnota and its global shortcut are available on macOS and Windows.
 - The main Inbox, including manual URL capture, is available on both platforms.
+- Nearby and ambient memo search use the on-device embedding index on both platforms.
 - Native current-browser-page capture and recent captures in the tray are
   macOS-only.
 - The Windows browser-extension clipper is reserved for a later release.

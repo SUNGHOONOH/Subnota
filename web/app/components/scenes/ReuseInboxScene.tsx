@@ -18,9 +18,10 @@ function SubnotaPagePreview() {
       <div className="safari-page-content">
         <span className="safari-page-content__eyebrow">SUBNOTA</span>
         <h3>
-          {text('적기만 하세요.', 'Just write.')}
-          <br />
-          {text('나머지는 ', '')}<span className="wordmark-text">Subnota</span>{text('가 합니다', ' takes care of the rest')}
+          {text(
+            '필요한 생각이 먼저 찾아오는 작업 공간',
+            'A workspace that brings your ideas back when you need them.',
+          )}
         </h3>
         <div className="safari-page-content__rule" />
         <div className="safari-page-content__lines">

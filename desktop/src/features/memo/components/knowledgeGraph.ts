@@ -8,7 +8,9 @@ export interface KnowledgeGraphNode {
   id: string;
   // Pictogram data-URI drawn as a white glyph over the node disc.
   image?: string;
-  kind?: 'inbox' | 'memo' | 'root' | 'topic';
+  // Topic is deliberately metadata, never a graph node. The Topics map is a
+  // memo-to-memo graph; the community boundary carries the topic label.
+  kind?: 'inbox' | 'memo' | 'root';
   label: string;
   memoId?: string;
   muted?: boolean;
@@ -39,18 +41,28 @@ export interface KnowledgeGraphEdge {
   weight?: number;
 }
 
-/**
- * 그래프는 데이터다. 그래서 노드는 브랜드색이 아니라 초록 계열이다 —
- * 브랜드색을 여기 쓰면 "관련 있는 메모"와 "여기를 누르라"가 같은 색이 된다.
- *
- * 값은 로고 잎의 말라카이트(#0b6e4f)와 캘린더 기본색(#66705A)의 중간이다.
- * 로고 쪽만 쓰면 캘린더와 남남이 되고, 캘린더 쪽만 쓰면 올리브라 흰 캔버스
- * 위에서 노드가 묻힌다. 두 초록을 잇는 자리라 가운데를 쓴다.
- *
- * Sigma에 넘기는 값이라 CSS 변수를 못 쓰고 리터럴로 둔다. 세 값이 갈라지지
- * 않도록 바꿀 때는 `_color-tokens.scss`의 두 원본을 같이 확인할 것.
- */
-export const GRAPH_NODE_COLOR = '#396f55';
+export interface KnowledgeGraphCommunity {
+  color: string;
+  id: string;
+  label: string;
+}
+
+export interface KnowledgeGraphPoint {
+  x: number;
+  y: number;
+}
+
+export interface KnowledgeGraphCommunityRegion extends KnowledgeGraphCommunity {
+  polygon: KnowledgeGraphPoint[];
+}
+
+export interface KnowledgeGraphCommunityMembers extends KnowledgeGraphCommunity {
+  memoNodeIds: string[];
+}
+
+// Memo nodes stay neutral. Topic identity belongs to the translucent dashed
+// community boundary, not to the note node itself.
+export const GRAPH_NODE_COLOR = '#69717a';
 
 export const GRAPH_COLORS = {
   active: '#1d1d1f',
@@ -65,6 +77,190 @@ export const GRAPH_INBOX_NODE = '#6d7185';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const pointCrossProduct = (
+  origin: KnowledgeGraphPoint,
+  a: KnowledgeGraphPoint,
+  b: KnowledgeGraphPoint,
+) => (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x);
+
+const makeCirclePolygon = (
+  center: KnowledgeGraphPoint,
+  radius: number,
+  segments = 24,
+) =>
+  Array.from({ length: segments }, (_value, index) => {
+    const angle = (index / segments) * Math.PI * 2;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
+    };
+  });
+
+const makeCapsulePolygon = (
+  start: KnowledgeGraphPoint,
+  end: KnowledgeGraphPoint,
+  radius: number,
+) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const angle = Math.atan2(dy, dx);
+  const points: KnowledgeGraphPoint[] = [];
+  const arcSegments = 12;
+
+  for (let index = 0; index <= arcSegments; index += 1) {
+    const arcAngle = angle + Math.PI / 2 - (index / arcSegments) * Math.PI;
+    points.push({
+      x: end.x + Math.cos(arcAngle) * radius,
+      y: end.y + Math.sin(arcAngle) * radius,
+    });
+  }
+  for (let index = 0; index <= arcSegments; index += 1) {
+    const arcAngle = angle - Math.PI / 2 - (index / arcSegments) * Math.PI;
+    points.push({
+      x: start.x + Math.cos(arcAngle) * radius,
+      y: start.y + Math.sin(arcAngle) * radius,
+    });
+  }
+
+  return points;
+};
+
+/**
+ * Builds a padded community boundary in viewport coordinates. One-note topics
+ * become circles and two-note (or collinear) topics become capsules, so every
+ * community remains visible and targetable before it grows a conventional
+ * convex hull.
+ */
+export const createCommunityPolygon = (
+  points: KnowledgeGraphPoint[],
+  padding: number,
+): KnowledgeGraphPoint[] => {
+  const uniquePoints = Array.from(
+    new Map(points.map(point => [`${point.x}:${point.y}`, point])).values(),
+  );
+  if (uniquePoints.length === 0) {
+    return [];
+  }
+
+  const safePadding = Math.max(0, padding);
+  if (uniquePoints.length === 1) {
+    return makeCirclePolygon(uniquePoints[0], safePadding);
+  }
+
+  const sorted = [...uniquePoints].sort((a, b) => a.x - b.x || a.y - b.y);
+  const lower: KnowledgeGraphPoint[] = [];
+  for (const point of sorted) {
+    while (
+      lower.length >= 2 &&
+      pointCrossProduct(lower[lower.length - 2], lower[lower.length - 1], point) <= 0
+    ) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+
+  const upper: KnowledgeGraphPoint[] = [];
+  for (const point of [...sorted].reverse()) {
+    while (
+      upper.length >= 2 &&
+      pointCrossProduct(upper[upper.length - 2], upper[upper.length - 1], point) <= 0
+    ) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+
+  const hull = [...lower.slice(0, -1), ...upper.slice(0, -1)];
+  if (hull.length === 2) {
+    return makeCapsulePolygon(hull[0], hull[1], safePadding);
+  }
+
+  const center = hull.reduce(
+    (sum, point) => ({ x: sum.x + point.x / hull.length, y: sum.y + point.y / hull.length }),
+    { x: 0, y: 0 },
+  );
+
+  return hull.map(point => {
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) {
+      return point;
+    }
+    return {
+      x: point.x + (dx / distance) * safePadding,
+      y: point.y + (dy / distance) * safePadding,
+    };
+  });
+};
+
+export const isPointInCommunityPolygon = (
+  point: KnowledgeGraphPoint,
+  polygon: KnowledgeGraphPoint[],
+) => {
+  if (polygon.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current++) {
+    const a = polygon[current];
+    const b = polygon[previous];
+    const crossesRay =
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (crossesRay) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+const polygonArea = (polygon: KnowledgeGraphPoint[]) => {
+  let area = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(area / 2);
+};
+
+/** Chooses the smallest containing region when community hulls overlap. */
+export const findCommunityRegionAtPoint = (
+  regions: KnowledgeGraphCommunityRegion[],
+  point: KnowledgeGraphPoint,
+) =>
+  regions
+    .filter(region => isPointInCommunityPolygon(point, region.polygon))
+    .sort((a, b) => polygonArea(a.polygon) - polygonArea(b.polygon))[0] ?? null;
+
+/**
+ * Caches the only nodes that may define a community boundary. Inbox and root
+ * helpers are intentionally excluded: they can be displayed on the map, but
+ * never turn into evidence for a topic area or expand one visually.
+ */
+export const createCommunityMemoGroups = (
+  nodes: KnowledgeGraphNode[],
+  communities: KnowledgeGraphCommunity[],
+): KnowledgeGraphCommunityMembers[] => {
+  const memoIdsByTopic = new Map<string, string[]>();
+
+  nodes.forEach(node => {
+    if (node.kind !== 'memo' || !node.topicId) {
+      return;
+    }
+    const memoNodeIds = memoIdsByTopic.get(node.topicId) ?? [];
+    memoNodeIds.push(node.id);
+    memoIdsByTopic.set(node.topicId, memoNodeIds);
+  });
+
+  return communities.flatMap(community => {
+    const memoNodeIds = memoIdsByTopic.get(community.id) ?? [];
+    return memoNodeIds.length > 0 ? [{ ...community, memoNodeIds }] : [];
+  });
+};
 
 // A surrounding-memo map needs an absolute floor so a weak search result
 // cannot masquerade as a strong match. Within that truthful range, give the
@@ -132,11 +328,6 @@ export const buildKnowledgeGraph = (
       // Icon nodes: disc + white pictogram (compound 'icon' program).
       ...(node.image
         ? { image: node.image, type: 'icon' }
-        : {}),
-      // Topic hubs get a dark ring (border node program) so they read as a
-      // different species from memo nodes at a glance. Wins over the icon.
-      ...(node.kind === 'topic'
-        ? { borderColor: GRAPH_COLORS.active, type: 'border' }
         : {}),
     });
   });
@@ -296,6 +487,7 @@ export const capIntraTopicEdges = <T extends MemoEdgeLike>(
 type GetActiveId = () => string | null | undefined;
 type GetHoveredId = () => string | null | undefined;
 type GetFocusedTopicId = () => string | null | undefined;
+type GetHoveredTopicId = () => string | null | undefined;
 
 const getStringAttribute = (data: Record<string, unknown>, key: string) =>
   typeof data[key] === 'string' ? data[key] : null;
@@ -335,9 +527,12 @@ export const createNodeReducer =
     getActiveId: GetActiveId,
     getHoveredId: GetHoveredId = () => null,
     getFocusedTopicId: GetFocusedTopicId = () => null,
+    getHoveredTopicId: GetHoveredTopicId = () => null,
   ) =>
   (node: string, data: Record<string, unknown>): Record<string, unknown> => {
-    const focusedTopicId = getFocusedTopicId();
+    // A pinned topic wins over a transient hover. Both operate on memo topic
+    // metadata rather than an artificial Topic hub node.
+    const focusedTopicId = getFocusedTopicId() ?? getHoveredTopicId();
     const nodeTopicId = getStringAttribute(data, 'topicId');
     if (focusedTopicId && nodeTopicId !== focusedTopicId) {
       return {
@@ -389,9 +584,10 @@ export const createEdgeReducer =
     getActiveId: GetActiveId,
     getHoveredId: GetHoveredId = () => null,
     getFocusedTopicId: GetFocusedTopicId = () => null,
+    getHoveredTopicId: GetHoveredTopicId = () => null,
   ) =>
   (edge: string, data: Record<string, unknown>): Record<string, unknown> => {
-    const focusedTopicId = getFocusedTopicId();
+    const focusedTopicId = getFocusedTopicId() ?? getHoveredTopicId();
     if (focusedTopicId) {
       const sourceTopicId = getStringAttribute(
         graph.getNodeAttributes(graph.source(edge)) as Record<string, unknown>,

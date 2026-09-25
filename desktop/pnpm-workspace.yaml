@@ -1,7 +1,7 @@
 nodeLinker: hoisted
 overrides:
   adm-zip: 0.6.0
-  sharp: 0.35.3
+  sharp: 0.35.4
 allowBuilds:
   '@parcel/watcher': true
   # core-js의 postinstall은 후원 안내를 출력할 뿐이라 실행할 이유가 없다.
