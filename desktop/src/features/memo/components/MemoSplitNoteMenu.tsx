@@ -1,8 +1,10 @@
 import {
+  Check,
   ClipboardCopy,
   Cloud,
   Copy,
   Download,
+  Folder,
   MoreHorizontal,
   Pin,
   PinSolid,
@@ -11,7 +13,7 @@ import {
 import TooltipIconButton from '../../../components/TooltipIconButton';
 import { copyTextToClipboard } from '../../../lib/copy-code';
 import type { MemoSavePresentation } from '../../../lib/memoSaveStatus';
-import type { MemoRow } from '../../../types';
+import type { MemoFolder, MemoFolderMembership, MemoRow } from '../../../types';
 import type {
   MemoSplitEditorState,
   MemoSplitPaneState,
@@ -26,6 +28,8 @@ export type NoteMenuFeedback = {
 
 interface MemoSplitNoteMenuProps {
   editor: MemoSplitEditorState;
+  folderMemberships: MemoFolderMembership[];
+  folders: MemoFolder[];
   isMemoSyncRetrying: boolean;
   isNoteMenuOpen: boolean;
   memo: MemoRow | null;
@@ -42,6 +46,7 @@ interface MemoSplitNoteMenuProps {
   onSetMenuDropdownElement: (element: HTMLDivElement | null) => void;
   onSetFeedback: (feedback: NoteMenuFeedback | null) => void;
   onTogglePinMemo?: (memoId: string) => void;
+  onToggleMemoFolder?: (folderId: string, memoId: string) => Promise<void>;
   onToggleMenu: () => void;
   pane: MemoSplitPaneState;
   pinnedMemoIds: string[];
@@ -52,6 +57,8 @@ interface MemoSplitNoteMenuProps {
 
 const MemoSplitNoteMenu = ({
   editor,
+  folderMemberships,
+  folders,
   isMemoSyncRetrying,
   isNoteMenuOpen,
   memo,
@@ -68,6 +75,7 @@ const MemoSplitNoteMenu = ({
   onSetMenuDropdownElement,
   onSetFeedback,
   onTogglePinMemo,
+  onToggleMemoFolder,
   onToggleMenu,
   pane,
   pinnedMemoIds,
@@ -153,6 +161,51 @@ const MemoSplitNoteMenu = ({
               : t('메모 고정', 'Pin note')}
           </span>
         </button>
+        {memo && onToggleMemoFolder && folders.length > 0 && (
+          <>
+            <div className="split-menu-separator" />
+            <div className="split-menu-section-label">
+              {t('폴더에 넣기', 'Add to folder')}
+            </div>
+            <div className="split-menu-folder-list">
+              {folders.map((folder) => {
+                const isFiled = folderMemberships.some(
+                  (membership) =>
+                    membership.folderId === folder.id &&
+                    membership.memoId === memo.id,
+                );
+                return (
+                  <button
+                    aria-pressed={isFiled}
+                    className="split-menu-item"
+                    key={folder.id}
+                    onClick={async () => {
+                      // 메뉴는 열어 둔다 — 체크와 문구가 바뀌는 것이 곧 확인이다.
+                      await onToggleMemoFolder(folder.id, memo.id);
+                      onSetFeedback({
+                        message: isFiled
+                          ? t(
+                              `'${folder.name}'에서 뺐습니다.`,
+                              `Removed from '${folder.name}'.`,
+                            )
+                          : t(
+                              `'${folder.name}'에 넣었습니다.`,
+                              `Added to '${folder.name}'.`,
+                            ),
+                        tone: 'success',
+                      });
+                    }}
+                    type="button"
+                  >
+                    {isFiled ? <Check size={15} /> : <Folder size={15} />}
+                    <span>{folder.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="split-menu-separator" />
+          </>
+        )}
         <button
           className="split-menu-item"
           onClick={async () => {

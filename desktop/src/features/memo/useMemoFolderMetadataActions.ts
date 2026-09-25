@@ -5,7 +5,6 @@ import { createUuid } from '../../lib/contentHash';
 import { getLocalWorkspaceOwner, saveLocalMemoFolder } from '../../services/local/offlineStore';
 import { upsertMemoFolder } from '../../services/supabase/data';
 import type { MemoFolder, MemoFolderMode } from '../../types';
-import { createFolderClassifierTerms } from './folderOrganization';
 
 interface UseMemoFolderMetadataActionsOptions {
   folderMutationQueueRef: MutableRefObject<{
@@ -40,16 +39,13 @@ export const useMemoFolderMetadataActions = ({
     }).catch(error => console.warn(warning, error));
   };
 
-  const createMemoFolder = async ({ description = '', mode, name }: {
-    description?: string;
+  const createMemoFolder = async ({ mode, name }: {
     mode: MemoFolderMode;
     name: string;
   }) => {
     const now = new Date().toISOString();
     const folder: MemoFolder = {
-      classifierTerms: createFolderClassifierTerms([name, description]),
       createdAt: now,
-      description: description.trim(),
       id: createUuid(),
       local_sync_status: 'pending',
       mode,
@@ -75,14 +71,12 @@ export const useMemoFolderMetadataActions = ({
     await syncFolder(next, folderOwnerId, 'Folder mode sync deferred:');
   };
 
-  const updateMemoFolderDetails = async (folderId: string, draft: { description: string; name: string }) => {
+  const renameMemoFolder = async (folderId: string, draftName: string) => {
     const current = memoFolders.find(folder => folder.id === folderId);
-    const name = draft.name.trim();
+    const name = draftName.trim();
     if (!current || !name) return;
     const next = {
       ...current,
-      classifierTerms: createFolderClassifierTerms([...(current.classifierTerms ?? []), draft.name, draft.description]),
-      description: draft.description.trim(),
       local_sync_status: 'pending' as const,
       name,
       updatedAt: new Date().toISOString(),
@@ -90,8 +84,8 @@ export const useMemoFolderMetadataActions = ({
     const folderOwnerId = ownerId();
     setMemoFolders(folders => folders.map(folder => folder.id === folderId ? next : folder));
     await saveLocalMemoFolder(next, folderOwnerId);
-    await syncFolder(next, folderOwnerId, 'Folder details sync deferred:');
+    await syncFolder(next, folderOwnerId, 'Folder rename sync deferred:');
   };
 
-  return { createMemoFolder, updateMemoFolderDetails, updateMemoFolderMode };
+  return { createMemoFolder, renameMemoFolder, updateMemoFolderMode };
 };

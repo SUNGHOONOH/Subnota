@@ -1029,7 +1029,7 @@ const App = () => {
     savePinnedMemoIds(session?.user.id ?? null, next);
   };
 
-  const { createMemoFolder, updateMemoFolderDetails, updateMemoFolderMode } =
+  const { createMemoFolder, renameMemoFolder, updateMemoFolderMode } =
     useMemoFolderMetadataActions({
       folderMutationQueueRef,
       memoFolders,
@@ -1039,27 +1039,34 @@ const App = () => {
 
   const { toggleMemoFolderMembership } = useMemoFolderMembershipActions({
     folderMembershipMutationQueueRef,
-    folderMutationQueueRef,
     memoFolderExclusions,
     memoFolderMemberships,
     memoFolders,
-    memos,
     session,
     setMemoFolderExclusions,
     setMemoFolderMemberships,
-    setMemoFolders,
   });
 
   const { createMemoFolderFromTopic } = useCreateMemoFolderFromTopic({
     folderMutationQueueRef,
     memoFolders,
-    memos,
     session,
     setMemoFolderMemberships,
     setMemoFolders,
     topicClusters,
     topicMemberships,
   });
+
+  // 자동 폴더는 로컬 검색 모델로 분류한다. 모델이 없어도 평소엔 조용히 두고,
+  // 자동 폴더를 만들거나 자동으로 바꾸는 순간에만 다운로드 창으로 알린다.
+  const promptModelForAutomaticFolder = (mode: 'automatic' | 'manual') => {
+    if (mode !== 'automatic') return;
+    void window.electronAPI?.localEmbedStatus?.().then((status) => {
+      if (status && !status.ready && status.state !== 'downloading') {
+        setEmbeddingGateOpen(true);
+      }
+    });
+  };
 
   const { deleteUserMemoFolder } = useDeleteMemoFolder({
     folderExclusions: memoFolderExclusions,
@@ -1085,7 +1092,7 @@ const App = () => {
     selectMemo(memo);
     openMemoInFocusedSplitPane(memo);
   };
-  useAutomaticMemoFolderAssignments({ folderMembershipMutationQueueRef, memoFolderExclusions, memoFolderMemberships, memoFolders, session, setMemoFolderMemberships, topicClusters, topicMemberships });
+  useAutomaticMemoFolderAssignments({ folderMembershipMutationQueueRef, memoFolderExclusions, memoFolderMemberships, memoFolders, memos, session, setMemoFolderMemberships });
 
   const { saveCalendarBlock } = useSaveCalendarBlock({
     calendarBlocks,
@@ -1493,8 +1500,14 @@ const App = () => {
               onSessionRailResizeStateChange={setSessionRailResizing}
               memos={memos}
               onDeleteMemoById={(id) => void deleteMemoById(id)}
-              onCreateFolder={createMemoFolder}
-              onCreateFolderFromRecommendation={createMemoFolderFromTopic}
+              onCreateFolder={(draft) => {
+                promptModelForAutomaticFolder(draft.mode);
+                return createMemoFolder(draft);
+              }}
+              onCreateFolderFromRecommendation={(draft) => {
+                promptModelForAutomaticFolder(draft.mode);
+                return createMemoFolderFromTopic(draft);
+              }}
               onCreateMemoInFolder={createMemoInFolder}
               onDeleteFolder={deleteUserMemoFolder}
               onSelectMemo={(memo) => {
@@ -1503,8 +1516,11 @@ const App = () => {
               }}
               onTogglePinMemo={togglePinnedMemo}
               onToggleMemoFolder={toggleMemoFolderMembership}
-              onUpdateFolderMode={updateMemoFolderMode}
-              onUpdateFolderDetails={updateMemoFolderDetails}
+              onUpdateFolderMode={(folderId, mode) => {
+                promptModelForAutomaticFolder(mode);
+                return updateMemoFolderMode(folderId, mode);
+              }}
+              onRenameFolder={renameMemoFolder}
               pinnedMemoIds={pinnedMemoIds}
               folders={memoFolders}
               folderMemberships={memoFolderMemberships}
@@ -1519,7 +1535,10 @@ const App = () => {
                   ambientResult={ambientResult}
                   onMemoEditorBlur={handleMemoEditorBlur}
                   onRunAmbientSearch={runAmbientSearchNow}
-                  onCreateFolderFromTopic={createMemoFolderFromTopic}
+                  onCreateFolderFromTopic={(draft) => {
+                    promptModelForAutomaticFolder(draft.mode);
+                    return createMemoFolderFromTopic(draft);
+                  }}
                   folderSourceTopicIds={memoFolders.flatMap((folder) =>
                     folder.sourceTopicId ? [folder.sourceTopicId] : [],
                   )}
@@ -1566,6 +1585,9 @@ const App = () => {
                   onSelectMemoById={selectMemoById}
                   onTogglePinMemo={togglePinnedMemo}
                   pinnedMemoIds={pinnedMemoIds}
+                  folders={memoFolders}
+                  folderMemberships={memoFolderMemberships}
+                  onToggleMemoFolder={toggleMemoFolderMembership}
                   calendarBlocks={calendarBlocks}
                   calendarCategories={calendarCategories}
                   onCreateCalendarCategory={saveCalendarCategory}

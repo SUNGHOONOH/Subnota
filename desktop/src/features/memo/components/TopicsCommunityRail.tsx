@@ -9,6 +9,7 @@ import type {
   TopicMembership,
 } from '../../../types';
 import { TOPIC_COLORS } from '../topicsGraphModel';
+import MemoFolderForm from './MemoFolderForm';
 
 interface TopicsCommunityRailProps {
   activeMemoId?: string | null;
@@ -17,7 +18,6 @@ interface TopicsCommunityRailProps {
   language: 'en' | 'ko';
   memos: MemoRow[];
   onCreateFolderFromTopic?: (draft: {
-    description?: string;
     mode: 'automatic' | 'manual';
     name: string;
     topicId: string;
@@ -49,12 +49,9 @@ export default function TopicsCommunityRail({
     () => new Set(),
   );
   const [isTopicRailCollapsed, setIsTopicRailCollapsed] = useState(false);
-  const [topicFolderDraft, setTopicFolderDraft] = useState<{
-    description: string;
-    mode: 'automatic' | 'manual';
-    name: string;
-    topicId: string;
-  } | null>(null);
+  const [folderDraftTopicId, setFolderDraftTopicId] = useState<string | null>(
+    null,
+  );
 
   return (
     <aside
@@ -117,14 +114,7 @@ export default function TopicsCommunityRail({
                     }
                     className="topics-community-folder-action"
                     disabled={isFolder || !onCreateFolderFromTopic}
-                    onClick={() =>
-                      setTopicFolderDraft({
-                        description: cluster.keywords.join(' · '),
-                        mode: 'automatic',
-                        name: cluster.label,
-                        topicId: cluster.id,
-                      })
-                    }
+                    onClick={() => setFolderDraftTopicId(cluster.id)}
                     title={
                       isFolder
                         ? t('폴더로 만들어짐', 'Made into a folder')
@@ -185,21 +175,14 @@ export default function TopicsCommunityRail({
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {topicFolderDraft?.topicId === cluster.id && (
-                    <form
-                      className="topics-community-folder-create"
-                      onSubmit={event => {
-                        event.preventDefault();
-                        if (
-                          !onCreateFolderFromTopic ||
-                          !topicFolderDraft.name.trim()
-                        )
-                          return;
-                        void onCreateFolderFromTopic({
-                          ...topicFolderDraft,
-                          name: topicFolderDraft.name.trim(),
-                        })
-                          .then(() => setTopicFolderDraft(null))
+                  {folderDraftTopicId === cluster.id && onCreateFolderFromTopic && (
+                    <MemoFolderForm
+                      initialMode="automatic"
+                      initialName={cluster.label}
+                      onCancel={() => setFolderDraftTopicId(null)}
+                      onSubmit={value =>
+                        onCreateFolderFromTopic({ ...value, topicId: cluster.id })
+                          .then(() => setFolderDraftTopicId(null))
                           .catch(error => {
                             console.warn('Topic folder creation failed:', error);
                             window.alert(
@@ -208,90 +191,11 @@ export default function TopicsCommunityRail({
                                 'Could not create the folder. Please try again shortly.',
                               ),
                             );
-                          });
-                      }}
-                    >
-                      <input
-                        aria-label={t('폴더 이름', 'Folder name')}
-                        autoFocus
-                        maxLength={80}
-                        onChange={event =>
-                          setTopicFolderDraft(current =>
-                            current
-                              ? { ...current, name: event.target.value }
-                              : current,
-                          )
-                        }
-                        value={topicFolderDraft.name}
-                      />
-                      <input
-                        aria-label={t('폴더 설명', 'Folder description')}
-                        maxLength={500}
-                        onChange={event =>
-                          setTopicFolderDraft(current =>
-                            current
-                              ? { ...current, description: event.target.value }
-                              : current,
-                          )
-                        }
-                        placeholder={t(
-                          '한 줄 설명 (선택)',
-                          'One-line description (optional)',
-                        )}
-                        value={topicFolderDraft.description}
-                      />
-                      <div className="topics-community-folder-mode">
-                        <button
-                          aria-pressed={topicFolderDraft.mode === 'automatic'}
-                          onClick={() =>
-                            setTopicFolderDraft(current =>
-                              current
-                                ? { ...current, mode: 'automatic' }
-                                : current,
-                            )
-                          }
-                          type="button"
-                        >
-                          {t('자동', 'Automatic')}
-                        </button>
-                        <button
-                          aria-pressed={topicFolderDraft.mode === 'manual'}
-                          onClick={() =>
-                            setTopicFolderDraft(current =>
-                              current ? { ...current, mode: 'manual' } : current,
-                            )
-                          }
-                          type="button"
-                        >
-                          {t('수동', 'Manual')}
-                        </button>
-                      </div>
-                      <p className="topics-community-folder-help">
-                        {topicFolderDraft.mode === 'manual'
-                          ? t(
-                              '직접 넣은 메모만 유지합니다.',
-                              'Keeps only notes you add yourself.',
-                            )
-                          : t(
-                              '미분류 메모 중 어울리는 메모를 자동으로 추가합니다.',
-                              'Automatically adds matching unfiled notes.',
-                            )}
-                      </p>
-                      <div className="topics-community-folder-actions">
-                        <button
-                          onClick={() => setTopicFolderDraft(null)}
-                          type="button"
-                        >
-                          {t('취소', 'Cancel')}
-                        </button>
-                        <button
-                          disabled={!topicFolderDraft.name.trim()}
-                          type="submit"
-                        >
-                          {t('폴더 만들기', 'Create folder')}
-                        </button>
-                      </div>
-                    </form>
+                          })
+                      }
+                      submitLabel={t('폴더 만들기', 'Create folder')}
+                      t={t}
+                    />
                   )}
                 </div>
               );

@@ -438,6 +438,56 @@ contextBridge.exposeInMainWorld('electronAPI', {
       limit,
       minimumSimilarity,
     ),
+  localDbClassifyFolderMemos: (
+    ownerId: string | null,
+    request: {
+      candidateMemoIds: string[];
+      folders: Array<{ folderId: string; seedMemoIds: string[] }>;
+      margin: number;
+      minimumSeeds: number;
+      threshold: number;
+    },
+  ): Promise<Array<{ folderId: string; memoId: string; score: number }>> =>
+    ipcRenderer.invoke('local-db:classify-folder-memos', ownerId, request),
+  localDbSearchSimilarMemos: (
+    ownerId: string | null,
+    queryVectors: number[][],
+    excludeMemoId: string | null,
+    limit: number,
+    minimumSimilarity: number,
+  ): Promise<{
+    inbox: Array<{
+      chunkId: string;
+      chunkText: string;
+      createdAt: string | null;
+      inboxSessionId: string;
+      similarity: number;
+      sourceLabel: string | null;
+      sourceType: string | null;
+      sourceUrl: string | null;
+      thumbnailUrl: string | null;
+      title: string | null;
+    }>;
+    memos: Array<{
+      chunkId: string;
+      chunkText: string;
+      endIndex: number;
+      memoContent: string;
+      memoCreatedAt: string | null;
+      memoId: string;
+      memoUpdatedAt: string | null;
+      similarity: number;
+      startIndex: number;
+    }>;
+  }> =>
+    ipcRenderer.invoke(
+      'local-db:search-similar-memos',
+      ownerId,
+      queryVectors,
+      excludeMemoId,
+      limit,
+      minimumSimilarity,
+    ),
   localDbInboxVectorState: (
     ownerId: string | null,
   ): Promise<

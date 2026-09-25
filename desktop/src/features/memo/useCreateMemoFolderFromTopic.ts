@@ -19,12 +19,10 @@ import type {
   MemoFolder,
   MemoFolderMembership,
   MemoFolderMode,
-  MemoRow,
   TopicCluster,
   TopicMembership,
 } from '../../types';
 import {
-  createFolderClassifierTerms,
   createTopicFolderMemberships,
 } from './folderOrganization';
 
@@ -40,7 +38,6 @@ interface MutationQueueRef {
 interface UseCreateMemoFolderFromTopicOptions {
   folderMutationQueueRef: MutableRefObject<MutationQueueRef['current']>;
   memoFolders: MemoFolder[];
-  memos: MemoRow[];
   session: Session | null;
   setMemoFolderMemberships: Dispatch<SetStateAction<MemoFolderMembership[]>>;
   setMemoFolders: Dispatch<SetStateAction<MemoFolder[]>>;
@@ -51,7 +48,6 @@ interface UseCreateMemoFolderFromTopicOptions {
 export const useCreateMemoFolderFromTopic = ({
   folderMutationQueueRef,
   memoFolders,
-  memos,
   session,
   setMemoFolderMemberships,
   setMemoFolders,
@@ -59,13 +55,11 @@ export const useCreateMemoFolderFromTopic = ({
   topicMemberships,
 }: UseCreateMemoFolderFromTopicOptions) => {
   const createMemoFolderFromTopic = async ({
-    description,
     memoIds,
     mode = 'automatic',
     name,
     topicId,
   }: {
-    description?: string;
     memoIds?: string[];
     mode?: MemoFolderMode;
     name?: string;
@@ -80,21 +74,8 @@ export const useCreateMemoFolderFromTopic = ({
     if (existing) return existing;
 
     const now = new Date().toISOString();
-    const topicMemoIds = topicMemberships
-      .filter((membership) => membership.topicId === topicId)
-      .map((membership) => membership.memoId);
-    const topicMemoContents = memos
-      .filter((memo) => topicMemoIds.includes(memo.id))
-      .map((memo) => memo.content);
     const folder: MemoFolder = {
-      classifierTerms: createFolderClassifierTerms([
-        name?.trim() || cluster.label,
-        description?.trim() || cluster.keywords.join(' · '),
-        ...cluster.keywords,
-        ...topicMemoContents,
-      ]),
       createdAt: now,
-      description: description?.trim() || cluster.keywords.join(' · '),
       id: createUuid(),
       local_sync_status: 'pending',
       mode,

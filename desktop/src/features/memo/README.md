@@ -28,20 +28,24 @@
 - `useNearbyNotesSearch.ts`: 주변 메모 검색 요청·취소·빈 결과 처리·stale 응답 보호와 결과 반영
 - `useDeleteMemo.ts`: 메모 optimistic 삭제, 로컬 tombstone, active memo 보정과 Cloud archive
 - `memoCloudSync.ts`: 로컬 메모를 Cloud 동기화 요청 형태로 바꾸는 규칙
-- `useMemoFolderMetadataActions.ts`: 폴더 생성·이름/설명·모드 변경의 local-first 동기화
-- `useMemoFolderMembershipActions.ts`: 수동 폴더 이동과 자동 폴더 제외의 local-first 동기화
+- `useMemoFolderMetadataActions.ts`: 폴더 생성·이름·모드 변경의 local-first 동기화
+- `useMemoFolderMembershipActions.ts`: 수동 폴더 포함/제외 전환과 자동 폴더 제외 기록의 local-first 동기화
+- `useAutomaticMemoFolderAssignments.ts`: 로컬 청크 벡터(중심화 메모 평균)로 미분류 메모를 자동 폴더에 넣기 — 색인 완료·멤버십 변경 때 다시 실행
+- `folderOrganization.ts`: 폴더 추천, 자동 분류 요청(시드 2개·문턱 0.40·마진 0.03)과 제외 반영 규칙
 - `useCreateMemoFolderFromTopic.ts`: 명시적으로 승인한 Topic → 폴더 변환과 현재 Topic 멤버 복사·동기화
 - `useDeleteMemoFolder.ts`: 폴더와 하위 membership/exclusion의 optimistic 삭제·tombstone·Cloud 동기화
 - `syncPendingMemoFolders.ts`: 재연결·세션 활성화 때 보류 중인 폴더 변경을 순서대로 재전송
 - `components/TopicsPane.tsx`: Topics 그래프·주제 영역 rail·Topic 폴더 생성 화면
 - `components/TopicsCommunityRail.tsx`: 주제 영역 목록·접기·메모 열기·Topic 폴더 생성 UI
 - `topicsGraphModel.ts`: Topics 메모/Inbox 노드와 edge의 순수 그래프 모델 계산
+- `components/topicLayout.worker.ts`, `components/topicLayoutClient.ts`: Topics 지도 배치(ForceAtlas2 + noverlap)를 웹 워커에서 계산하고 결과 좌표를 그래프에 반영. 제목만 바뀌면 배치를 다시 하지 않는다
 - `components/NearbyNotesPane.tsx`: 주변 메모 검색 결과의 로딩·빈 상태·오류·그래프 화면
 - `components/SplitWorkspaceCommandBar.tsx`: 분할 작업 공간 상단의 사이드바 토글·전역 검색·문서 Undo/Redo 명령 바
 - `components/MemoContextMenu.tsx`: 메모 고정·폴더 이동·삭제 컨텍스트 메뉴
-- `components/MemoFolderActionsMenu.tsx`: 폴더별 새 메모·모드·편집·삭제 메뉴
-- `components/MemoFolderRecommendations.tsx`: 추천 폴더 목록과 검토 폼의 controlled UI
-- `components/MemoFolderSidebar.tsx`: 폴더 생성·추천·편집·접기와 폴더 메모 목록 표시
+- `components/MemoFolderActionsMenu.tsx`: 폴더별 새 메모·모드·이름 변경·삭제 메뉴
+- `components/MemoFolderRecommendations.tsx`: 추천 폴더 행(누르면 공용 폼이 펼쳐짐)
+- `components/MemoFolderForm.tsx`: ＋·추천·Topics가 함께 쓰는 폴더 이름 + 수동/자동 폼
+- `components/MemoFolderSidebar.tsx`: 폴더 생성·추천·이름 변경·접기, 폴더 메모 목록과 자동 폴더 상태 표시
 - `components/MemoTimeSidebar.tsx`: 시간순 섹션과 메모 행 표시, 메모 선택·컨텍스트 메뉴 이벤트 전달
 - `components/SourcePaneBody.tsx`: 출처 없음·Inbox 상세·요약 fallback 본문 조립
 - `components/RelatedSentenceCard.tsx`: 선택 문장 하이라이트 표시와 닫기 동작
@@ -49,11 +53,10 @@
 - `components/MemoSplitSpecialView.tsx`: 메모 외 split view의 picker·calendar·inbox·topics·source 조립
 - `components/MemoSplitPaneMenu.tsx`: 분할 패널 탭 닫기·보기 전환 드롭다운
 - `components/MemoSplitPaneHeader.tsx`: 탭 목록·드래그·패널 명령과 탭 메뉴 조립
-- `components/MemoSplitNoteMenu.tsx`: 노트 동기화 상태·고정·Markdown·복제·삭제 메뉴
+- `components/MemoSplitNoteMenu.tsx`: 노트 동기화 상태·고정·폴더에 넣기·Markdown·복제·삭제 메뉴
 - `components/MemoSplitScheduleOverlay.tsx`: 분할 메모의 날짜 선택 팝오버·일정 확인 포털 조립
 - `memoWorkspaceUtils.ts`: 메모 제목/미리보기, 폴더 멤버십 행, 접힌 섹션 복원 규칙
 - `memoSplitWorkspaceUtils.ts`: 탭 표시·에디터 상태 변환·미리보기 결과 어댑터의 순수 규칙
-- `useMemoFolderMembershipActions.ts`: 수동 폴더 포함/제외 전환과 classifier 용어 갱신의 local-first 동기화
 - `components/MemoSplitWorkspace.tsx`: 실제 분할 작업 공간 화면
 - App: 패널 생성·닫기와 각 메모 action의 wiring
 
@@ -64,8 +67,9 @@
 - 새 패널 ID는 같은 순간의 여러 생성 요청에서도 충돌 가능성을 낮춘다.
 - 동기화 입력은 메모의 마지막 콘텐츠 수정 시각과 정규화된 카테고리를 보존한다.
 - 폴더 메타데이터는 화면 반영 후 로컬 저장, 기존 mutation queue Cloud 동기화 순서를 유지한다.
-- 수동 이동은 기존 폴더와 중첩하지 않으며 Topic에서 만든 폴더만 예외적으로 중첩을 허용한다.
-- Topic → 폴더 변환은 이미 같은 Topic에서 만든 폴더가 있으면 기존 폴더를 반환하며, 변환 시점의 Topic 멤버와 분류어를 고정한다.
+- 메모는 여러 폴더에 동시에 들어갈 수 있다(폴더 안의 폴더는 없다). 자동 폴더만은 어느 폴더에도 없는 메모만 가져간다.
+- 자동 분류의 시드는 사용자가 넣은 메모(`user`, `topic_import`)뿐이다. 자동으로 들어온 메모로는 학습하지 않고, 사용자가 뺀 메모는 제외 기록 때문에 다시 들어오지 않는다.
+- Topic → 폴더 변환은 이미 같은 Topic에서 만든 폴더가 있으면 기존 폴더를 반환하며, 변환 시점의 Topic 멤버를 복사한다.
 - Topic → 폴더 변환은 화면 반영과 로컬 저장을 먼저 완료한 뒤 로그인 상태에서만 기존 폴더·membership 동기화 큐를 사용한다.
 - 폴더 삭제는 화면과 로컬 하위 레코드를 먼저 정리하고, 삭제 tombstone을 남긴 뒤 로그인 상태에서만 Cloud 삭제를 시도한다.
 - 보류 중인 폴더 동기화는 한 행의 실패가 다른 폴더·membership·exclusion·삭제 action을 막지 않도록 각 항목을 독립적으로 재시도한다.

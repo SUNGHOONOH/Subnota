@@ -36,12 +36,10 @@ interface MemoWorkspaceProps {
   onSessionRailResizeStateChange: (isResizing: boolean) => void;
   onDeleteMemoById: (id: string) => void;
   onCreateFolder: (draft: {
-    description?: string;
     mode: MemoFolderMode;
     name: string;
   }) => Promise<MemoFolder | null>;
   onCreateFolderFromRecommendation: (draft: {
-    description?: string;
     memoIds: string[];
     mode: MemoFolderMode;
     name: string;
@@ -53,10 +51,7 @@ interface MemoWorkspaceProps {
   onTogglePinMemo?: (memoId: string) => void;
   onToggleMemoFolder: (folderId: string, memoId: string) => Promise<void>;
   onUpdateFolderMode: (folderId: string, mode: MemoFolderMode) => Promise<void>;
-  onUpdateFolderDetails: (
-    folderId: string,
-    draft: { description: string; name: string },
-  ) => Promise<void>;
+  onRenameFolder: (folderId: string, name: string) => Promise<void>;
   pinnedMemoIds?: string[];
   folders: MemoFolder[];
   folderMemberships: MemoFolderMembership[];
@@ -91,7 +86,7 @@ const MemoWorkspace = ({
   onTogglePinMemo,
   onToggleMemoFolder,
   onUpdateFolderMode,
-  onUpdateFolderDetails,
+  onRenameFolder,
   pinnedMemoIds = [],
   folders,
   folderMemberships,
@@ -236,7 +231,7 @@ const MemoWorkspace = ({
             onDeleteFolder={onDeleteFolder}
             onOpenMemoMenu={(id, x, y) => setMemoMenu({ id, x, y })}
             onSelectMemo={onSelectMemo}
-            onUpdateFolderDetails={onUpdateFolderDetails}
+            onRenameFolder={onRenameFolder}
             onUpdateFolderMode={onUpdateFolderMode}
           />
         ) : null}

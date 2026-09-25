@@ -6,40 +6,7 @@ import {
   TopicMembership,
 } from '../../types';
 
-const tokenize = (value: string) =>
-  new Set(
-    value
-      .toLocaleLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .map(token => token.trim())
-      .filter(token => token.length >= 2),
-  );
-
-const intersectionSize = (left: Set<string>, right: Set<string>) => {
-  let count = 0;
-  left.forEach(token => {
-    if (right.has(token)) count += 1;
-  });
-  return count;
-};
-
-/** The folder classifier is frozen from user-approved folder details and seed
- * notes. It deliberately does not retain a live Topic id: regenerating the
- * map must never redirect a folder that came from a Topic. */
-export const createFolderClassifierTerms = (values: string[]) =>
-  [...new Set(values.flatMap(value => [...tokenize(value)]))].slice(0, 80);
-
-interface AutomaticFolderAssignmentInput {
-  folders: MemoFolder[];
-  exclusions?: MemoFolderExclusion[];
-  memberships: MemoFolderMembership[];
-  now?: string;
-  topicClusters: TopicCluster[];
-  topicMemberships: TopicMembership[];
-}
-
 export interface FolderRecommendation {
-  description: string;
   memoIds: string[];
   name: string;
   topicId: string;
@@ -52,10 +19,12 @@ export const getFolderRecommendations = ({
   memberships,
   topicClusters,
   topicMemberships,
-}: Pick<
-  AutomaticFolderAssignmentInput,
-  'folders' | 'memberships' | 'topicClusters' | 'topicMemberships'
->): FolderRecommendation[] => {
+}: {
+  folders: MemoFolder[];
+  memberships: MemoFolderMembership[];
+  topicClusters: TopicCluster[];
+  topicMemberships: TopicMembership[];
+}): FolderRecommendation[] => {
   const classifiedMemoIds = new Set(memberships.map(item => item.memoId));
   const topicById = new Map(topicClusters.map(topic => [topic.id, topic]));
   const sourceTopicIds = new Set(
@@ -81,86 +50,82 @@ export const getFolderRecommendations = ({
     .sort((a, b) => b.memoIds.length - a.memoIds.length)
     .slice(0, 3)
     .map(({ memoIds, topic, topicId }) => ({
-      description: topic.keywords.join(' · '),
       memoIds,
       name: topic.label,
       topicId,
     }));
 };
 
-/**
- * Automatic folders may only claim notes that are not in any folder. Their
- * frozen classifier terms are compared with the current topic description;
- * previous automatic assignments are deliberately excluded so one wrong guess
- * cannot train the next one. Topic regeneration cannot change a folder's
- * target merely because a former seed memo moved to another Topic.
- */
-export const getAutomaticFolderAssignments = ({
+/** Measured on 73 hand-labelled memos (centered memo means, see
+ * `local-database.ts`): two seeds give 0.90-0.97 precision at 0.40, and a
+ * third seed mostly adds recall. A wrong automatic filing costs the user a
+ * removal, so the threshold favours precision (~30% recall). */
+export const AUTOMATIC_FOLDER_MIN_SEEDS = 2;
+const AUTOMATIC_FOLDER_THRESHOLD = 0.4;
+const AUTOMATIC_FOLDER_MARGIN = 0.03;
+
+/** Seeds are notes the user filed (directly or by importing a Topic).
+ * Automatic filings never count, so one wrong guess cannot train the next. */
+const isSeed = (membership: MemoFolderMembership) =>
+  membership.source !== 'automatic';
+
+export const getFolderSeedCount = (
+  folderId: string,
+  memberships: MemoFolderMembership[],
+) =>
+  memberships.filter(item => item.folderId === folderId && isSeed(item)).length;
+
+/** Automatic folders may only claim notes that are in no folder at all. */
+export const buildFolderClassificationRequest = ({
+  activeMemoIds,
   folders,
-  exclusions = [],
   memberships,
-  now = new Date().toISOString(),
-  topicClusters,
-  topicMemberships,
-}: AutomaticFolderAssignmentInput): MemoFolderMembership[] => {
-  const classifiedMemoIds = new Set(memberships.map(item => item.memoId));
-  const targetByFolderId = new Map<string, { score: number; topicId: string }>();
-
-  folders
+}: {
+  activeMemoIds: string[];
+  folders: MemoFolder[];
+  memberships: MemoFolderMembership[];
+}) => {
+  const classifyingFolders = folders
     .filter(folder => folder.mode === 'automatic')
-    .forEach(folder => {
-      const folderTokens = new Set([
-        ...createFolderClassifierTerms([
-          folder.name,
-          folder.description,
-          ...(folder.classifierTerms ?? []),
-        ]),
-      ]);
-      const textualTarget = topicClusters
-        .map(topic => {
-          const topicTokens = tokenize(`${topic.label} ${topic.keywords.join(' ')}`);
-          return {
-            score: intersectionSize(folderTokens, topicTokens),
-            topicId: topic.id,
-          };
-        })
-        .filter(candidate => candidate.score > 0)
-        .sort((a, b) => b.score - a.score)[0];
-      if (textualTarget) targetByFolderId.set(folder.id, textualTarget);
-    });
+    .map(folder => ({
+      folderId: folder.id,
+      seedMemoIds: memberships
+        .filter(item => item.folderId === folder.id && isSeed(item))
+        .map(item => item.memoId),
+    }))
+    .filter(folder => folder.seedMemoIds.length >= AUTOMATIC_FOLDER_MIN_SEEDS);
+  const filedMemoIds = new Set(memberships.map(item => item.memoId));
+  const candidateMemoIds = activeMemoIds.filter(memoId => !filedMemoIds.has(memoId));
+  if (classifyingFolders.length === 0 || candidateMemoIds.length === 0) {
+    return null;
+  }
+  return {
+    candidateMemoIds,
+    folders: classifyingFolders,
+    margin: AUTOMATIC_FOLDER_MARGIN,
+    minimumSeeds: AUTOMATIC_FOLDER_MIN_SEEDS,
+    threshold: AUTOMATIC_FOLDER_THRESHOLD,
+  };
+};
 
-  const candidatesByTopicId = new Map<
-    string,
-    Array<{ folderId: string; score: number }>
-  >();
-  targetByFolderId.forEach((target, folderId) => {
-    const candidates = candidatesByTopicId.get(target.topicId) ?? [];
-    candidates.push({ folderId, score: target.score });
-    candidatesByTopicId.set(target.topicId, candidates);
-  });
-  const bestFolderByTopicId = new Map<string, { folderId: string; score: number }>();
-  candidatesByTopicId.forEach((candidates, topicId) => {
-    const ranked = candidates.sort((a, b) => b.score - a.score);
-    if (ranked[1] && ranked[0].score - ranked[1].score < 0.5) return;
-    bestFolderByTopicId.set(topicId, ranked[0]);
-  });
+/** A note the user took out of a folder never goes back in automatically. */
+export const toAutomaticMemberships = (
+  assignments: Array<{ folderId: string; memoId: string; score: number }>,
+  exclusions: MemoFolderExclusion[],
+  now = new Date().toISOString(),
+): MemoFolderMembership[] => {
   const excludedPairs = new Set(
     exclusions.map(item => `${item.folderId}:${item.memoId}`),
   );
-
-  return topicMemberships.flatMap(topicMembership => {
-    if (classifiedMemoIds.has(topicMembership.memoId)) return [];
-    const target = bestFolderByTopicId.get(topicMembership.topicId);
-    if (!target) return [];
-    if (excludedPairs.has(`${target.folderId}:${topicMembership.memoId}`)) return [];
-    return [{
+  return assignments
+    .filter(item => !excludedPairs.has(`${item.folderId}:${item.memoId}`))
+    .map(item => ({
       createdAt: now,
-      folderId: target.folderId,
-      memoId: topicMembership.memoId,
-      score: topicMembership.score,
+      folderId: item.folderId,
+      memoId: item.memoId,
+      score: item.score,
       source: 'automatic' as const,
-    }];
-  });
+    }));
 };
 
 export const createTopicFolderMemberships = (

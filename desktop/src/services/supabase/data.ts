@@ -629,9 +629,7 @@ export const fetchTopicMap = async (
 };
 
 interface MemoFolderRow {
-  classifier_terms: string[] | null;
   created_at: string;
-  description: string;
   id: string;
   name: string;
   organization_mode: MemoFolder['mode'];
@@ -658,7 +656,7 @@ export const fetchMemoFolders = async (
     supabase
       .from('memo_folders')
       .select(
-        'id, name, description, classifier_terms, organization_mode, source_topic_id, created_at, updated_at',
+        'id, name, organization_mode, source_topic_id, created_at, updated_at',
       )
       .eq('user_id', session.user.id)
       .order('updated_at', { ascending: false }),
@@ -683,9 +681,7 @@ export const fetchMemoFolders = async (
       memoId: row.memo_id,
     })),
     folders: ((folderResult.data ?? []) as MemoFolderRow[]).map(row => ({
-      classifierTerms: row.classifier_terms ?? [],
       createdAt: row.created_at,
-      description: row.description ?? '',
       id: row.id,
       mode: row.organization_mode,
       name: row.name,
@@ -709,9 +705,7 @@ export const upsertMemoFolder = async (
   folder: MemoFolder,
 ) => {
   const { error } = await supabase.from('memo_folders').upsert({
-    classifier_terms: folder.classifierTerms,
     created_at: folder.createdAt,
-    description: folder.description,
     id: folder.id,
     name: folder.name,
     organization_mode: folder.mode,

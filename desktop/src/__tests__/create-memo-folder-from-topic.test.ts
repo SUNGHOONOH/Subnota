@@ -29,10 +29,10 @@ describe('Topic → folder creation boundary', () => {
     expect(hookSource).toContain("mode = 'automatic'");
   });
 
-  it('freezes classifier input from the Topic and its current notes', () => {
-    expect(hookSource).toContain('...cluster.keywords');
-    expect(hookSource).toContain('...topicMemoContents');
-    expect(hookSource).toContain('createFolderClassifierTerms([');
+  it('keeps no keyword classifier: automatic filing uses local vectors', () => {
+    expect(hookSource).not.toContain('classifierTerms');
+    expect(hookSource).not.toContain('cluster.keywords');
+    expect(hookSource).not.toContain('description');
   });
 
   it('preserves the intentional overlap and optional recommendation subset', () => {

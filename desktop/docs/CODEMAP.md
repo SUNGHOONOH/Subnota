@@ -205,6 +205,7 @@ React Native WebView bridge.
 | `src/services/backend/inboxService.ts` | Inbox metadata/summary backend client. |
 | `src/services/local/localMemoIndexer.ts` | Chunks memos and writes vectors to the local index. Filters noise chunks with `isMeaningfulChunk`. |
 | `src/services/local/localMemoSearch.ts` | Local cosine search over `local_memo_chunk_vectors`, excluding the current memo and near-duplicates. |
+| `src/features/memo/useAutomaticMemoFolderAssignments.ts` | Files unfiled notes into automatic folders through `local-db:classify-folder-memos` (stored vectors only, no model at run time). |
 | `src/services/local/localInboxIndexer.ts` | Same, for saved web summaries. |
 
 ### Ambient Mirror (local embeddings)
@@ -228,20 +229,31 @@ Two invariants live in code comments and regression tests. Do not undo them:
   quantization invalidates every stored vector; the signature column exists so
   stale vectors are discarded rather than silently mixed.
 
-The writing stage still selects the query text, but every stage waits 5 seconds.
-This deliberately favors a quiet writing flow over earlier recommendations that
-used 1.5–2 second stage-specific delays:
+The writing stage selects both the query text and delay. Clear completion signals
+use 3 seconds; an unfinished sentence uses 4 seconds so a brief pause while
+composing is less likely to trigger a recommendation:
 
 | Stage | Delay | Query |
 | --- | --- | --- |
-| Cursor in a heading | 5s | The heading text |
-| Current block empty (just pressed Enter) | 5s | The previous sibling block |
-| Text before the cursor ends at a sentence boundary | 5s | Cursor sentence ±1 |
-| Otherwise | 5s | Cursor sentence ±1 |
+| Cursor in a heading | 3s | The heading text |
+| Current block empty (just pressed Enter) | 3s | The previous sibling block |
+| Text before the cursor ends at a sentence boundary | 3s | Cursor sentence ±1 |
+| Otherwise | 4s | Cursor sentence ±1 |
 
 The "previous sibling" lookup walks up the ancestor chain rather than reading
 the document's top level, because roughly half of real chunks sit inside list
 items, where the top-level index points at the whole list.
+
+### Centered memo vectors (nearby notes and automatic folders)
+
+Nearby notes (`searchNearbyMemos`) and automatic folders rank **whole memos**,
+not sentences. The worker subtracts the owner's mean chunk vector, re-normalizes
+each chunk and sums them per memo (`centeredMemos` in `local-database.ts`).
+Raw bge-m3 cosine is high even between unrelated notes; on 73 hand-labelled
+memos centering raised folder precision to 0.97 and nearby P@5 from 0.54 to
+0.68, while per-chunk voting did worse than both. Scores are on the centered
+scale, so `NETWORK_MIN_SIMILARITY` (0.10) and the folder threshold (0.40) are
+not comparable with the ambient ghost line's raw-cosine threshold.
 
 ### Memo/calendar flow
 

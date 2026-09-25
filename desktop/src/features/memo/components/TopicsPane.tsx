@@ -85,7 +85,6 @@ export interface TopicsPaneProps {
   inboxItems: InboxSession[];
   isTopicsLoading?: boolean;
   onCreateFolderFromTopic?: (draft: {
-    description?: string;
     mode: "automatic" | "manual";
     name: string;
     topicId: string;

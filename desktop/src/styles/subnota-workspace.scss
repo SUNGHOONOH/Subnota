@@ -1634,9 +1634,7 @@ html.dark .session-rail {
 }
 
 .memo-folder-toolbar,
-.memo-folder-head-row,
-.memo-folder-mode-picker,
-.memo-folder-edit > div {
+.memo-folder-head-row {
   align-items: center;
   display: flex;
 }
@@ -1652,104 +1650,59 @@ html.dark .session-rail {
   font-weight: var(--legacy-weight-black);
 }
 
+/* 폴더 제안: 행 자체가 클릭 대상이다(행마다 "검토" 버튼을 두지 않는다). */
 .memo-folder-recommendations {
   border-bottom: 1px solid var(--legacy-border-soft);
   margin: 0 7px 8px;
-  padding: 0 1px 8px;
+  padding: 0 0 8px;
 }
 
-.memo-folder-recommendations > strong {
-  color: var(--legacy-accent);
-  display: block;
-  font-size: var(--legacy-font-size-xxs);
-  font-weight: var(--legacy-weight-black);
-  margin: 4px 5px 2px;
-  text-transform: uppercase;
-}
-
-.memo-folder-recommendation {
-  align-items: center;
-  display: grid;
-  gap: 3px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 3px 4px;
-}
-
-.memo-folder-recommendation > div:first-child {
-  min-width: 0;
-}
-
-.memo-folder-recommendation > div:first-child span {
-  color: var(--legacy-ink);
-  display: block;
+.memo-folder-recommendations > h3 {
+  color: var(--legacy-muted);
   font-size: var(--legacy-font-size-xs);
   font-weight: var(--legacy-weight-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 4px 8px 4px;
 }
 
-.memo-folder-recommendation > div:first-child em {
-  color: var(--legacy-muted);
-  display: block;
-  font-size: 10px;
-  font-style: normal;
-  margin-top: 1px;
-}
-
-.memo-folder-recommendation > div:first-child small {
-  color: var(--legacy-muted);
-  display: block;
-  font-size: 10px;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memo-folder-recommendation > button,
-.memo-folder-recommendation-actions button {
+.memo-folder-recommendation-row {
   background: transparent;
   border: 0;
-  border-radius: 6px;
-  color: var(--legacy-accent);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10px;
-  font-weight: var(--legacy-weight-semibold);
-  min-height: 25px;
-  padding: 0 7px;
-}
-
-.memo-folder-recommendation > button:hover,
-.memo-folder-recommendation-actions button[type='submit'] {
-  background: var(--app-color-action-secondary-bg);
-}
-
-.memo-folder-recommendation-review {
-  background: color-mix(in srgb, var(--legacy-bg-muted) 68%, transparent);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 7px;
-  display: grid;
-  gap: 6px;
-  grid-column: 1 / -1;
-  padding: 7px;
-}
-
-.memo-folder-recommendation-review input {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 6px;
+  border-radius: var(--legacy-radius-row);
   color: var(--legacy-ink);
+  cursor: pointer;
+  display: grid;
   font: inherit;
-  font-size: 11px;
-  padding: 6px 7px;
+  gap: 1px;
+  padding: 7px 8px;
+  text-align: left;
+  transition: background-color 140ms ease;
+  width: 100%;
 }
 
-.memo-folder-recommendation-actions {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+.memo-folder-recommendation-row:hover {
+  background: var(--app-color-state-hover);
+}
+
+.memo-folder-recommendation-row[aria-expanded='true'] {
+  background: var(--app-color-state-selected);
+}
+
+.memo-folder-recommendation-row span {
+  font-size: var(--legacy-font-size-md);
+  font-weight: var(--legacy-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-folder-recommendation-row em,
+.memo-folder-recommendation-row small {
+  color: var(--legacy-muted);
+  font-size: var(--legacy-font-size-xs);
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memo-folder-add,
@@ -1768,109 +1721,98 @@ html.dark .session-rail {
 }
 
 .memo-folder-add:hover,
-.memo-folder-more:hover {
+.memo-folder-more:hover,
+.memo-folder-add[aria-expanded='true'] {
   background: var(--app-color-state-hover);
   color: var(--legacy-ink);
 }
 
-.memo-folder-create,
-.memo-folder-edit {
-  background: color-mix(in srgb, var(--legacy-bg-muted) 68%, transparent);
+/* 새 폴더·제안·Topics·이름 변경이 모두 쓰는 한 가지 폼. */
+.memo-folder-form {
+  background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-border-soft);
-  border-radius: var(--legacy-radius-row);
+  border-radius: 10px;
   display: grid;
-  gap: 7px;
-  margin: 2px 7px 8px;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin: 4px 7px 8px;
   padding: 8px;
 }
 
-.memo-folder-create input,
-.memo-folder-edit input {
+.memo-folder-recommendation .memo-folder-form {
+  margin: 4px 0 6px;
+}
+
+.memo-folder-form input {
   background: var(--legacy-bg-paper);
   border: 1px solid var(--legacy-border-soft);
   border-radius: 7px;
   color: var(--legacy-ink);
   font: inherit;
-  font-size: var(--legacy-font-size-xs);
+  font-size: var(--control-font-compact);
   min-width: 0;
-  padding: 7px 8px;
+  padding: 6px 8px;
 }
 
-.memo-folder-create input:focus-visible,
-.memo-folder-edit input:focus-visible {
+.memo-folder-form input:focus-visible {
   border-color: var(--app-color-action-primary);
   outline: 2px solid var(--app-color-focus-ring);
   outline-offset: 1px;
 }
 
-.memo-folder-mode-picker {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 8px;
-  gap: 2px;
-  padding: 2px;
-}
-
-.memo-folder-mode-picker button,
-.memo-folder-create-submit,
-.memo-folder-edit button {
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--legacy-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--legacy-font-size-xs);
-  font-weight: var(--legacy-weight-semibold);
-  min-height: 27px;
-  padding: 0 8px;
-}
-
-.memo-folder-mode-picker button {
-  align-items: center;
-  display: inline-flex;
-  flex: 1;
-  gap: 4px;
-  justify-content: center;
-}
-
-.memo-folder-mode-picker button[aria-pressed='true'] {
-  background: var(--app-color-action-secondary-bg);
-  color: var(--legacy-ink);
-}
-
 .memo-folder-mode-help {
   color: var(--legacy-muted);
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--legacy-font-size-xs);
+  line-height: 1.4;
   margin: 0;
 }
 
-.memo-folder-create-submit,
-.memo-folder-edit button[type='submit'] {
-  background: var(--app-color-action-primary);
-  color: var(--legacy-bg-paper);
-}
-
-.memo-folder-create-submit:hover:not(:disabled),
-.memo-folder-edit button[type='submit']:hover:not(:disabled) {
-  background: var(--app-color-action-primary-hover);
-}
-
-.memo-folder-create-submit:disabled,
-.memo-folder-edit button:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.memo-folder-edit > div {
-  gap: 5px;
+.memo-folder-form-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
   justify-content: flex-end;
 }
 
-.memo-folder-edit button[type='button']:hover {
+.memo-folder-form-actions button {
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--control-font-compact);
+  font-weight: var(--legacy-weight-semibold);
+  height: 26px;
+  padding: 0 10px;
+  transition: background-color 140ms ease;
+}
+
+.memo-folder-form-actions button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.memo-folder-form-cancel {
+  background: transparent;
+  border: 0;
+  color: var(--legacy-muted);
+}
+
+.memo-folder-form-cancel:hover {
   background: var(--app-color-state-hover);
   color: var(--legacy-ink);
+}
+
+.memo-folder-form-submit {
+  background: var(--legacy-bg-paper);
+  border: 1px solid var(--app-color-action-primary-border);
+  color: var(--app-color-action-primary-ink);
+}
+
+.memo-folder-form-submit:hover:not(:disabled) {
+  background: var(--app-color-brand-50);
+}
+
+.memo-folder-form-submit:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .memo-folder-head-row {
@@ -1883,9 +1825,16 @@ html.dark .session-rail {
 
 .memo-folder-auto-mark {
   align-items: center;
-  color: var(--app-color-action-primary);
+  color: var(--legacy-muted);
   display: inline-flex;
   flex: 0 0 auto;
+}
+
+.memo-folder-auto-status {
+  color: var(--legacy-muted);
+  font-size: var(--legacy-font-size-xs);
+  line-height: 1.4;
+  margin: 6px 10px 4px 13px;
 }
 
 .memo-folder-empty {
@@ -8431,6 +8380,31 @@ html.dark .split-editor-tab:hover:not(.active) {
   margin: 5px 10px;
 }
 
+.split-menu-section-label {
+  color: var(--legacy-muted);
+  font-size: var(--legacy-font-size-xs);
+  font-weight: var(--legacy-weight-semibold);
+  padding: 2px 12px 4px;
+}
+
+// 폴더가 많아도 노트 메뉴의 나머지 항목이 화면 밖으로 밀리지 않게 한다.
+.split-menu-folder-list {
+  max-height: 180px;
+  max-width: 240px;
+  overflow-y: auto;
+
+  .split-menu-item svg {
+    flex: 0 0 auto;
+  }
+
+  .split-menu-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .split-menu-item {
   align-items: center;
   background: transparent;
@@ -9299,79 +9273,6 @@ html.dark .selection-bubble-toolbar {
 .topics-community-memos button.active {
   background: var(--app-color-state-hover);
   color: var(--app-color-text-strong);
-}
-
-.topics-community-folder-create {
-  background: color-mix(in srgb, var(--legacy-bg-toolbar) 78%, transparent);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 8px;
-  display: grid;
-  gap: 6px;
-  grid-column: 1 / -1;
-  margin: 2px 2px 5px;
-  padding: 7px;
-}
-
-.topics-community-folder-create input {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 6px;
-  color: var(--legacy-ink);
-  font: inherit;
-  font-size: 11px;
-  padding: 6px 7px;
-}
-
-.topics-community-folder-mode,
-.topics-community-folder-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.topics-community-folder-mode {
-  background: var(--legacy-bg-paper);
-  border: 1px solid var(--legacy-border-soft);
-  border-radius: 7px;
-  padding: 2px;
-}
-
-.topics-community-folder-mode button,
-.topics-community-folder-actions button {
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  color: var(--app-color-muted-design);
-  cursor: pointer;
-  flex: 1;
-  font: inherit;
-  font-size: 10px;
-  min-height: 24px;
-}
-
-.topics-community-folder-mode button[aria-pressed='true'] {
-  background: var(--app-color-action-secondary-bg);
-  color: var(--app-color-text-strong);
-}
-
-.topics-community-folder-help {
-  color: var(--app-color-muted-design);
-  font-size: 10px;
-  line-height: 1.35;
-  margin: 0;
-}
-
-.topics-community-folder-actions {
-  justify-content: flex-end;
-}
-
-.topics-community-folder-actions button {
-  flex: 0 0 auto;
-  padding: 0 7px;
-}
-
-.topics-community-folder-actions button[type='submit'] {
-  background: var(--app-color-action-primary);
-  color: var(--legacy-bg-paper);
 }
 
 .split-topics-stage .split-knowledge-graph .knowledge-graph-controls {

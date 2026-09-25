@@ -1,5 +1,5 @@
 import { hashText } from '../../lib/contentHash';
-import { isMeaningfulChunk } from '../../lib/memoChunker';
+import { chunkMemoText, isMeaningfulChunk } from '../../lib/memoChunker';
 import type { MemoChunk } from '../../lib/memoChunker';
 import type {
   NetworkSearchResponse,
@@ -45,6 +45,13 @@ interface LocalMemoSearchApi {
     limit: number,
     minimumSimilarity: number,
   ) => Promise<LocalInboxSearchRow[]>;
+  localDbSearchSimilarMemos: (
+    ownerId: string | null,
+    queryVectors: number[][],
+    excludeMemoId: string | null,
+    limit: number,
+    minimumSimilarity: number,
+  ) => Promise<{ inbox: LocalInboxSearchRow[]; memos: LocalMemoSearchRow[] }>;
   localDbSetOwner: (ownerId: string | null) => Promise<void>;
   localEmbed: (texts: string[]) => Promise<number[][]>;
 }
@@ -71,6 +78,50 @@ const getApi = (): LocalMemoSearchApi => {
   }
   return window.electronAPI;
 };
+
+const toMemoResult = (row: LocalMemoSearchRow): NetworkSearchResult => ({
+  chunkId: row.chunkId,
+  chunkText: row.chunkText,
+  createdAt: null,
+  endIndex: row.endIndex,
+  inboxSessionId: null,
+  memoContent: row.memoContent,
+  memoCreatedAt: row.memoCreatedAt
+    ? new Date(row.memoCreatedAt).getTime()
+    : null,
+  memoId: row.memoId,
+  memoUpdatedAt: row.memoUpdatedAt
+    ? new Date(row.memoUpdatedAt).getTime()
+    : null,
+  similarity: row.similarity,
+  sourceKind: 'memo',
+  sourceLabel: null,
+  sourceType: null,
+  sourceUrl: null,
+  startIndex: row.startIndex,
+  thumbnailUrl: null,
+  title: null,
+});
+
+const toInboxResult = (row: LocalInboxSearchRow): NetworkSearchResult => ({
+  chunkId: row.chunkId,
+  chunkText: row.chunkText,
+  createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,
+  endIndex: row.chunkText.length,
+  inboxSessionId: row.inboxSessionId,
+  memoContent: null,
+  memoCreatedAt: null,
+  memoId: null,
+  memoUpdatedAt: null,
+  similarity: row.similarity,
+  sourceKind: 'inbox',
+  sourceLabel: row.sourceLabel,
+  sourceType: row.sourceType,
+  sourceUrl: row.sourceUrl,
+  startIndex: 0,
+  thumbnailUrl: row.thumbnailUrl,
+  title: row.title,
+});
 
 export const searchLocalMemoChunks = async ({
   api = getApi(),
@@ -129,48 +180,8 @@ export const searchLocalMemoChunks = async ({
     ),
   ]);
   throwIfAborted(signal);
-  const memoResults: NetworkSearchResult[] = memoRows.map(row => ({
-      chunkId: row.chunkId,
-      chunkText: row.chunkText,
-      createdAt: null,
-      endIndex: row.endIndex,
-      inboxSessionId: null,
-      memoContent: row.memoContent,
-      memoCreatedAt: row.memoCreatedAt
-        ? new Date(row.memoCreatedAt).getTime()
-        : null,
-      memoId: row.memoId,
-      memoUpdatedAt: row.memoUpdatedAt
-        ? new Date(row.memoUpdatedAt).getTime()
-        : null,
-      similarity: row.similarity,
-      sourceKind: 'memo',
-      sourceLabel: null,
-      sourceType: null,
-      sourceUrl: null,
-      startIndex: row.startIndex,
-      thumbnailUrl: null,
-      title: null,
-    }));
-  const inboxResults: NetworkSearchResult[] = inboxRows.map(row => ({
-      chunkId: row.chunkId,
-      chunkText: row.chunkText,
-      createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,
-      endIndex: row.chunkText.length,
-      inboxSessionId: row.inboxSessionId,
-      memoContent: null,
-      memoCreatedAt: null,
-      memoId: null,
-      memoUpdatedAt: null,
-      similarity: row.similarity,
-      sourceKind: 'inbox',
-      sourceLabel: row.sourceLabel,
-      sourceType: row.sourceType,
-      sourceUrl: row.sourceUrl,
-      startIndex: 0,
-      thumbnailUrl: row.thumbnailUrl,
-      title: row.title,
-    }));
+  const memoResults = memoRows.map(toMemoResult);
+  const inboxResults = inboxRows.map(toInboxResult);
   const results = [...memoResults, ...inboxResults]
     .sort((left, right) => right.similarity - left.similarity)
     .slice(0, limit);
@@ -178,6 +189,78 @@ export const searchLocalMemoChunks = async ({
   return {
     message: results.length === 0 ? LOCAL_SEARCH_EMPTY_MESSAGE : null,
     queryChunk,
+    results,
+  };
+};
+
+// ponytail: 아주 긴 메모는 앞 64개 청크만 질의에 쓴다. 전체를 쓰려면 저장된
+// 청크 벡터를 재사용하는 경로가 필요하다.
+const NEARBY_MAX_QUERY_CHUNKS = 64;
+
+/**
+ * 주변 메모: 메모 전체를 하나의 질의로 삼아 메모 단위로 순위를 매긴다.
+ * 문장마다 임베딩한 뒤 워커가 중심화 평균을 내므로, 긴 메모가 앞 1000자로
+ * 잘리지 않고 여러 주제가 섞인 메모도 한 방향으로 뭉개지지 않는다.
+ */
+export const searchNearbyMemos = async ({
+  api = getApi(),
+  limit,
+  memoId,
+  minimumSimilarity,
+  ownerId,
+  queryText,
+  signal,
+}: {
+  api?: LocalMemoSearchApi;
+  limit: number;
+  memoId: string | null;
+  minimumSimilarity: number;
+  ownerId: string | null;
+  queryText: string;
+  signal?: AbortSignal;
+}): Promise<NetworkSearchResponse> => {
+  throwIfAborted(signal);
+  const text = queryText.trim();
+  const texts = chunkMemoText(text)
+    .map(chunk => chunk.text)
+    .filter(isMeaningfulChunk)
+    .slice(0, NEARBY_MAX_QUERY_CHUNKS);
+  if (texts.length === 0) {
+    return {
+      message: LOCAL_SEARCH_EMPTY_MESSAGE,
+      queryChunk: null,
+      results: [],
+    };
+  }
+
+  await api.localDbSetOwner(ownerId);
+  throwIfAborted(signal);
+  const queryVectors = await api.localEmbed(texts);
+  throwIfAborted(signal);
+  const rows = await api.localDbSearchSimilarMemos(
+    ownerId,
+    queryVectors,
+    memoId,
+    limit,
+    minimumSimilarity,
+  );
+  throwIfAborted(signal);
+  const results = [
+    ...rows.memos.map(toMemoResult),
+    ...rows.inbox.map(toInboxResult),
+  ]
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, limit);
+
+  return {
+    message: results.length === 0 ? LOCAL_SEARCH_EMPTY_MESSAGE : null,
+    queryChunk: {
+      end: text.length,
+      id: `local-query-${hashText(text)}`,
+      index: 0,
+      start: 0,
+      text,
+    },
     results,
   };
 };

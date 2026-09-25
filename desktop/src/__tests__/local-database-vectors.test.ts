@@ -47,6 +47,7 @@ const OWNER_A = '11111111-1111-4111-8111-111111111111';
 const OWNER_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_SEARCH = '33333333-3333-4333-8333-333333333333';
 const OWNER_REPLACE = '44444444-4444-4444-8444-444444444444';
+const OWNER_CENTER = '55555555-5555-4555-8555-555555555555';
 const CURRENT_SIGNATURE =
   'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8';
 let databasePath = '';
@@ -60,6 +61,7 @@ const eventA = eventFor(1);
 const eventB = eventFor(2);
 const eventSearch = eventFor(4);
 const eventReplace = eventFor(5);
+const eventCenter = eventFor(6);
 
 const invoke = (channel: string, event: unknown, ...args: unknown[]) => {
   const handler = electronState.ipcHandlers[channel];
@@ -268,6 +270,7 @@ beforeAll(async () => {
   await invoke('local-db:set-owner', eventB, OWNER_B);
   await invoke('local-db:set-owner', eventSearch, OWNER_SEARCH);
   await invoke('local-db:set-owner', eventReplace, OWNER_REPLACE);
+  await invoke('local-db:set-owner', eventCenter, OWNER_CENTER);
 });
 
 afterAll(async () => {
@@ -1251,6 +1254,144 @@ describe('local memo vector SQLite store', () => {
         -1,
       ),
     ).resolves.toMatchObject([{ memoId: 'search-nearest' }]);
+  });
+
+  describe('centered memo vectors', () => {
+    // Every vector shares a large third component, like bge-m3's crowding:
+    // raw cosine calls them all similar, centering tells the topics apart.
+    const crowded = (first: number, second: number) =>
+      Array.from({ length: 1024 }, (_, index) =>
+        index === 0 ? first : index === 1 ? second : index === 2 ? 3 : 0,
+      );
+    const seedMemos = [
+      { id: 'center-a1', vector: crowded(1, 0) },
+      { id: 'center-a2', vector: crowded(0.95, 0.05) },
+      { id: 'center-b1', vector: crowded(0, 1) },
+      { id: 'center-b2', vector: crowded(0.05, 0.95) },
+      { id: 'center-candidate-a', vector: crowded(0.9, 0.1) },
+      { id: 'center-candidate-b', vector: crowded(0.1, 0.9) },
+      { id: 'center-candidate-mixed', vector: crowded(0.5, 0.5) },
+      // Neutral filler: the owner needs 20 chunks before centering is trusted.
+      ...Array.from({ length: 13 }, (_, index) => ({
+        id: `center-filler-${index}`,
+        vector: crowded(0.5, 0.5),
+      })),
+    ];
+
+    beforeAll(async () => {
+      for (const record of seedMemos) {
+        const hash = `${record.id}-hash`;
+        await upsertMemo(eventCenter, OWNER_CENTER, memo(record.id, record.id, hash));
+        await replaceVectors(eventCenter, OWNER_CENTER, record.id, hash, record.id, [
+          vectorChunk(record.id, record.vector),
+        ]);
+      }
+    });
+
+    const classify = (request: Record<string, unknown>) =>
+      invoke('local-db:classify-folder-memos', eventCenter, OWNER_CENTER, {
+        candidateMemoIds: [
+          'center-candidate-a',
+          'center-candidate-b',
+          'center-candidate-mixed',
+          'center-missing',
+        ],
+        folders: [
+          { folderId: 'folder-a', seedMemoIds: ['center-a1', 'center-a2'] },
+          { folderId: 'folder-b', seedMemoIds: ['center-b1', 'center-b2'] },
+        ],
+        margin: 0.03,
+        minimumSeeds: 2,
+        threshold: 0.4,
+        ...request,
+      }) as Promise<Array<{ folderId: string; memoId: string; score: number }>>;
+
+    it('files clear candidates and abstains on an even split', async () => {
+      const assignments = await classify({});
+      expect(
+        assignments.map(({ folderId, memoId }) => [memoId, folderId]),
+      ).toEqual([
+        ['center-candidate-a', 'folder-a'],
+        ['center-candidate-b', 'folder-b'],
+      ]);
+      expect(assignments[0].score).toBeGreaterThan(0.4);
+    });
+
+    it('ignores folders with fewer indexed seeds than required', async () => {
+      await expect(
+        classify({
+          folders: [
+            { folderId: 'folder-a', seedMemoIds: ['center-a1', 'center-unindexed'] },
+            { folderId: 'folder-b', seedMemoIds: ['center-b1', 'center-b2'] },
+          ],
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({ folderId: 'folder-b', memoId: 'center-candidate-b' }),
+      ]);
+    });
+
+    it('ranks whole memos for nearby notes and shows the closest chunk', async () => {
+      const result = (await invoke(
+        'local-db:search-similar-memos',
+        eventCenter,
+        OWNER_CENTER,
+        [crowded(0.9, 0.1)],
+        'center-candidate-a',
+        3,
+        0.1,
+      )) as { inbox: unknown[]; memos: SearchResult[] };
+      expect(result.memos.map(row => row.memoId).slice(0, 2).sort()).toEqual([
+        'center-a1',
+        'center-a2',
+      ]);
+      expect(result.memos.every(row => row.memoId !== 'center-candidate-a')).toBe(true);
+      expect(result.memos.every(row => !row.memoId.startsWith('center-b'))).toBe(true);
+      expect(result.memos[0]).toMatchObject({
+        chunkText: result.memos[0].memoId,
+        memoContent: result.memos[0].memoId,
+      });
+      expect(result.inbox).toEqual([]);
+    });
+
+    it('stays silent while too few chunks are indexed to center reliably', async () => {
+      const eventSparse = eventFor(7);
+      const OWNER_SPARSE = '66666666-6666-4666-8666-666666666666';
+      await invoke('local-db:set-owner', eventSparse, OWNER_SPARSE);
+      for (const record of seedMemos.slice(0, 5)) {
+        const hash = `${record.id}-hash`;
+        await upsertMemo(eventSparse, OWNER_SPARSE, memo(record.id, record.id, hash));
+        await replaceVectors(eventSparse, OWNER_SPARSE, record.id, hash, record.id, [
+          vectorChunk(record.id, record.vector),
+        ]);
+      }
+      await expect(
+        invoke('local-db:classify-folder-memos', eventSparse, OWNER_SPARSE, {
+          candidateMemoIds: ['center-candidate-a'],
+          folders: [{ folderId: 'folder-a', seedMemoIds: ['center-a1', 'center-a2'] }],
+          margin: 0.03,
+          minimumSeeds: 2,
+          threshold: 0.4,
+        }),
+      ).resolves.toEqual([]);
+      await expect(
+        invoke('local-db:search-similar-memos', eventSparse, OWNER_SPARSE, [crowded(1, 0)], null, 3, 0.1),
+      ).resolves.toEqual({ inbox: [], memos: [] });
+    });
+
+    it('rejects malformed classification and nearby requests', () => {
+      expect(() =>
+        invoke('local-db:classify-folder-memos', eventCenter, OWNER_CENTER, {
+          candidateMemoIds: [],
+          folders: [],
+          margin: 0.03,
+          minimumSeeds: 0,
+          threshold: 0.4,
+        }),
+      ).toThrow('Invalid folder classification settings');
+      expect(() =>
+        invoke('local-db:search-similar-memos', eventCenter, OWNER_CENTER, [], null, 5, 0.1),
+      ).toThrow('Invalid memo search vectors');
+    });
   });
 
   it('rejects malformed memo vector search requests', () => {

@@ -5,13 +5,11 @@ import {
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-import { createFolderClassifierTerms } from './folderOrganization';
 import {
   getLocalWorkspaceOwner,
   removeLocalMemoFolderAction,
   removeLocalMemoFolderExclusion,
   removeLocalMemoFolderMembership,
-  saveLocalMemoFolder,
   saveLocalMemoFolderAction,
   saveLocalMemoFolderExclusion,
   saveLocalMemoFolderMembership,
@@ -19,7 +17,6 @@ import {
 import {
   deleteMemoFolderExclusion,
   deleteMemoFolderMembership,
-  upsertMemoFolder,
   upsertMemoFolderExclusion,
   upsertMemoFolderMemberships,
 } from '../../services/supabase/data';
@@ -27,7 +24,6 @@ import type {
   MemoFolder,
   MemoFolderExclusion,
   MemoFolderMembership,
-  MemoRow,
 } from '../../types';
 
 interface MutationQueueRef {
@@ -43,28 +39,22 @@ interface UseMemoFolderMembershipActionsOptions {
   folderMembershipMutationQueueRef: MutableRefObject<
     MutationQueueRef['current']
   >;
-  folderMutationQueueRef: MutableRefObject<MutationQueueRef['current']>;
   memoFolderExclusions: MemoFolderExclusion[];
   memoFolderMemberships: MemoFolderMembership[];
   memoFolders: MemoFolder[];
-  memos: MemoRow[];
   session: Session | null;
   setMemoFolderExclusions: Dispatch<SetStateAction<MemoFolderExclusion[]>>;
   setMemoFolderMemberships: Dispatch<SetStateAction<MemoFolderMembership[]>>;
-  setMemoFolders: Dispatch<SetStateAction<MemoFolder[]>>;
 }
 
 export const useMemoFolderMembershipActions = ({
   folderMembershipMutationQueueRef,
-  folderMutationQueueRef,
   memoFolderExclusions,
   memoFolderMemberships,
   memoFolders,
-  memos,
   session,
   setMemoFolderExclusions,
   setMemoFolderMemberships,
-  setMemoFolders,
 }: UseMemoFolderMembershipActionsOptions) => {
   const toggleMemoFolderMembership = async (
     folderId: string,
@@ -164,37 +154,6 @@ export const useMemoFolderMembershipActions = ({
         ),
         removeLocalMemoFolderExclusion(folderId, memoId, ownerId),
       ]);
-    }
-    const folder = memoFolders.find((item) => item.id === folderId);
-    const selectedMemo = memos.find((memo) => memo.id === memoId);
-    if (folder && selectedMemo) {
-      const nextFolder = {
-        ...folder,
-        classifierTerms: createFolderClassifierTerms([
-          ...(folder.classifierTerms ?? []),
-          selectedMemo.content,
-        ]),
-        local_sync_status: 'pending' as const,
-        updatedAt: new Date().toISOString(),
-      };
-      setMemoFolders((current) =>
-        current.map((item) => (item.id === folderId ? nextFolder : item)),
-      );
-      await saveLocalMemoFolder(nextFolder, ownerId);
-      if (session) {
-        await folderMutationQueueRef.current
-          .enqueue(folderId, async ({ isLatest }) => {
-            await upsertMemoFolder(session, nextFolder);
-            if (!isLatest()) return;
-            await saveLocalMemoFolder(
-              { ...nextFolder, local_sync_status: 'synced' },
-              ownerId,
-            );
-          })
-          .catch((error) => {
-            console.warn('Folder classifier sync deferred:', error);
-          });
-      }
     }
     setMemoFolderMemberships((current) => [...current, membership]);
     await Promise.all([

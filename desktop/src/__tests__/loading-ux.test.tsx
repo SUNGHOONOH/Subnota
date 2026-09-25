@@ -314,7 +314,7 @@ describe('State B — 주변 메모 검색', () => {
     // 검색 시작 패치에서 결과를 비우면 그래프가 사라진다.
     const searchStart = nearbySearchSource.slice(
       nearbySearchSource.indexOf('networkRequestId,\n          view:'),
-      nearbySearchSource.indexOf('const response = await searchLocalMemoChunks'),
+      nearbySearchSource.indexOf('const response = await searchNearbyMemos'),
     );
     expect(searchStart).not.toContain('networkResults: []');
   });
@@ -499,9 +499,7 @@ describe('웹 요약 — SourceDetailPane', () => {
     const markup = render(
       <MemoFolderActionsMenu
         folder={{
-          classifierTerms: [],
-          createdAt: '2026-09-06T00:00:00.000Z',
-          description: '',
+                  createdAt: '2026-09-06T00:00:00.000Z',
           id: 'folder-1',
           mode: 'manual',
           name: '작업',
@@ -510,7 +508,7 @@ describe('웹 요약 — SourceDetailPane', () => {
         }}
         onCreateMemoInFolder={() => Promise.resolve()}
         onDeleteFolder={() => Promise.resolve()}
-        onEditFolder={() => undefined}
+        onRenameFolder={() => undefined}
         onUpdateFolderMode={() => Promise.resolve()}
         t={(korean) => korean}
       />,
@@ -519,67 +517,77 @@ describe('웹 요약 — SourceDetailPane', () => {
     expect(markup).toContain('작업 폴더 메뉴');
     expect(memoFolderActionsSource).toContain('이 폴더에 새 메모');
     expect(memoFolderActionsSource).toContain('자동 폴더로 변경');
-    expect(memoFolderActionsSource).toContain('이름과 설명 변경');
+    expect(memoFolderActionsSource).toContain('이름 변경');
+    expect(memoFolderActionsSource).not.toContain('설명');
     expect(memoFolderActionsSource).toContain('폴더 삭제');
     expect(memoWorkspaceSource).toContain('<MemoFolderActionsMenu');
     expect(memoWorkspaceSource).not.toContain('<Menu position="bottom-end"');
   });
 
-  it('폴더 제안 UI는 미리보기와 수동·자동 검토 폼을 유지한다', () => {
+  it('폴더 제안은 행을 누르면 이름과 수동·자동만 묻는 공용 폼을 펼친다', () => {
     const markup = render(
       <MemoFolderRecommendations
-        folderRecommendations={[{
-          description: 'SQLite · sync',
-          memoIds: ['memo-1', 'memo-2'],
-          name: 'Databases',
-          topicId: 'topic-1',
-        }]}
-        language="ko"
-        memos={[
-          {
-            category: null,
-            content: '첫 번째 메모',
-            content_hash: null,
-            created_at: '2026-09-06T00:00:00.000Z',
-            id: 'memo-1',
-            is_archived: false,
-            updated_at: '2026-09-06T00:00:00.000Z',
-          },
-          {
-            category: null,
-            content: '두 번째 메모',
-            content_hash: null,
-            created_at: '2026-09-06T00:00:00.000Z',
-            id: 'memo-2',
-            is_archived: false,
-            updated_at: '2026-09-06T00:00:00.000Z',
-          },
-        ]}
-        onBeginReview={() => undefined}
-        onCancel={() => undefined}
-        onDraftChange={() => undefined}
-        onSubmit={() => undefined}
-        recommendationDraft={{
-          description: 'SQLite · sync',
-          memoIds: ['memo-1', 'memo-2'],
-          mode: 'automatic',
-          name: 'Databases',
-          topicId: 'topic-1',
-        }}
-      />,
+          folderRecommendations={[{
+            memoIds: ['memo-1', 'memo-2'],
+            name: 'Databases',
+            topicId: 'topic-1',
+          }]}
+          language="ko"
+          memos={[
+            {
+              category: null,
+              content: '첫 번째 메모',
+              content_hash: null,
+              created_at: '2026-09-06T00:00:00.000Z',
+              id: 'memo-1',
+              is_archived: false,
+              updated_at: '2026-09-06T00:00:00.000Z',
+            },
+            {
+              category: null,
+              content: '두 번째 메모',
+              content_hash: null,
+              created_at: '2026-09-06T00:00:00.000Z',
+              id: 'memo-2',
+              is_archived: false,
+              updated_at: '2026-09-06T00:00:00.000Z',
+            },
+          ]}
+          onCancel={() => undefined}
+          onOpen={() => undefined}
+          onSubmit={() => undefined}
+          openTopicId="topic-1"
+        />,
     );
 
     expect(markup).toContain('폴더 제안');
     expect(markup).toContain('Databases');
     expect(markup).toContain('2개 메모');
     expect(markup).toContain('첫 번째 메모 · 두 번째 메모');
+    expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('수동');
     expect(markup).toContain('자동');
     expect(markup).toContain('폴더 만들기');
+    expect(markup).not.toContain('폴더 설명');
+    expect(markup).not.toContain('검토');
     expect(memoWorkspaceSource).toContain('<MemoFolderRecommendations');
-    expect(memoWorkspaceSource).not.toContain('className="memo-folder-recommendations"');
-    expect(memoFolderRecommendationsSource).toContain('aria-pressed={recommendationDraft.mode === \'manual\'}');
-    expect(memoFolderRecommendationsSource).toContain('disabled={!recommendationDraft.name.trim()}');
+    expect(memoFolderRecommendationsSource).toContain('<MemoFolderForm');
+  });
+
+  it('자동 폴더는 시드 진행과 자동으로 들어온 메모를 알려 준다', () => {
+    const sidebarSource = read('features/memo/components/MemoFolderSidebar.tsx');
+    expect(sidebarSource).toContain('memo-folder-auto-status');
+    expect(sidebarSource).toContain('getFolderSeedCount(folder.id, folderMemberships)');
+    expect(sidebarSource).toContain("membership.source === 'automatic'");
+    expect(sidebarSource).toContain('자동으로 들어옴');
+    // 넣는 방법을 알려 준다: 노트 ⋯ 메뉴와 목록 우클릭.
+    expect(sidebarSource).toContain('노트의 ⋯ 메뉴나, 목록에서 메모를 우클릭해 넣을 수 있어요.');
+    const noteMenuSource = read('features/memo/components/MemoSplitNoteMenu.tsx');
+    expect(noteMenuSource).toContain("t('폴더에 넣기', 'Add to folder')");
+    expect(noteMenuSource).toContain('onToggleMemoFolder(folder.id, memo.id)');
+    // 폼은 한 번에 하나만 연다.
+    expect(sidebarSource).toContain('const [openForm, setOpenForm] = useState<OpenFolderForm>(null);');
+    expect(sidebarSource).not.toContain('폴더 설명');
   });
 
   it('시간순 메모 사이드바는 섹션 접힘·활성 메모·메뉴 좌표 전달을 유지한다', () => {

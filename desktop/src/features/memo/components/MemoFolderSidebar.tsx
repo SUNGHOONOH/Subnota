@@ -11,16 +11,25 @@ import {
   MemoFolderMode,
   MemoRow,
 } from '../../../types';
-import type { FolderRecommendation } from '../folderOrganization';
+import {
+  AUTOMATIC_FOLDER_MIN_SEEDS,
+  type FolderRecommendation,
+  getFolderSeedCount,
+} from '../folderOrganization';
 import {
   getFolderMemoRows,
   getMemoPreview,
   getMemoTitle,
 } from '../memoWorkspaceUtils';
 import MemoFolderActionsMenu from './MemoFolderActionsMenu';
-import MemoFolderRecommendations, {
-  type MemoFolderRecommendationDraft,
-} from './MemoFolderRecommendations';
+import MemoFolderForm from './MemoFolderForm';
+import MemoFolderRecommendations from './MemoFolderRecommendations';
+
+type OpenFolderForm =
+  | { kind: 'create' }
+  | { kind: 'recommendation'; topicId: string }
+  | { folderId: string; kind: 'rename' }
+  | null;
 
 interface MemoFolderSidebarProps {
   activeMemoId: string | null;
@@ -31,12 +40,10 @@ interface MemoFolderSidebarProps {
   memos: MemoRow[];
   normalMemos: MemoRow[];
   onCreateFolder: (draft: {
-    description?: string;
     mode: MemoFolderMode;
     name: string;
   }) => Promise<MemoFolder | null>;
   onCreateFolderFromRecommendation: (draft: {
-    description?: string;
     memoIds: string[];
     mode: MemoFolderMode;
     name: string;
@@ -45,11 +52,8 @@ interface MemoFolderSidebarProps {
   onCreateMemoInFolder: (folderId: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onOpenMemoMenu: (memoId: string, x: number, y: number) => void;
+  onRenameFolder: (folderId: string, name: string) => Promise<void>;
   onSelectMemo: (memo: MemoRow) => void;
-  onUpdateFolderDetails: (
-    folderId: string,
-    draft: { description: string; name: string },
-  ) => Promise<void>;
   onUpdateFolderMode: (folderId: string, mode: MemoFolderMode) => Promise<void>;
 }
 
@@ -67,7 +71,7 @@ export default function MemoFolderSidebar({
   onDeleteFolder,
   onOpenMemoMenu,
   onSelectMemo,
-  onUpdateFolderDetails,
+  onRenameFolder,
   onUpdateFolderMode,
 }: MemoFolderSidebarProps) {
   const t = (korean: string, english: string) =>
@@ -75,15 +79,10 @@ export default function MemoFolderSidebar({
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
-  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editingFolderDescription, setEditingFolderDescription] = useState('');
-  const [editingFolderName, setEditingFolderName] = useState('');
-  const [newFolderDescription, setNewFolderDescription] = useState('');
-  const [recommendationDraft, setRecommendationDraft] =
-    useState<MemoFolderRecommendationDraft | null>(null);
-  const [newFolderMode, setNewFolderMode] = useState<MemoFolderMode>('manual');
-  const [newFolderName, setNewFolderName] = useState('');
+  // 폼은 한 번에 하나만 연다. 새 폴더·제안 검토·이름 변경이 동시에 열리면
+  // 모드 선택기가 두 개 보이고 어느 쪽이 무엇을 만드는지 흐려진다.
+  const [openForm, setOpenForm] = useState<OpenFolderForm>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   const visibleFolders = useMemo(() => {
     return folders
@@ -109,40 +108,16 @@ export default function MemoFolderSidebar({
       return next;
     });
 
-  const submitFolder = async () => {
-    const name = newFolderName.trim();
-    if (!name) return;
-    const folder = await onCreateFolder({
-      description: newFolderDescription,
-      mode: newFolderMode,
-      name,
-    });
+  const revealFolder = (folder: MemoFolder | null) => {
     if (!folder) return;
     setExpandedFolderIds(current => new Set(current).add(folder.id));
-    setNewFolderDescription('');
-    setNewFolderName('');
-    setNewFolderMode('manual');
-    setIsCreatingFolder(false);
+    setOpenForm(null);
   };
 
-  const submitFolderDetails = async (folderId: string) => {
-    if (!editingFolderName.trim()) return;
-    await onUpdateFolderDetails(folderId, {
-      description: editingFolderDescription,
-      name: editingFolderName,
-    });
-    setEditingFolderId(null);
-  };
-
-  const submitRecommendation = async () => {
-    if (!recommendationDraft?.name.trim()) return;
-    const folder = await onCreateFolderFromRecommendation({
-      ...recommendationDraft,
-      name: recommendationDraft.name.trim(),
-    });
-    if (!folder) return;
-    setExpandedFolderIds(current => new Set(current).add(folder.id));
-    setRecommendationDraft(null);
+  const submitRename = async (folderId: string) => {
+    if (!renameDraft.trim()) return;
+    await onRenameFolder(folderId, renameDraft);
+    setOpenForm(null);
   };
 
   return (
@@ -150,83 +125,43 @@ export default function MemoFolderSidebar({
       <div className="memo-folder-toolbar">
         <strong>{t('폴더', 'Folders')}</strong>
         <button
+          aria-expanded={openForm?.kind === 'create'}
           aria-label={t('새 폴더', 'New folder')}
           className="memo-folder-add"
-          onClick={() => setIsCreatingFolder(current => !current)}
+          onClick={() =>
+            setOpenForm(current => (current?.kind === 'create' ? null : { kind: 'create' }))
+          }
           type="button"
         >
           <Plus size={15} />
         </button>
       </div>
+      {openForm?.kind === 'create' && (
+        <MemoFolderForm
+          initialMode="manual"
+          onCancel={() => setOpenForm(null)}
+          onSubmit={async value => revealFolder(await onCreateFolder(value))}
+          submitLabel={t('만들기', 'Create')}
+          t={t}
+        />
+      )}
       <MemoFolderRecommendations
         folderRecommendations={folderRecommendations}
         language={language}
         memos={memos}
-        onBeginReview={recommendation => setRecommendationDraft({
-          ...recommendation,
-          mode: 'automatic',
-        })}
-        onCancel={() => setRecommendationDraft(null)}
-        onDraftChange={patch => setRecommendationDraft(current =>
-          current ? { ...current, ...patch } : current,
-        )}
-        onSubmit={submitRecommendation}
-        recommendationDraft={recommendationDraft}
+        onCancel={() => setOpenForm(null)}
+        onOpen={topicId => setOpenForm({ kind: 'recommendation', topicId })}
+        onSubmit={async (recommendation, value) =>
+          revealFolder(
+            await onCreateFolderFromRecommendation({
+              ...value,
+              memoIds: recommendation.memoIds,
+              topicId: recommendation.topicId,
+            }),
+          )
+        }
+        openTopicId={openForm?.kind === 'recommendation' ? openForm.topicId : null}
       />
-      {isCreatingFolder && (
-        <form
-          className="memo-folder-create"
-          onSubmit={event => {
-            event.preventDefault();
-            void submitFolder();
-          }}
-        >
-          <input
-            aria-label={t('폴더 이름', 'Folder name')}
-            autoFocus
-            maxLength={80}
-            onChange={event => setNewFolderName(event.target.value)}
-            placeholder={t('폴더 이름', 'Folder name')}
-            value={newFolderName}
-          />
-          <input
-            aria-label={t('폴더 설명', 'Folder description')}
-            maxLength={500}
-            onChange={event => setNewFolderDescription(event.target.value)}
-            placeholder={t('한 줄 설명 (선택)', 'One-line description (optional)')}
-            value={newFolderDescription}
-          />
-          <div className="memo-folder-mode-picker">
-            <button
-              aria-pressed={newFolderMode === 'manual'}
-              onClick={() => setNewFolderMode('manual')}
-              type="button"
-            >
-              {t('수동', 'Manual')}
-            </button>
-            <button
-              aria-pressed={newFolderMode === 'automatic'}
-              onClick={() => setNewFolderMode('automatic')}
-              type="button"
-            >
-              <Sparkles size={12} />
-              {t('자동', 'Automatic')}
-            </button>
-          </div>
-          <p className="memo-folder-mode-help">
-            {newFolderMode === 'manual'
-              ? t('이 폴더는 사용자가 넣은 메모만 유지합니다.', 'Only notes you add stay in this folder.')
-              : t('미분류 메모 중 어울리는 메모만 자동으로 추가합니다.', 'Matching unfiled notes are added automatically.')}
-          </p>
-          <button
-            className="memo-folder-create-submit"
-            disabled={!newFolderName.trim()}
-            type="submit"
-          >
-            {t('만들기', 'Create')}
-          </button>
-        </form>
-      )}
       <div className="topic-folder-list">
         {visibleFolders.length === 0 ? (
           <EmptyState
@@ -240,7 +175,9 @@ export default function MemoFolderSidebar({
         ) : (
           visibleFolders.map(({ folder, rows }) => {
             const isExpanded = expandedFolderIds.has(folder.id);
-            const isEditing = editingFolderId === folder.id;
+            const isRenaming =
+              openForm?.kind === 'rename' && openForm.folderId === folder.id;
+            const seedCount = getFolderSeedCount(folder.id, folderMemberships);
 
             return (
               <section className="topic-folder" key={folder.id}>
@@ -270,45 +207,45 @@ export default function MemoFolderSidebar({
                     folder={folder}
                     onCreateMemoInFolder={onCreateMemoInFolder}
                     onDeleteFolder={onDeleteFolder}
-                    onEditFolder={() => {
-                      setEditingFolderId(folder.id);
-                      setEditingFolderName(folder.name);
-                      setEditingFolderDescription(folder.description);
+                    onRenameFolder={() => {
+                      setRenameDraft(folder.name);
+                      setOpenForm({ folderId: folder.id, kind: 'rename' });
                     }}
                     onUpdateFolderMode={onUpdateFolderMode}
                     t={t}
                   />
                 </div>
-                {isEditing && (
+                {isRenaming && (
                   <form
-                    className="memo-folder-edit"
+                    className="memo-folder-form"
+                    onKeyDown={event => {
+                      if (event.key === 'Escape') setOpenForm(null);
+                    }}
                     onSubmit={event => {
                       event.preventDefault();
-                      void submitFolderDetails(folder.id);
+                      void submitRename(folder.id);
                     }}
                   >
                     <input
                       aria-label={t('폴더 이름', 'Folder name')}
                       autoFocus
                       maxLength={80}
-                      onChange={event => setEditingFolderName(event.target.value)}
-                      value={editingFolderName}
+                      onChange={event => setRenameDraft(event.target.value)}
+                      value={renameDraft}
                     />
-                    <input
-                      aria-label={t('폴더 설명', 'Folder description')}
-                      maxLength={500}
-                      onChange={event => setEditingFolderDescription(event.target.value)}
-                      placeholder={t('한 줄 설명 (선택)', 'One-line description (optional)')}
-                      value={editingFolderDescription}
-                    />
-                    <div>
+                    <div className="memo-folder-form-actions">
                       <button
-                        onClick={() => setEditingFolderId(null)}
+                        className="memo-folder-form-cancel"
+                        onClick={() => setOpenForm(null)}
                         type="button"
                       >
                         {t('취소', 'Cancel')}
                       </button>
-                      <button disabled={!editingFolderName.trim()} type="submit">
+                      <button
+                        className="memo-folder-form-submit"
+                        disabled={!renameDraft.trim()}
+                        type="submit"
+                      >
                         {t('저장', 'Save')}
                       </button>
                     </div>
@@ -323,7 +260,26 @@ export default function MemoFolderSidebar({
                       initial={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
                     >
+                      {folder.mode === 'automatic' && (
+                        <p className="memo-folder-auto-status">
+                          {seedCount < AUTOMATIC_FOLDER_MIN_SEEDS
+                            ? t(
+                                `메모를 ${AUTOMATIC_FOLDER_MIN_SEEDS}개 직접 넣으면 비슷한 메모를 모으기 시작해요 · ${seedCount}/${AUTOMATIC_FOLDER_MIN_SEEDS}`,
+                                `Add ${AUTOMATIC_FOLDER_MIN_SEEDS} notes yourself to start gathering similar ones · ${seedCount}/${AUTOMATIC_FOLDER_MIN_SEEDS}`,
+                              )
+                            : t(
+                                '넣어 둔 메모와 비슷한 미분류 메모를 모으는 중이에요.',
+                                'Gathering unfiled notes similar to the ones you added.',
+                              )}
+                        </p>
+                      )}
                       {rows.map(({ memo }) => {
+                        const isAutomatic = folderMemberships.some(
+                          membership =>
+                            membership.memoId === memo.id &&
+                            membership.folderId === folder.id &&
+                            membership.source === 'automatic',
+                        );
                         const isAlsoInOtherFolder = folderMemberships.some(
                           membership =>
                             membership.memoId === memo.id &&
@@ -345,17 +301,25 @@ export default function MemoFolderSidebar({
                               {formatMemoDate(memo.updated_at, language)} ·{' '}
                               {getMemoPreview(memo, language)}
                             </span>
-                            {isAlsoInOtherFolder && (
+                            {(isAutomatic || isAlsoInOtherFolder) && (
                               <small className="memo-folder-overlap">
-                                {t('다른 폴더에도 있음', 'Also in another folder')}
+                                {[
+                                  isAutomatic && t('자동으로 들어옴', 'Added automatically'),
+                                  isAlsoInOtherFolder && t('다른 폴더에도 있음', 'Also in another folder'),
+                                ].filter(Boolean).join(' · ')}
                               </small>
                             )}
                           </button>
                         );
                       })}
-                      {rows.length === 0 && (
+                      {(rows.length === 0 ||
+                        (folder.mode === 'automatic' &&
+                          seedCount < AUTOMATIC_FOLDER_MIN_SEEDS)) && (
                         <p className="memo-folder-empty">
-                          {t('아직 메모가 없습니다.', 'No notes yet.')}
+                          {t(
+                            '노트의 ⋯ 메뉴나, 목록에서 메모를 우클릭해 넣을 수 있어요.',
+                            "Add notes from a note's ⋯ menu, or right-click one in the list.",
+                          )}
                         </p>
                       )}
                     </motion.div>

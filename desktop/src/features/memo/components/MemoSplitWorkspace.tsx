@@ -23,6 +23,8 @@ import {
   CalendarBlockDraft,
   CalendarCategoryDraft,
   CalendarCategoryRow,
+  MemoFolder,
+  MemoFolderMembership,
   MemoRow,
   MemoSaveState,
   CalendarBlockRow,
@@ -231,7 +233,6 @@ interface MemoSplitWorkspaceProps {
   folderSourceTopicIds?: string[];
   isTopicsLoading?: boolean;
   onCreateFolderFromTopic?: (draft: {
-    description?: string;
     mode: 'automatic' | 'manual';
     name: string;
     topicId: string;
@@ -247,6 +248,9 @@ interface MemoSplitWorkspaceProps {
   // 메모 고정
   onTogglePinMemo?: (memoId: string) => void;
   pinnedMemoIds?: string[];
+  folders?: MemoFolder[];
+  folderMemberships?: MemoFolderMembership[];
+  onToggleMemoFolder?: (folderId: string, memoId: string) => Promise<void>;
 }
 
 const MemoSplitWorkspace = ({
@@ -319,6 +323,9 @@ const MemoSplitWorkspace = ({
   topicMemberships,
   onTogglePinMemo,
   pinnedMemoIds = [],
+  folders = [],
+  folderMemberships = [],
+  onToggleMemoFolder,
 }: MemoSplitWorkspaceProps) => {
   const language = useUiLanguage();
   const t = (korean: string, english: string) =>
@@ -1269,6 +1276,9 @@ const MemoSplitWorkspace = ({
                 )
               }
               onTogglePinMemo={onTogglePinMemo}
+              folderMemberships={folderMemberships}
+              folders={folders}
+              onToggleMemoFolder={onToggleMemoFolder}
               pane={pane}
               pinnedMemoIds={pinnedMemoIds}
               savePresentation={savePresentation}

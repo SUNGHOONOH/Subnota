@@ -13,7 +13,7 @@ interface MemoFolderActionsMenuProps {
   folder: MemoFolder;
   onCreateMemoInFolder: (folderId: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
-  onEditFolder: () => void;
+  onRenameFolder: () => void;
   onUpdateFolderMode: (folderId: string, mode: MemoFolderMode) => Promise<void>;
   t: (korean: string, english: string) => string;
 }
@@ -22,7 +22,7 @@ const MemoFolderActionsMenu = ({
   folder,
   onCreateMemoInFolder,
   onDeleteFolder,
-  onEditFolder,
+  onRenameFolder,
   onUpdateFolderMode,
   t,
 }: MemoFolderActionsMenuProps) => (
@@ -54,8 +54,8 @@ const MemoFolderActionsMenu = ({
           ? t('수동 폴더로 변경', 'Make manual')
           : t('자동 폴더로 변경', 'Make automatic')}
       </Menu.Item>
-      <Menu.Item onClick={onEditFolder}>
-        {t('이름과 설명 변경', 'Edit name and description')}
+      <Menu.Item onClick={onRenameFolder}>
+        {t('이름 변경', 'Rename')}
       </Menu.Item>
       <Menu.Item
         color="red"

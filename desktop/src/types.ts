@@ -20,9 +20,7 @@ export interface MemoRow {
 export type MemoFolderMode = 'automatic' | 'manual';
 
 export interface MemoFolder {
-  classifierTerms: string[];
   createdAt: string;
-  description: string;
   id: string;
   local_sync_status?: 'failed' | 'pending' | 'synced';
   mode: MemoFolderMode;

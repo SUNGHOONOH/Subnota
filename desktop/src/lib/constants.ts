@@ -15,7 +15,10 @@ export const AMBIENT_MIN_SIMILARITY = 0.75;
 // 더보기 목록은 사용자가 명시적으로 열므로, 고스트보다 조금 넓게 보여 준다.
 // 거의 무관(1~2점) 문장쌍의 중앙값 0.694보다 높은 0.70에서 시작한다.
 export const AMBIENT_LIST_MIN_SIMILARITY = 0.7;
-export const NETWORK_MIN_SIMILARITY = 0.35;
+// 주변 메모는 중심화한 메모 평균끼리의 코사인이다(원래 코사인과 척도가 다르다).
+// 메모 73개 손라벨 측정: 다른 주제 쌍 90%가 0.17 아래, 같은 주제 중앙값 0.23.
+// 사용자가 직접 연 목록이라 넉넉하게 0.10부터 보여 준다.
+export const NETWORK_MIN_SIMILARITY = 0.1;
 
 export type TopicTimeFilterKey = '1m' | '6m' | '1y' | 'all';
 

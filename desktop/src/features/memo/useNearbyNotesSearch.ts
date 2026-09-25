@@ -6,7 +6,7 @@ import {
 
 import { NETWORK_MIN_SIMILARITY } from '../../lib/constants';
 import type { MemoChunk } from '../../lib/memoChunker';
-import { formatLocalMemoSearchErrorMessage, searchLocalMemoChunks } from '../../services/local/localMemoSearch';
+import { formatLocalMemoSearchErrorMessage, searchNearbyMemos } from '../../services/local/localMemoSearch';
 import { getLocalWorkspaceOwner } from '../../services/local/offlineStore';
 import type { InboxSession } from '../../services/backend/inboxService';
 import type { MemoRow } from '../../types';
@@ -153,7 +153,7 @@ export const useNearbyNotesSearch = ({
       );
 
       try {
-        const response = await searchLocalMemoChunks({
+        const response = await searchNearbyMemos({
           limit: 8,
           minimumSimilarity: NETWORK_MIN_SIMILARITY,
           memoId: editor.memoId ?? null,

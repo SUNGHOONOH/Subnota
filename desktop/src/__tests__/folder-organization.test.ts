@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AUTOMATIC_FOLDER_MIN_SEEDS,
+  buildFolderClassificationRequest,
   createTopicFolderMemberships,
-  getAutomaticFolderAssignments,
   getFolderRecommendations,
+  getFolderSeedCount,
+  toAutomaticMemberships,
 } from '../features/memo/folderOrganization';
 import { MemoFolder, MemoFolderMembership, TopicCluster } from '../types';
 
 const folder = (patch: Partial<MemoFolder> = {}): MemoFolder => ({
-  classifierTerms: [],
   createdAt: '2026-09-06T00:00:00.000Z',
-  description: '',
   id: 'folder-a',
   mode: 'automatic',
   name: 'Databases',
@@ -31,40 +32,80 @@ const topics: TopicCluster[] = [
 ];
 
 describe('folder organization', () => {
-  it('only auto-classifies memos that do not already belong to a folder', () => {
-    const existing: MemoFolderMembership[] = [{
-      createdAt: '2026-09-06T00:00:00.000Z',
-      folderId: 'other-folder',
-      memoId: 'memo-kept',
-      score: null,
-      source: 'user',
-    }];
-
-    expect(getAutomaticFolderAssignments({
-      folders: [folder()],
-      memberships: existing,
-      now: '2026-09-06T01:00:00.000Z',
-      topicClusters: topics,
-      topicMemberships: [
-        { memoId: 'memo-kept', score: 0.8, topicId: 'topic-db' },
-        { memoId: 'memo-new', score: 0.7, topicId: 'topic-db' },
+  const membership = (
+    folderId: string,
+    memoId: string,
+    source: MemoFolderMembership['source'] = 'user',
+  ): MemoFolderMembership => ({
+    createdAt: '2026-09-06T00:00:00.000Z',
+    folderId,
+    memoId,
+    score: null,
+    source,
+  });
+  it('asks only about unfiled notes, using hand-filed seeds of automatic folders', () => {
+    expect(AUTOMATIC_FOLDER_MIN_SEEDS).toBe(2);
+    expect(buildFolderClassificationRequest({
+      folders: [
+        folder(),
+        folder({ id: 'folder-manual', mode: 'manual' }),
+        folder({ id: 'folder-one-seed' }),
       ],
-    })).toEqual([{
+      memberships: [
+        membership('folder-a', 'seed-user'),
+        membership('folder-a', 'seed-topic', 'topic_import'),
+        membership('folder-a', 'auto-filed', 'automatic'),
+        membership('folder-manual', 'manual-1'),
+        membership('folder-manual', 'manual-2'),
+        membership('folder-one-seed', 'lonely'),
+      ],
+      activeMemoIds: ['seed-user', 'auto-filed', 'manual-1', 'unfiled'],
+    })).toEqual({
+      candidateMemoIds: ['unfiled'],
+      folders: [{ folderId: 'folder-a', seedMemoIds: ['seed-user', 'seed-topic'] }],
+      margin: 0.03,
+      minimumSeeds: 2,
+      threshold: 0.4,
+    });
+  });
+
+  it('skips the request when no automatic folder has enough seeds or nothing is unfiled', () => {
+    expect(buildFolderClassificationRequest({
+      folders: [folder()],
+      memberships: [membership('folder-a', 'seed-user')],
+      activeMemoIds: ['unfiled'],
+    })).toBeNull();
+    expect(buildFolderClassificationRequest({
+      folders: [folder()],
+      memberships: [membership('folder-a', 'm1'), membership('folder-a', 'm2')],
+      activeMemoIds: ['m1', 'm2'],
+    })).toBeNull();
+  });
+
+  it('counts only hand-filed notes as seeds', () => {
+    expect(getFolderSeedCount('folder-a', [
+      membership('folder-a', 'm1'),
+      membership('folder-a', 'm2', 'automatic'),
+      membership('folder-a', 'm3', 'topic_import'),
+      membership('folder-b', 'm4'),
+    ])).toBe(2);
+  });
+
+  it('turns classifier hits into automatic memberships except removed pairs', () => {
+    expect(toAutomaticMemberships(
+      [
+        { folderId: 'folder-a', memoId: 'memo-new', score: 0.52 },
+        { folderId: 'folder-a', memoId: 'memo-removed', score: 0.61 },
+      ],
+      [{ createdAt: '2026-09-06T00:00:00.000Z', folderId: 'folder-a', memoId: 'memo-removed' }],
+      '2026-09-06T01:00:00.000Z',
+    )).toEqual([{
       createdAt: '2026-09-06T01:00:00.000Z',
       folderId: 'folder-a',
       memoId: 'memo-new',
-      score: 0.7,
+      score: 0.52,
       source: 'automatic',
     }]);
-  });
-
-  it('never lets manual folders claim notes automatically', () => {
-    expect(getAutomaticFolderAssignments({
-      folders: [folder({ mode: 'manual', sourceTopicId: 'topic-db' })],
-      memberships: [],
-      topicClusters: topics,
-      topicMemberships: [{ memoId: 'memo-new', score: 0.7, topicId: 'topic-db' }],
-    })).toEqual([]);
   });
 
   it('copies every current topic member without removing overlapping memberships', () => {
@@ -72,64 +113,6 @@ describe('folder organization', () => {
       { memoId: 'memo-a', score: 0.9, topicId: 'topic-db' },
       { memoId: 'memo-b', score: 0.8, topicId: 'topic-db' },
     ], '2026-09-06T02:00:00.000Z')).toHaveLength(2);
-  });
-
-  it('keeps an ambiguous memo unfiled when automatic folders tie', () => {
-    expect(getAutomaticFolderAssignments({
-      folders: [folder({ id: 'folder-a' }), folder({ id: 'folder-b' })],
-      memberships: [],
-      topicClusters: topics,
-      topicMemberships: [{ memoId: 'memo-new', score: 0.7, topicId: 'topic-db' }],
-    })).toEqual([]);
-  });
-
-  it('does not re-add a memo the user removed from an automatic folder', () => {
-    expect(getAutomaticFolderAssignments({
-      exclusions: [{
-        createdAt: '2026-09-06T00:00:00.000Z',
-        folderId: 'folder-a',
-        memoId: 'memo-new',
-      }],
-      folders: [folder()],
-      memberships: [],
-      topicClusters: topics,
-      topicMemberships: [{ memoId: 'memo-new', score: 0.7, topicId: 'topic-db' }],
-    })).toEqual([]);
-  });
-
-  it('keeps a Topic-imported folder target stable after Topics are regenerated', () => {
-    const regeneratedTopics: TopicCluster[] = [
-      ...topics,
-      {
-        confidence: 0.9,
-        id: 'topic-groceries',
-        keywords: ['market'],
-        label: 'Groceries',
-        memoCount: 2,
-        representativeMemoIds: [],
-      },
-    ];
-
-    expect(getAutomaticFolderAssignments({
-      folders: [folder({ classifierTerms: ['databases'], name: 'Archive' })],
-      memberships: [{
-        createdAt: '2026-09-06T00:00:00.000Z',
-        folderId: 'folder-a',
-        memoId: 'former-database-note',
-        score: 0.9,
-        source: 'topic_import',
-      }],
-      topicClusters: regeneratedTopics,
-      topicMemberships: [
-        { memoId: 'former-database-note', score: 0.9, topicId: 'topic-groceries' },
-        { memoId: 'new-database-note', score: 0.8, topicId: 'topic-db' },
-        { memoId: 'new-grocery-note', score: 0.8, topicId: 'topic-groceries' },
-      ],
-    })).toMatchObject([{
-      folderId: 'folder-a',
-      memoId: 'new-database-note',
-      source: 'automatic',
-    }]);
   });
 
   it('only suggests a reviewable folder for a sufficiently large unfiled topic', () => {
@@ -149,7 +132,6 @@ describe('folder organization', () => {
         { memoId: 'memo-filed', score: 0.7, topicId: 'topic-db' },
       ],
     })).toEqual([{
-      description: 'SQLite · sync',
       memoIds: ['memo-a', 'memo-b'],
       name: 'Databases',
       topicId: 'topic-db',

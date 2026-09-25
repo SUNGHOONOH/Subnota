@@ -4,6 +4,7 @@ import {
   LOCAL_SEARCH_ERROR_MESSAGE,
   formatLocalMemoSearchErrorMessage,
   searchLocalMemoChunks,
+  searchNearbyMemos,
 } from '../services/local/localMemoSearch';
 
 const queryVector = Array.from({ length: 1024 }, (_, index) =>
@@ -32,6 +33,10 @@ const searchRow = (
 const createApi = () => ({
   localDbSearchInboxVectors: vi.fn(async () => []),
   localDbSearchMemoVectors: vi.fn(async () => [searchRow()]),
+  localDbSearchSimilarMemos: vi.fn(async () => ({
+    inbox: [],
+    memos: [searchRow({ similarity: 0.31 })],
+  })),
   localDbSetOwner: vi.fn(async () => undefined),
   localEmbed: vi.fn(async () => [queryVector]),
 });
@@ -205,5 +210,51 @@ describe('local memo search', () => {
         new DOMException('workspace changed', 'AbortError'),
       ),
     ).toBeNull();
+  });
+
+  it('주변 메모는 메모의 모든 문장을 임베딩해 메모 단위로 검색한다', async () => {
+    const api = createApi();
+    api.localEmbed.mockResolvedValueOnce([queryVector, queryVector]);
+    const response = await searchNearbyMemos({
+      api,
+      limit: 8,
+      memoId: 'memo-1',
+      minimumSimilarity: 0.1,
+      ownerId: null,
+      queryText: '배당주 공부를 시작했다. 매달 현금흐름을 기록해 본다.',
+    });
+
+    expect(api.localEmbed).toHaveBeenCalledWith([
+      '배당주 공부를 시작했다.',
+      '매달 현금흐름을 기록해 본다.',
+    ]);
+    expect(api.localDbSearchSimilarMemos).toHaveBeenCalledWith(
+      null,
+      [queryVector, queryVector],
+      'memo-1',
+      8,
+      0.1,
+    );
+    expect(api.localDbSearchMemoVectors).not.toHaveBeenCalled();
+    expect(response.results).toMatchObject([
+      { memoId: 'memo-2', similarity: 0.31, sourceKind: 'memo' },
+    ]);
+    expect(response.queryChunk?.text).toBe(
+      '배당주 공부를 시작했다. 매달 현금흐름을 기록해 본다.',
+    );
+  });
+
+  it('의미 있는 문장이 없으면 모델을 깨우지 않는다', async () => {
+    const api = createApi();
+    const response = await searchNearbyMemos({
+      api,
+      limit: 8,
+      memoId: null,
+      minimumSimilarity: 0.1,
+      ownerId: null,
+      queryText: '   ',
+    });
+    expect(api.localEmbed).not.toHaveBeenCalled();
+    expect(response.queryChunk).toBeNull();
   });
 });
