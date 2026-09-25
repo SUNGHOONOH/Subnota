@@ -60,7 +60,6 @@ def replace_topic_clusters(
     user_id: str,
     clusters: list[DatabaseRow],
     memberships_by_cluster_index: list[list[DatabaseRow]],
-    edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
     inbox_items_by_cluster_index: list[list[DatabaseRow]] | None = None,
     inbox_edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
 ) -> None:
@@ -68,7 +67,6 @@ def replace_topic_clusters(
 
     cluster_rows: list[DatabaseRow] = []
     memberships: list[DatabaseRow] = []
-    edges: list[DatabaseRow] = []
     inbox_items: list[DatabaseRow] = []
     inbox_edges: list[DatabaseRow] = []
     for index, cluster in enumerate(clusters):
@@ -76,9 +74,6 @@ def replace_topic_clusters(
         cluster_rows.append({**cluster, "id": topic_id})
         for membership in memberships_by_cluster_index[index]:
             memberships.append({"topic_id": topic_id, **membership})
-        if edges_by_cluster_index:
-            for edge in edges_by_cluster_index[index]:
-                edges.append({"topic_id": topic_id, **edge})
         if inbox_items_by_cluster_index:
             for item in inbox_items_by_cluster_index[index]:
                 inbox_items.append({"topic_id": topic_id, **item})
@@ -91,7 +86,9 @@ def replace_topic_clusters(
             "p_user_id": user_id,
             "p_clusters": cluster_rows,
             "p_memberships": memberships,
-            "p_edges": edges,
+            # replace_topic_map still takes p_edges (older backends send it);
+            # topic memo edges are no longer produced, so it is always empty.
+            "p_edges": [],
             "p_inbox_items": inbox_items,
             "p_inbox_edges": inbox_edges,
         },
@@ -102,7 +99,6 @@ def apply_incremental_topic_clusters(
     user_id: str,
     clusters: list[DatabaseRow],
     memberships_by_cluster_index: list[list[DatabaseRow]],
-    edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
     inbox_items_by_cluster_index: list[list[DatabaseRow]] | None = None,
     inbox_edges_by_cluster_index: list[list[DatabaseRow]] | None = None,
 ) -> None:
@@ -115,7 +111,6 @@ def apply_incremental_topic_clusters(
     client = get_supabase()
     cluster_rows: list[DatabaseRow] = []
     memberships: list[DatabaseRow] = []
-    edges: list[DatabaseRow] = []
     inbox_items: list[DatabaseRow] = []
     inbox_edges: list[DatabaseRow] = []
 
@@ -124,8 +119,6 @@ def apply_incremental_topic_clusters(
         cluster_rows.append({**cluster, "id": topic_id, "user_id": user_id})
         for membership in memberships_by_cluster_index[index]:
             memberships.append({"topic_id": topic_id, **membership})
-        if edges_by_cluster_index:
-            edges.extend({"topic_id": topic_id, **edge} for edge in edges_by_cluster_index[index])
         if inbox_items_by_cluster_index:
             inbox_items.extend(
                 {"topic_id": topic_id, **item}
@@ -148,15 +141,12 @@ def apply_incremental_topic_clusters(
     for table_name in (
         "topic_memo_inbox_edges",
         "topic_cluster_inbox_items",
-        "topic_memo_edges",
         "topic_cluster_memos",
     ):
         client.table(table_name).delete().in_("topic_id", topic_ids).execute()
 
     if memberships:
         client.table("topic_cluster_memos").insert(memberships).execute()
-    if edges:
-        client.table("topic_memo_edges").insert(edges).execute()
     if inbox_items:
         client.table("topic_cluster_inbox_items").insert(inbox_items).execute()
     if inbox_edges:

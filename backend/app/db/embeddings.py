@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import cast
 
 from app.core import constants
 from app.db.client import get_supabase
@@ -44,44 +44,6 @@ def upsert_topic_memo_embeddings(rows: list[DatabaseRow]) -> None:
         ],
         on_conflict="memo_id,embedding_model",
     ).execute()
-
-
-def search_similar_topic_memos(
-    user_id: str,
-    query_embedding: Any,
-    exclude_memo_id: str | None,
-    limit: int,
-) -> list[DatabaseRow]:
-    client = get_supabase()
-    response = client.rpc(
-        "match_topic_memo_embeddings",
-        {
-            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
-            "p_user_id": user_id,
-            "p_query_embedding": format_vector(query_embedding),
-            "p_match_count": limit,
-            "p_exclude_memo_id": exclude_memo_id,
-        },
-    ).execute()
-    return cast(list[DatabaseRow], response.data or [])
-
-
-def search_similar_inbox_embeddings(
-    user_id: str,
-    query_embedding: Any,
-    limit: int,
-) -> list[DatabaseRow]:
-    client = get_supabase()
-    response = client.rpc(
-        "match_inbox_session_embeddings",
-        {
-            "p_embedding_model": constants.EMBEDDING_MODEL_SIGNATURE,
-            "p_user_id": user_id,
-            "p_query_embedding": format_vector(query_embedding),
-            "p_match_count": limit,
-        },
-    ).execute()
-    return cast(list[DatabaseRow], response.data or [])
 
 
 def rebuild_user_memo_similarity_edges(

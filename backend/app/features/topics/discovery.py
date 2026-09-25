@@ -143,7 +143,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
             # Automatic maintenance never clears a user's existing knowledge
             # map just because notes were removed below the discovery threshold.
             if is_full_regeneration:
-                replace_topic_clusters(request.user_id, [], [], [])
+                replace_topic_clusters(request.user_id, [], [])
             mark_topic_memos_clean(request.user_id, memos)
         return TopicDiscoveryResponse(
             status="skipped",
@@ -159,21 +159,19 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
     if not memos:
         if request.persist:
             if is_full_regeneration:
-                replace_topic_clusters(request.user_id, [], [], [])
+                replace_topic_clusters(request.user_id, [], [])
             elif existing_topics:
                 storage_clusters: list[DatabaseRow] = []
                 memberships: list[list[DatabaseRow]] = []
-                edges: list[list[DatabaseRow]] = []
                 append_empty_existing_topics(
                     existing_topics,
                     {},
                     request.user_id,
                     storage_clusters,
                     memberships,
-                    edges,
                 )
                 apply_incremental_topic_clusters(
-                    request.user_id, storage_clusters, memberships, edges
+                    request.user_id, storage_clusters, memberships
                 )
             mark_topic_memos_clean(request.user_id, memos)
         return TopicDiscoveryResponse(
@@ -200,7 +198,7 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
         labels, clustering_method = cluster_embeddings(embeddings)
         grouped = group_memos_by_cluster(memos, labels)
         preserved_identities = {}
-    results, storage_clusters, memberships, edges = build_topic_results(
+    results, storage_clusters, memberships = build_topic_results(
         request.user_id,
         grouped,
         embeddings,
@@ -216,7 +214,6 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
             request.user_id,
             storage_clusters,
             memberships,
-            edges,
         )
 
     # Saved links decorate the map; a fetch failure must not break discovery.
@@ -243,7 +240,6 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
                 request.user_id,
                 storage_clusters,
                 memberships,
-                edges,
                 inbox_items_by_cluster_index=inbox_items,
                 inbox_edges_by_cluster_index=inbox_edges,
             )
@@ -252,7 +248,6 @@ def run_topic_discovery(request: TopicDiscoveryRequest) -> TopicDiscoveryRespons
                 request.user_id,
                 storage_clusters,
                 memberships,
-                edges,
                 inbox_items_by_cluster_index=inbox_items,
                 inbox_edges_by_cluster_index=inbox_edges,
             )
@@ -619,12 +614,10 @@ def build_topic_results(
     list[TopicClusterResult],
     list[DatabaseRow],
     list[list[DatabaseRow]],
-    list[list[DatabaseRow]],
 ]:
     results: list[TopicClusterResult] = []
     storage_clusters: list[DatabaseRow] = []
     memberships: list[list[DatabaseRow]] = []
-    edges: list[list[DatabaseRow]] = []
     keywords_by_group = extract_keywords_by_group(grouped_indices, memos)
     stable_identities = preserved_identities or {}
 
@@ -669,9 +662,8 @@ def build_topic_results(
                 for memo in cluster_memos
             ]
         )
-        edges.append(build_topic_memo_edges(indices, embeddings, memos))
 
-    return results, storage_clusters, memberships, edges
+    return results, storage_clusters, memberships
 
 
 def append_empty_existing_topics(
@@ -680,7 +672,6 @@ def append_empty_existing_topics(
     user_id: str,
     storage_clusters: list[DatabaseRow],
     memberships: list[list[DatabaseRow]],
-    edges: list[list[DatabaseRow]],
 ) -> None:
     """Retain an emptied topic row until the user explicitly regenerates."""
     active_ids = {
@@ -708,59 +699,6 @@ def append_empty_existing_topics(
             }
         )
         memberships.append([])
-        edges.append([])
-
-
-def build_topic_memo_edges(
-    indices: list[int],
-    embeddings: FloatArray,
-    memos: list[MemoRecord],
-) -> list[DatabaseRow]:
-    if len(indices) <= 1:
-        return []
-
-    vectors = embeddings[indices]
-    similarities: Any = cosine_similarity(cast(Any, vectors))
-    candidates: list[tuple[int, int, float]] = []
-
-    for source_local_index in range(len(indices)):
-        ranked_targets = sorted(
-            (
-                (
-                    target_local_index,
-                    float(similarities[source_local_index][target_local_index]),
-                )
-                for target_local_index in range(len(indices))
-                if target_local_index != source_local_index
-            ),
-            key=lambda item: item[1],
-            reverse=True,
-        )[: constants.TOPIC_MEMO_EDGE_TOP_K]
-
-        for target_local_index, similarity in ranked_targets:
-            if similarity < constants.TOPIC_MEMO_EDGE_MIN_SIMILARITY:
-                continue
-            left = min(source_local_index, target_local_index)
-            right = max(source_local_index, target_local_index)
-            candidates.append((left, right, similarity))
-
-    deduped: dict[tuple[int, int], float] = {}
-    for left, right, similarity in candidates:
-        key = (left, right)
-        deduped[key] = max(deduped.get(key, 0), similarity)
-
-    return [
-        {
-            "source_memo_id": memos[indices[left]].id,
-            "target_memo_id": memos[indices[right]].id,
-            "similarity": round(similarity, 4),
-        }
-        for (left, right), similarity in sorted(
-            deduped.items(),
-            key=lambda item: item[1],
-            reverse=True,
-        )
-    ]
 
 
 def extract_keywords_by_group(

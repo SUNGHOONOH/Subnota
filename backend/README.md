@@ -10,7 +10,7 @@ client-side storage or authentication.
 
 - Run nightly schedule suggestion extraction from Supabase memos.
 - Run State A topic discovery from Supabase memos only when synced memos are marked dirty.
-- Store clustering results into `topic_clusters`, `topic_cluster_memos`, and `topic_memo_edges`.
+- Store clustering results into `topic_clusters` and `topic_cluster_memos`, and rebuild `memo_similarity_edges` for the desktop Topics map.
 - Analyze inbox URLs (YouTube transcripts, static HTML metadata extraction).
 - Guard all incoming URL requests against SSRF (anti-SSRF routing protection).
 - Provide unified daily maintenance endpoints for background jobs.

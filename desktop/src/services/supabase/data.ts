@@ -13,7 +13,6 @@ import {
   TopicInboxMembership,
   TopicMapData,
   TopicMemoInboxEdge,
-  TopicMemoEdge,
   TopicMembership,
 } from '../../types';
 import { supabase } from './client';
@@ -502,13 +501,6 @@ interface TopicMembershipRow {
   topic_id: string;
 }
 
-interface TopicMemoEdgeRow {
-  similarity: number;
-  source_memo_id: string;
-  target_memo_id: string;
-  topic_id: string;
-}
-
 interface MemoSimilarityEdgeRow {
   similarity: number;
   source_memo_id: string;
@@ -553,10 +545,6 @@ export const fetchTopicMap = async (
     throw membershipError;
   }
 
-  const edgeResult = await supabase
-    .from('topic_memo_edges')
-    .select('topic_id, source_memo_id, target_memo_id, similarity');
-  const edgeData = edgeResult.error ? [] : (edgeResult.data ?? []);
   // Tolerate a missing table so the app keeps working pre-migration.
   const inboxItemResult = await supabase
     .from('topic_cluster_inbox_items')
@@ -596,14 +584,6 @@ export const fetchTopicMap = async (
     score: row.score,
     topicId: row.topic_id,
   }));
-  const edges: TopicMemoEdge[] = (edgeData as TopicMemoEdgeRow[]).map(
-    (row) => ({
-      similarity: row.similarity,
-      sourceMemoId: row.source_memo_id,
-      targetMemoId: row.target_memo_id,
-      topicId: row.topic_id,
-    }),
-  );
   const globalEdges = (globalEdgeData as MemoSimilarityEdgeRow[]).map(
     (row) => ({
       similarity: row.similarity,
@@ -640,7 +620,6 @@ export const fetchTopicMap = async (
 
   return {
     clusters,
-    edges,
     globalEdges,
     inboxEdges,
     inboxMemberships,

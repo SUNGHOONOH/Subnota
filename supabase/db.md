@@ -1,6 +1,6 @@
 # Subnota database handoff
 
-Last verified: 2026-09-08 (Asia/Seoul)
+Last verified: 2026-09-25 (Asia/Seoul)
 
 This document describes the production Supabase database after the security and
 memo graph consistency migration. It is intended as the starting point for any
@@ -26,10 +26,15 @@ Google Secret Manager.
 
 ## Source of truth and migration workflow
 
-The production schema was verified from the live catalog on 2026-09-08. The
-canonical production migration history is the 35-row
+The production schema was verified from the live catalog on 2026-09-25. The
+canonical production migration history is the 37-row
 `supabase_migrations.schema_migrations` table, whose latest recorded version is
-`20260908090000`.
+`20260925000000`. `20260906075256_memo_folders` was applied by hand earlier; on
+2026-09-25 its two missing `memo_id` indexes were created in production so the
+schema matches the file, and the version was then recorded under the same name.
+
+`supabase/migrations/` is listed in `.gitignore`; existing files were added
+with `git add -f`, and new migration files need the same.
 
 The local SQL files are the reproducible source for future work, but their
 filenames do not exactly match every production history version. Several SQL
@@ -73,13 +78,14 @@ reproducible chain; new production changes belong in a new migration.
 
 The project CLI configuration is `supabase/config.toml`.
 
-## Public tables (23)
+## Public tables (20)
 
-All public tables have RLS enabled.
+All public tables have RLS enabled. Tables marked *(pending removal)* are
+dropped by a migration listed under "Pending migrations" below.
 
 ### User-facing, owner-scoped
 
-- `profiles`: profile, push metadata, and an IANA
+- `profiles`: profile and an IANA
   `time_zone` for schedule extraction. It defaults to `Asia/Seoul` so existing
   users' schedule times do not shift before their desktop app reports a device
   time zone.
@@ -88,14 +94,23 @@ All public tables have RLS enabled.
 - `schedule_inbox`: backend-generated schedule suggestions; owner read/update.
 - `topic_clusters`: State A topic clusters.
 - `topic_cluster_memos`: topic membership rows.
-- `topic_memo_edges`: memo relationships inside topics.
+- `topic_memo_edges`: memo relationships inside topics. *(pending removal —
+  only the legacy RN app reads it; the desktop map uses `memo_similarity_edges`)*
 - `topic_memo_embedding_cache`: whole-memo embeddings used by topic discovery.
 - `memo_similarity_edges`: persisted memo-level similarity graph.
 - `topic_cluster_inbox_items`: inbox sessions attached to a topic cluster.
 - `topic_memo_inbox_edges`: memo-to-inbox links inside a topic cluster.
 - `activity_completions`: append-only first-completion ledger.
 - `daily_completions`: append-only fully-completed-day ledger.
-- `trees`: immutable growth-tree snapshots by user and generation.
+- `trees`: growth-tree snapshots of the abolished calendar gamification, 0 rows.
+  *(pending removal)*
+- `memo_folders`: user folders; `organization_mode` is `manual` or `automatic`.
+  `description` and `classifier_terms` are unused since 2026-09-25 *(pending
+  removal)*: automatic folders classify on-device with local embeddings.
+- `memo_folder_memberships`: memo-in-folder rows; `assignment_source` is
+  `user`, `topic_import` or `automatic`.
+- `memo_folder_exclusions`: notes a user took out of an automatic folder, so
+  they are never re-added automatically.
 
 ### Backend-only, no client policy
 
@@ -113,8 +128,8 @@ The following functions are backend-only. `anon` and `authenticated` must not
 have `EXECUTE`; `service_role` must have it. Privileged functions pin their
 `search_path`.
 
-- `match_inbox_session_embeddings`
-- `find_dirty_memo_user_ids`
+- `find_dirty_memo_user_ids` (the backend calls the 3-argument version; the old
+  2-argument overload is pending removal)
 - `fetch_dirty_memos`
 - `replace_topic_map`
 - `rebuild_user_memo_similarity_edges`
@@ -152,6 +167,28 @@ through the migration workflow and explicitly hardened.
 `handle_new_user`, `set_updated_at` and `rls_auto_enable` are trigger helpers,
 not public RPC endpoints. Their direct application-role execution is revoked.
 
+## Pending migrations
+
+Both files exist locally and are **not** applied or recorded yet.
+
+1. `20260925010000_drop_retired_trees_and_unused_columns.sql` — safe to apply
+   now. Drops `trees`, the 2-argument `find_dirty_memo_user_ids`,
+   `memos.last_indexed_at`, `memos.last_synced_at`, `profiles.briefing_time` and
+   `profiles.push_token`. Verified unused by the released desktop (v1.0.4), the
+   deployed backend, the iOS app and every public function body.
+2. `20260925020000_drop_topic_memo_edges_and_folder_text_columns.sql` — apply
+   only when both are true:
+   - the backend that no longer writes `topic_memo_edges` is deployed (the
+     v1.0.4-era backend deletes from and inserts into it directly), and
+   - no desktop at or before v1.0.4 is still in use (v1.0.4 selects and upserts
+     `memo_folders.description`/`classifier_terms` by name).
+   It keeps the `replace_topic_map` signature (`p_edges` is accepted and
+   ignored), drops `topic_memo_edges`, and drops the two folder columns.
+
+After applying either, record it with
+`supabase migration repair --status applied <version> --linked`, run the
+advisors, and move the entry into the relevant section of this document.
+
 ## Local memo search retirement
 
 Nearby and ambient memo search now splits and embeds memo chunks locally on
@@ -163,6 +200,14 @@ The retirement migration is
 The old `/network/search` endpoint, its query-vector cache, and its rate-limit
 state are removed by the retirement migration. Topics and saved-link topic
 attachments continue using their separate server embeddings.
+
+Applied 2026-09-25 and recorded as `20260925000000`:
+`20260925000000_drop_unused_memo_match_functions.sql` dropped
+`match_topic_memo_embeddings` and `match_inbox_session_embeddings`. Nothing called
+them (verified in client, backend and the live catalog before dropping). Advisors
+after the change: only the documented `extension_in_public`,
+`auth_leaked_password_protection`, and the intended client RPC
+`upsert_memo_if_base_hash` (SECURITY DEFINER, executable by `authenticated`).
 
 ## Schedule parsing anchor and maintenance cron
 
@@ -201,8 +246,6 @@ active maintenance job.
 
 ## Security state after 2026-08-24
 
-- `match_inbox_session_embeddings` is service-only, has an empty `search_path`,
-  and includes ownership predicates.
 - Inbox tables and inbox embeddings are backend-only.
 - The previously exposed backend admin key was rotated; old Secret Manager
   versions 1 and 2 are disabled; version 3 is enabled. Retrieve the current key

@@ -142,13 +142,6 @@ export interface TopicMemoInboxEdge {
   topicId: string;
 }
 
-export interface TopicMemoEdge {
-  similarity: number;
-  sourceMemoId: string;
-  targetMemoId: string;
-  topicId: string;
-}
-
 export interface MemoSimilarityEdge {
   similarity: number;
   sourceMemoId: string;
@@ -159,7 +152,6 @@ export interface MemoSimilarityEdge {
 
 export interface TopicMapData {
   clusters: TopicCluster[];
-  edges: TopicMemoEdge[];
   globalEdges: MemoSimilarityEdge[];
   inboxEdges: TopicMemoInboxEdge[];
   inboxMemberships: TopicInboxMembership[];

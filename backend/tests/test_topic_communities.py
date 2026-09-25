@@ -114,7 +114,7 @@ def test_preserved_identity_keeps_id_and_label_in_storage_result() -> None:
     memos = [memo("memo-1"), memo("memo-2")]
     embeddings = np.asarray([[1.0, 0.0], [0.99, 0.01]], dtype=np.float64)
 
-    results, storage_clusters, memberships, _edges = build_topic_results(
+    results, storage_clusters, memberships = build_topic_results(
         "user-1",
         [[0, 1]],
         embeddings,

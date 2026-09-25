@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Any
 
 from app.db.types import MemoRecord
@@ -36,6 +35,3 @@ def optional_str(value: Any) -> str | None:
         return None
     return str(value)
 
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
