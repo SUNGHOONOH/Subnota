@@ -6,7 +6,7 @@ import type {
   LocalEmbeddingRuntime,
 } from './local-embedding-runtime';
 
-type WorkerMethod = 'embed' | 'ensure' | 'initialize' | 'release-all' | 'release-index';
+type WorkerMethod = 'embed' | 'topics' | 'ensure' | 'initialize' | 'release-all' | 'release-index';
 
 interface WorkerRequest {
   cacheDirectory?: string;
@@ -20,7 +20,7 @@ interface WorkerResponse {
   error?: string;
   id: number;
   ok: boolean;
-  result?: null | number[][];
+  result?: null | number[][] | string[][];
 }
 
 interface QueueEntry {
@@ -43,7 +43,7 @@ const reply = (response: WorkerResponse) => parentPort.postMessage(response);
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-const run = async (request: WorkerRequest): Promise<null | number[][]> => {
+const run = async (request: WorkerRequest): Promise<null | number[][] | string[][]> => {
   switch (request.method) {
     case 'initialize': {
       if (typeof request.cacheDirectory !== 'string' || request.cacheDirectory.length === 0) {
@@ -69,6 +69,13 @@ const run = async (request: WorkerRequest): Promise<null | number[][]> => {
         throw new Error('Embedding worker is not initialized.');
       }
       return runtime.embed(request.mode, request.texts);
+    }
+    case 'topics': {
+      if (!runtime || !Array.isArray(request.texts) || request.texts.length > 64 ||
+          request.texts.some(text => typeof text !== 'string')) {
+        throw new Error('Invalid topic extraction input.');
+      }
+      return runtime.topics(request.texts);
     }
     case 'release-index': {
       await runtime?.releaseIndex();
@@ -101,7 +108,7 @@ const drain = () => {
 parentPort.on('message', event => {
   const request = event.data as WorkerRequest;
   if (!request || typeof request !== 'object' || !Number.isSafeInteger(request.id)) return;
-  if (!['embed', 'ensure', 'initialize', 'release-all', 'release-index'].includes(request.method)) {
+  if (!['embed', 'topics', 'ensure', 'initialize', 'release-all', 'release-index'].includes(request.method)) {
     reply({ id: request.id, ok: false, error: 'Unknown embedding worker method.' });
     return;
   }

@@ -145,6 +145,7 @@ describe('local-embedding IPC', () => {
       'local-embed:index',
       'local-embed:release-index',
       'local-embed:status',
+      'local-embed:topics',
     ]);
   });
 
@@ -165,6 +166,12 @@ describe('local-embedding IPC', () => {
     expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledWith(
       expect.objectContaining({ targetPath: testWeightsPath }),
     );
+    expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetPath: expect.stringContaining('Hoon03/subnota-ax-encoder-int8-onnx'),
+        url: expect.stringContaining('ce7ce9a158b28352fed762f86aab028385bc5f23'),
+      }),
+    );
   });
 
   it('기존 캐시가 같은 파일이면 재다운로드 없이 pinned 경로로 이동한다', async () => {
@@ -181,7 +188,9 @@ describe('local-embedding IPC', () => {
     expect(fs.existsSync(legacyPath)).toBe(false);
     expect(fs.existsSync(testWeightsPath)).toBe(true);
     expect(fs.existsSync(partialPath)).toBe(false);
-    expect(downloadMocks.downloadWeightsResumable).not.toHaveBeenCalled();
+    expect(downloadMocks.downloadWeightsResumable).not.toHaveBeenCalledWith(
+      expect.objectContaining({ targetPath: testWeightsPath }),
+    );
   });
 
   it('다운로드 완료 후 Utility Process에서 세션을 준비하고 ready를 유지한다', async () => {
@@ -195,8 +204,9 @@ describe('local-embedding IPC', () => {
     await ipcHandlers['local-embed:download-model'](trustedEvent);
 
     expect(ipcHandlers['local-embed:status'](trustedEvent)).toMatchObject({
-      downloadedBytes: 569_694_530,
-      totalBytes: 569_694_530,
+      downloadedBytes: 759_687_819,
+      totalBytes: 759_687_819,
+      topicReady: true,
       state: 'ready',
     });
     expect(utilityProcessMocks.fork).toHaveBeenCalledOnce();
@@ -206,18 +216,46 @@ describe('local-embedding IPC', () => {
     ]);
   });
 
+  it('A.X 파일 다운로드가 실패해도 BGE 검색 준비 상태를 유지한다', async () => {
+    downloadMocks.downloadWeightsResumable.mockImplementation(async options => {
+      if (String(options.url).endsWith('/config.json')) throw new Error('A.X download failed');
+      if (String(options.url).includes('Xenova/bge-m3')) {
+        options.onProgress({ downloadedBytes: 569_694_530, totalBytes: 569_694_530 });
+      }
+    });
+    await ipcHandlers['local-embed:download-model'](trustedEvent);
+    expect(ipcHandlers['local-embed:status'](trustedEvent)).toMatchObject({
+      ready: true,
+      state: 'ready',
+      topicReady: false,
+      topicError: 'A.X download failed',
+    });
+  });
+
+  it('모델 삭제는 BGE와 A.X 캐시를 함께 제거한다', async () => {
+    seedVerifiedWeights();
+    const topicRoot = path.join(testUserDataRoot, 'Models/Embedding/Hoon03/subnota-ax-encoder-int8-onnx');
+    fs.mkdirSync(topicRoot, { recursive: true });
+    fs.writeFileSync(path.join(topicRoot, 'marker'), 'cached');
+
+    const status = await ipcHandlers['local-embed:delete-model'](trustedEvent);
+    expect(status).toMatchObject({ ready: false, state: 'absent', topicReady: false });
+    expect(fs.existsSync(testModelRoot)).toBe(false);
+    expect(fs.existsSync(topicRoot)).toBe(false);
+  });
+
   it('동시에 온 다운로드 요청은 하나의 모델 받기 작업을 공유한다', async () => {
     let releaseDownload: (() => void) | null = null;
     downloadMocks.downloadWeightsResumable.mockImplementation(async options => {
-      await new Promise<void>(resolve => {
-        releaseDownload = resolve;
-      });
+      if (options.targetPath === testWeightsPath) {
+        await new Promise<void>(resolve => { releaseDownload = resolve; });
+      }
       fs.mkdirSync(path.dirname(options.targetPath), { recursive: true });
       fs.closeSync(fs.openSync(options.targetPath, 'w'));
-      fs.truncateSync(options.targetPath, 569_694_530);
+      fs.truncateSync(options.targetPath, options.expectedBytes);
       options.onProgress({
-        downloadedBytes: 569_694_530,
-        totalBytes: 569_694_530,
+        downloadedBytes: options.expectedBytes,
+        totalBytes: options.expectedBytes,
       });
     });
 
@@ -230,7 +268,7 @@ describe('local-embedding IPC', () => {
     expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledOnce();
     releaseDownload?.();
     await Promise.all([first, second]);
-    expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledOnce();
+    expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledTimes(7);
   });
 
   it('신뢰할 수 없는 sender를 거부한다', () => {
@@ -331,13 +369,13 @@ describe('local-embedding IPC', () => {
     expect(messagesFor('release-index')).toHaveLength(1);
   });
 
-  // 570MB를 받다 실패하는 것보다 시작 전에 막는 편이 낫다.
+  // 약 760MB 모델과 여유 공간을 포함한 필요량을 받기 전에 확인한다.
   it('디스크 여유 공간과 필요한 공간을 알려 준다', () => {
     const space = ipcHandlers['local-embed:disk-space'](trustedEvent) as {
       freeBytes: number | null;
       requiredBytes: number;
     };
-    expect(space.requiredBytes).toBeGreaterThan(470_000_000);
+    expect(space.requiredBytes).toBeGreaterThan(900_000_000);
     expect(space.freeBytes === null || space.freeBytes >= 0).toBe(true);
   });
 });

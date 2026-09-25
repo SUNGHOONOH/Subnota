@@ -31,6 +31,24 @@ artifact used by each client remain auditable.
 - Base model source: <https://huggingface.co/BAAI/bge-m3>
 - License text: <https://opensource.org/license/mit/>
 
+## Desktop local topic-word model
+
+- Original model: `skt/A.X-Encoder-base` by SK Telecom (SKT AI Model Lab)
+- Original revision: `9708f9c404ace91efd25c06fac2d73413616f4ef`
+- License: Apache License 2.0
+- Original source: <https://huggingface.co/skt/A.X-Encoder-base>
+- Distributed artifact: <https://huggingface.co/Hoon03/subnota-ax-encoder-int8-onnx/tree/ce7ce9a158b28352fed762f86aab028385bc5f23>
+- Change: Subnota made an **unofficial** ONNX opset-17 export of the original
+  masked-language model and dynamically quantized its MatMul and Gather weights
+  to signed int8. No further training or fine-tuning was performed. This is not
+  an official SK Telecom release or endorsement.
+- Usage: downloaded on request with the desktop embedding model; topic-word
+  inference and subsequent search-vector calculation run on the user's device.
+  Model weights are not bundled in the installer.
+- License text: <https://www.apache.org/licenses/LICENSE-2.0> and the `LICENSE`
+  file in the distributed model repository. The conversion script is
+  `desktop/scripts/export-ax-encoder.py`.
+
 The model repositories identify the license metadata above. If a model revision
 changes, update this file and the corresponding model signature in the code
 before releasing the change.

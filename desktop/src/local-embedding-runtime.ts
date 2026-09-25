@@ -3,7 +3,12 @@ import {
   EMBEDDING_MODEL_REPO,
   EMBEDDING_MODEL_REVISION,
   EMBEDDING_VECTOR_DIMENSIONS,
+  TOPIC_MODEL_REPO,
+  TOPIC_MODEL_REVISION,
+  TOPIC_MODEL_WEIGHTS,
 } from './local-embedding-config';
+import { eligibleTopicTokenIds, rankTopicWords, topicPrompt } from './lib/topicWords';
+import path from 'node:path';
 
 export type LocalEmbeddingMode = 'index' | 'interactive';
 
@@ -16,6 +21,7 @@ type DisposableExtractor = Extractor & { dispose: () => Promise<void> };
 
 export interface LocalEmbeddingRuntime {
   embed: (mode: LocalEmbeddingMode, texts: string[]) => Promise<number[][]>;
+  topics: (texts: string[]) => Promise<string[][]>;
   ensure: (mode: LocalEmbeddingMode) => Promise<void>;
   releaseAll: () => Promise<void>;
   releaseIndex: () => Promise<void>;
@@ -30,6 +36,58 @@ export const createLocalEmbeddingRuntime = (
 ): LocalEmbeddingRuntime => {
   let interactiveExtractorPromise: Promise<DisposableExtractor> | null = null;
   let indexExtractorPromise: Promise<DisposableExtractor> | null = null;
+  type TopicSession = {
+    run: (feeds: Record<string, unknown>) => Promise<Record<string, { data: ArrayLike<number>; dims: number[] }>>;
+    release: () => Promise<void>;
+  };
+  type TopicTokenizer = {
+    (text: string, options: { truncation: boolean; max_length: number }): Promise<{ input_ids: { data: ArrayLike<number> }; attention_mask: { data: ArrayLike<number> } }>;
+    mask_token_id: number;
+    all_special_ids: number[];
+    get_vocab: () => Map<string, number>;
+  };
+  let topicSessionPromise: Promise<{ session: TopicSession; tokenizer: TopicTokenizer; tokens: string[]; eligibleIds: number[] }> | null = null;
+
+  const ensureTopicSession = () => {
+    if (topicSessionPromise) return topicSessionPromise;
+    const next = (async () => {
+      const [{ AutoTokenizer, env }, ort] = await Promise.all([
+        import('@huggingface/transformers'),
+        import('onnxruntime-node'),
+      ]);
+      const modelDir = path.join(cacheDirectory, TOPIC_MODEL_REPO, TOPIC_MODEL_REVISION);
+      env.allowLocalModels = true;
+      let tokenizer: TopicTokenizer;
+      try {
+        tokenizer = await AutoTokenizer.from_pretrained(modelDir, { local_files_only: true }) as unknown as TopicTokenizer;
+      } finally {
+        env.allowLocalModels = false;
+      }
+      const tokens: string[] = [];
+      for (const [token, id] of tokenizer.get_vocab()) tokens[id] = token;
+      const session = await ort.InferenceSession.create(path.join(modelDir, TOPIC_MODEL_WEIGHTS), {
+        intraOpNumThreads: 2,
+      });
+      return {
+        session: session as unknown as TopicSession,
+        tokenizer,
+        tokens,
+        eligibleIds: eligibleTopicTokenIds(tokens, tokenizer.all_special_ids),
+      };
+    })().catch(error => {
+      topicSessionPromise = null;
+      throw error;
+    });
+    topicSessionPromise = next;
+    return next;
+  };
+
+  const releaseTopicSession = async () => {
+    const active = topicSessionPromise;
+    topicSessionPromise = null;
+    if (!active) return;
+    try { await (await active).session.release(); } catch { /* A failed load owns no session. */ }
+  };
 
   const loadExtractor = async (
     mode: LocalEmbeddingMode,
@@ -86,6 +144,7 @@ export const createLocalEmbeddingRuntime = (
     const active = indexExtractorPromise;
     indexExtractorPromise = null;
     await releaseExtractor(active);
+    await releaseTopicSession();
   };
 
   return {
@@ -109,12 +168,35 @@ export const createLocalEmbeddingRuntime = (
       }
       return out;
     },
+    topics: async texts => {
+      const { session, tokenizer, tokens, eligibleIds } = await ensureTopicSession();
+      const ort = await import('onnxruntime-node');
+      const result: string[][] = [];
+      for (const text of texts) {
+        const encoded = await tokenizer(topicPrompt(text), { truncation: true, max_length: 512 });
+        const ids = Array.from(encoded.input_ids.data, Number);
+        const masks = ids.flatMap((id, index) => id === tokenizer.mask_token_id ? [index] : []);
+        if (masks.length !== 3) throw new Error('A.X prompt is missing mask tokens.');
+        const shape = [1, ids.length];
+        const output = await session.run({
+          input_ids: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), shape),
+          attention_mask: new ort.Tensor('int64', BigInt64Array.from(encoded.attention_mask.data, BigInt), shape),
+        });
+        const logits = output.logits;
+        if (!logits || logits.dims[0] !== 1 || logits.dims[1] !== ids.length || logits.dims[2] !== tokens.length) {
+          throw new Error('A.X returned invalid logits.');
+        }
+        result.push(rankTopicWords(logits.data, tokens.length, masks, tokens, eligibleIds));
+      }
+      return result;
+    },
     releaseAll: async () => {
       const interactive = interactiveExtractorPromise;
       const index = indexExtractorPromise;
       interactiveExtractorPromise = null;
       indexExtractorPromise = null;
       await Promise.all([releaseExtractor(interactive), releaseExtractor(index)]);
+      await releaseTopicSession();
     },
     releaseIndex,
   };

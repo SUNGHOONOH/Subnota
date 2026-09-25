@@ -17,8 +17,8 @@
  * 전부 동일했고 어떤 옵션을 줘도 결과가 비트 단위로 같았다.
  * 자세한 근거는 docs/embedding-migration-plan.md 참고.
  *
- * 모델은 앱에 번들하지 않는다(570MB). 첫 사용 시 userData로 내려받고,
- * 이후 실행부터는 로컬 캐시를 그대로 쓴다.
+ * 모델은 앱에 번들하지 않는다(BGE-M3와 A.X 합계 약 760MB). 첫 사용 시
+ * userData로 내려받고, 이후 실행부터는 로컬 캐시를 그대로 쓴다.
  */
 import { app, ipcMain, utilityProcess } from 'electron';
 import fs from 'node:fs';
@@ -33,6 +33,13 @@ import {
   EMBEDDING_MODEL_WEIGHTS,
   EMBEDDING_REQUIRED_DISK_BYTES,
   EMBEDDING_VECTOR_DIMENSIONS,
+  TOPIC_MODEL_BYTES,
+  TOPIC_MODEL_FILES,
+  TOPIC_MODEL_REPO,
+  TOPIC_MODEL_REVISION,
+  TOPIC_MODEL_SHA256,
+  TOPIC_MODEL_TOTAL_BYTES,
+  TOPIC_MODEL_WEIGHTS,
 } from './local-embedding-config';
 import {
   downloadWeightsResumable,
@@ -47,6 +54,8 @@ import {
 export { EMBEDDING_MODEL_ID, EMBEDDING_VECTOR_DIMENSIONS };
 
 const WEIGHTS_URL = `https://huggingface.co/${EMBEDDING_MODEL_REPO}/resolve/${EMBEDDING_MODEL_REVISION}/${EMBEDDING_MODEL_WEIGHTS}`;
+const MODEL_TOTAL_BYTES = EMBEDDING_MODEL_BYTES + TOPIC_MODEL_TOTAL_BYTES;
+const topicFileUrl = (name: string) => `https://huggingface.co/${TOPIC_MODEL_REPO}/resolve/${TOPIC_MODEL_REVISION}/${name}`;
 
 /**
  * 문서 벡터와 질의 벡터를 가르는 딱지. bge-m3는 접두사를 쓰지 않아 둘이 같은
@@ -64,10 +73,12 @@ export interface LocalEmbeddingStatus {
   ready: boolean;
   state: 'absent' | 'downloading' | 'loading' | 'ready' | 'failed';
   totalBytes: number;
+  topicReady: boolean;
+  topicError?: string;
 }
 
 type EmbeddingMode = 'index' | 'interactive';
-type UtilityMethod = 'embed' | 'ensure' | 'initialize' | 'release-all' | 'release-index';
+type UtilityMethod = 'embed' | 'topics' | 'ensure' | 'initialize' | 'release-all' | 'release-index';
 
 interface UtilityResponse {
   error?: unknown;
@@ -91,6 +102,14 @@ const weightsPath = () =>
     EMBEDDING_MODEL_WEIGHTS,
   );
 const partialWeightsPath = () => `${weightsPath()}.part`;
+const topicFilePath = (name: string) => path.join(cacheDirectory(), TOPIC_MODEL_REPO, TOPIC_MODEL_REVISION, name);
+const topicFiles = [
+  { name: TOPIC_MODEL_WEIGHTS, bytes: TOPIC_MODEL_BYTES, sha256: TOPIC_MODEL_SHA256 },
+  ...TOPIC_MODEL_FILES,
+];
+const topicFilesPresent = () => topicFiles.every(file => {
+  try { return fs.statSync(topicFilePath(file.name)).size === file.bytes; } catch { return false; }
+});
 const legacyWeightsPath = () =>
   path.join(getLegacyModelCacheDirectory(), EMBEDDING_MODEL_REPO, EMBEDDING_MODEL_WEIGHTS);
 
@@ -99,15 +118,18 @@ let status: LocalEmbeddingStatus = {
   modelId: EMBEDDING_MODEL_ID,
   ready: false,
   state: 'absent',
-  totalBytes: EMBEDDING_MODEL_BYTES,
+  totalBytes: MODEL_TOTAL_BYTES,
+  topicReady: false,
 };
 let inspectedDisk = false;
 let weightsVerified = false;
+let topicFilesVerified = false;
 let prunedStaleCache = false;
 let modelDownloadPromise: Promise<LocalEmbeddingStatus> | null = null;
 let indexEmbeddingQueue: Promise<void> = Promise.resolve();
 let interactiveExtractorLoaded = false;
 let indexExtractorLoaded = false;
+let topicExtractorLoaded = false;
 let embeddingProcess: Electron.UtilityProcess | null = null;
 let embeddingProcessReady: Promise<Electron.UtilityProcess> | null = null;
 let nextUtilityRequestId = 1;
@@ -130,10 +152,12 @@ const currentStatus = (): LocalEmbeddingStatus => {
           : null;
       if (candidate) {
         const downloadedBytes = fs.statSync(candidate).size;
+        const topicReady = topicFilesPresent();
         setStatus({
-          downloadedBytes,
+          downloadedBytes: downloadedBytes + (topicReady ? TOPIC_MODEL_TOTAL_BYTES : 0),
           ready: downloadedBytes === EMBEDDING_MODEL_BYTES,
           state: downloadedBytes === EMBEDDING_MODEL_BYTES ? 'ready' : 'absent',
+          topicReady,
         });
       }
     } catch {
@@ -181,6 +205,7 @@ const startEmbeddingProcess = (): Promise<Electron.UtilityProcess> => {
     embeddingProcessReady = null;
     interactiveExtractorLoaded = false;
     indexExtractorLoaded = false;
+    topicExtractorLoaded = false;
     if (!settled) {
       settled = true;
       rejectReady(error);
@@ -243,6 +268,7 @@ const releaseAllEmbeddingExtractors = async () => {
   }
   interactiveExtractorLoaded = false;
   indexExtractorLoaded = false;
+  topicExtractorLoaded = false;
 };
 
 const ensureRemoteExtractor = async (mode: EmbeddingMode) => {
@@ -250,11 +276,11 @@ const ensureRemoteExtractor = async (mode: EmbeddingMode) => {
   if (loaded) return;
 
   setStatus({
-    downloadedBytes: EMBEDDING_MODEL_BYTES,
+    downloadedBytes: EMBEDDING_MODEL_BYTES + (status.topicReady ? TOPIC_MODEL_TOTAL_BYTES : 0),
     error: undefined,
     ready: false,
     state: 'loading',
-    totalBytes: EMBEDDING_MODEL_BYTES,
+    totalBytes: MODEL_TOTAL_BYTES,
   });
   try {
     await initializeEmbeddingUtility();
@@ -326,6 +352,30 @@ const ensureWeights = async (
   weightsVerified = true;
 };
 
+const ensureTopicFiles = async (onProgress: (bytes: number) => void) => {
+  if (topicFilesVerified && topicFilesPresent()) return;
+  let completed = 0;
+  for (const file of topicFiles) {
+    const target = topicFilePath(file.name);
+    if (fs.existsSync(target) && await fileMatchesExpectedModel(target, file.bytes, file.sha256)) {
+      completed += file.bytes;
+      onProgress(completed);
+      continue;
+    }
+    await downloadWeightsResumable({
+      expectedBytes: file.bytes,
+      expectedSha256: file.sha256,
+      onProgress: progress => onProgress(completed + progress.downloadedBytes),
+      targetPath: target,
+      url: topicFileUrl(file.name),
+    });
+    completed += file.bytes;
+    onProgress(completed);
+  }
+  topicFilesVerified = true;
+  pruneStaleModelCache(path.join(cacheDirectory(), TOPIC_MODEL_REPO), TOPIC_MODEL_REVISION);
+};
+
 // Transformers.js가 남기는 revision 고정 전 캐시·중단 임시 파일은 현재 경로와
 // 겹치지 않는다. 모델을 실제로 쓸 수 있다고 확인한 뒤에만 정리한다.
 export const pruneStaleModelCache = (repoRoot: string, keepRevision: string) => {
@@ -366,10 +416,10 @@ const prepareWeightsForInference = async (allowDownload = true) => {
     state: alreadyOnDisk ? 'loading' : 'downloading',
   });
   await ensureWeights(
-    ({ downloadedBytes, totalBytes }) =>
+    ({ downloadedBytes }) =>
       setStatus({
         downloadedBytes,
-        totalBytes: totalBytes || EMBEDDING_MODEL_BYTES,
+        totalBytes: MODEL_TOTAL_BYTES,
       }),
     allowDownload,
   );
@@ -402,12 +452,28 @@ export const downloadModel = (): Promise<LocalEmbeddingStatus> => {
     try {
       await prepareWeightsForInference(true);
       await ensureRemoteExtractor('interactive');
-    } catch (error) {
       setStatus({
-        error: utilityErrorMessage(error),
-        ready: false,
-        state: 'failed',
+        downloadedBytes: EMBEDDING_MODEL_BYTES,
+        ready: true,
+        state: 'downloading',
+        totalBytes: MODEL_TOTAL_BYTES,
       });
+      await ensureTopicFiles(bytes => setStatus({
+        downloadedBytes: EMBEDDING_MODEL_BYTES + bytes,
+        totalBytes: MODEL_TOTAL_BYTES,
+      }));
+      setStatus({ ready: true, state: 'ready', topicReady: true, topicError: undefined });
+    } catch (error) {
+      if (status.ready) {
+        setStatus({
+          ready: true,
+          state: 'ready',
+          topicReady: false,
+          topicError: utilityErrorMessage(error),
+        });
+      } else {
+        setStatus({ error: utilityErrorMessage(error), ready: false, state: 'failed' });
+      }
     }
     return status;
   })();
@@ -429,14 +495,18 @@ export const deleteModel = async (): Promise<LocalEmbeddingStatus> => {
     force: true,
     recursive: true,
   });
+  fs.rmSync(path.join(cacheDirectory(), TOPIC_MODEL_REPO), { force: true, recursive: true });
   weightsVerified = false;
+  topicFilesVerified = false;
   inspectedDisk = true;
   setStatus({
     downloadedBytes: 0,
     error: undefined,
     ready: false,
     state: 'absent',
-    totalBytes: EMBEDDING_MODEL_BYTES,
+    totalBytes: MODEL_TOTAL_BYTES,
+    topicReady: false,
+    topicError: undefined,
   });
   return status;
 };
@@ -484,10 +554,19 @@ export const embedTextsForIndex = async (
   });
 };
 
+/** A.X is optional: callers may skip topic vectors without stopping body indexing. */
+export const topicWordsForIndex = async (texts: string[]): Promise<string[][]> => {
+  if (!currentStatus().topicReady) throw new Error('A.X model is not available.');
+  await initializeEmbeddingUtility();
+  topicExtractorLoaded = true;
+  return requestEmbeddingUtility<string[][]>('topics', { texts });
+};
+
 export const releaseIndexModel = async (): Promise<void> => {
-  if (!indexExtractorLoaded) return;
+  if (!indexExtractorLoaded && !topicExtractorLoaded) return;
   await requestEmbeddingUtility<null>('release-index');
   indexExtractorLoaded = false;
+  topicExtractorLoaded = false;
   setStatus({ ready: true, state: 'ready' });
 };
 
@@ -569,6 +648,13 @@ ipcMain.handle(
     return enqueueIndexEmbedding(texts, prefix);
   },
 );
+
+ipcMain.handle('local-embed:topics', async (event, texts: unknown) => {
+  assertTrustedSender(event);
+  if (!validTexts(texts) || texts.length > 64) throw new Error('Invalid topic extraction input.');
+  if (texts.length === 0) return [];
+  return topicWordsForIndex(texts);
+});
 
 ipcMain.handle('local-embed:release-index', async event => {
   assertTrustedSender(event);
