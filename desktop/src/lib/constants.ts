@@ -2,9 +2,9 @@
 // 복원: 이 값을 true로 바꾸고 MemoSplitWorkspace 상단바에 ThemeToggle을 되돌린다.
 export const DARK_MODE_ENABLED = false;
 
-export const AMBIENT_HEADING_DELAY_MS = 5000;
-export const AMBIENT_BOUNDARY_DELAY_MS = 5000;
-export const AMBIENT_IDLE_DELAY_MS = 5000;
+export const AMBIENT_HEADING_DELAY_MS = 3000;
+export const AMBIENT_BOUNDARY_DELAY_MS = 3000;
+export const AMBIENT_IDLE_DELAY_MS = 4000;
 export const AMBIENT_EMPTY_NOTICE_MS = 2200;
 export const AMBIENT_MAX_RESULT_COUNT = 1;
 export const AMBIENT_MIN_CHARS = 12;
