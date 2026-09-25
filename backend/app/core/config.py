@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     # development still opts in through backend/.env or .env.example.
     backend_env: str = "production"
     allow_local_admin_bypass: bool = False
-    enable_playwright_fetch: bool = False
     # Development origins belong in a local .env, never in the production
     # fallback used by a hosted service.
     cors_allow_origins: str = "subnota-app://bundle,https://subnota.com"

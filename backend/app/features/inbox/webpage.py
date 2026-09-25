@@ -5,7 +5,6 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup
 
-from app.core.config import settings
 from app.db.types import DatabaseRow
 from app.features.inbox.constants import (
     IMPORTANT_JSON_TEXT_KEYS,
@@ -13,45 +12,20 @@ from app.features.inbox.constants import (
     MAX_FETCH_BYTES,
     MAX_FETCH_REDIRECTS,
     MIN_USEFUL_EXTRACTED_TEXT_CHARS,
-    PLAYWRIGHT_NAVIGATION_TIMEOUT_MS,
-    PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS,
-    PLAYWRIGHT_RENDER_WAIT_MS,
-    PLAYWRIGHT_SCROLL_STEPS,
     USER_AGENT,
 )
 from app.features.inbox.utils import clean_text, optional_str
 from app.shared.url_guard import (
     build_ssrf_safe_client,
     ensure_public_http_url,
-    resolve_public_ip_literal,
 )
-
-try:
-    from playwright.sync_api import sync_playwright
-except Exception:  # pragma: no cover - optional runtime dependency
-    sync_playwright = None
-
 
 def fetch_page_metadata(url: str | None) -> DatabaseRow:
     if not url:
         return {}
 
     html = fetch_static_html(url)
-    metadata = extract_page_metadata_from_html(html, url, "static_html")
-    if int(metadata.get("content_length") or 0) >= MIN_USEFUL_EXTRACTED_TEXT_CHARS:
-        return metadata
-    if not settings.enable_playwright_fetch:
-        return metadata
-
-    rendered_html = fetch_rendered_page_html(url)
-    if not rendered_html:
-        return metadata
-
-    rendered_metadata = extract_page_metadata_from_html(rendered_html, url, "playwright")
-    if int(rendered_metadata.get("content_length") or 0) > int(metadata.get("content_length") or 0):
-        return rendered_metadata
-
-    return metadata
+    return extract_page_metadata_from_html(html, url)
 
 
 def fetch_static_html(url: str) -> str:
@@ -105,7 +79,6 @@ def _read_capped_text(response: httpx.Response) -> str:
 def extract_page_metadata_from_html(
     html: str,
     url: str,
-    default_extraction_method: str,
 ) -> DatabaseRow:
     soup = BeautifulSoup(html, "html.parser")
     embedded_text = extract_embedded_json_text(soup)
@@ -121,18 +94,14 @@ def extract_page_metadata_from_html(
     thumbnail = meta_content(soup, "og:image") or meta_content(soup, "twitter:image")
     canonical = canonical_href(soup) or url
     article_text = extract_article_text(soup)
-    extraction_method = default_extraction_method
+    extraction_method = "static_html"
     extracted = article_text
     if (
         len(article_text) < MIN_USEFUL_EXTRACTED_TEXT_CHARS
         and len(embedded_text) > len(article_text)
     ):
         extracted = embedded_text
-        extraction_method = (
-            "playwright_embedded_json"
-            if default_extraction_method == "playwright"
-            else "embedded_json"
-        )
+        extraction_method = "embedded_json"
 
     return {
         "provider": "html_fetch",
@@ -145,71 +114,6 @@ def extract_page_metadata_from_html(
         "extraction_method": extraction_method,
         "has_embedded_json": bool(embedded_text),
     }
-
-
-def fetch_rendered_page_html(url: str) -> str | None:
-    if sync_playwright is None:
-        return None
-
-    try:
-        host, _port, host_ip = resolve_public_ip_literal(url)
-    except ValueError:
-        return None
-
-    browser = None
-    playwright = None
-    try:
-        playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-                # Pin the validated public IP so the browser connects to the same
-                # address we checked, closing the DNS-rebinding gap (the route
-                # guard below still re-validates redirects/subresources to other
-                # hosts). Mirrors the httpx path's connect-time IP pinning.
-                f"--host-resolver-rules=MAP {host} {host_ip},EXCLUDE localhost",
-            ],
-        )
-        page = browser.new_page(
-            user_agent=USER_AGENT,
-            viewport={"width": 1280, "height": 900},
-        )
-        page.route("**/*", _guard_playwright_route)
-        page.goto(
-            url,
-            wait_until="domcontentloaded",
-            timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS,
-        )
-        try:
-            page.wait_for_load_state("networkidle", timeout=PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS)
-        except Exception:
-            pass
-
-        for _ in range(PLAYWRIGHT_SCROLL_STEPS):
-            page.mouse.wheel(0, 1800)
-            page.wait_for_timeout(PLAYWRIGHT_RENDER_WAIT_MS)
-
-        return page.content()
-    except Exception:
-        return None
-    finally:
-        if browser is not None:
-            browser.close()
-        if playwright is not None:
-            playwright.stop()
-
-
-def _guard_playwright_route(route: Any) -> None:
-    request_url = route.request.url
-    if request_url.startswith(("http://", "https://")):
-        try:
-            ensure_public_http_url(request_url)
-        except ValueError:
-            route.abort()
-            return
-    route.continue_()
 
 
 def fetch_oembed_or_page_metadata(url: str | None) -> DatabaseRow:

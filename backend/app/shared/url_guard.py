@@ -72,25 +72,6 @@ def _validated_public_ip(host: str, port: int) -> str:
     return infos[0][4][0]
 
 
-def resolve_public_ip_literal(url: str) -> tuple[str, int, str]:
-    """Resolve an http(s) URL's host to a single validated public IP.
-
-    Returns (host, port, ip). Raises ValueError for unsupported schemes or any
-    host that resolves to a non-public address. The Playwright fallback uses the
-    returned IP to pin the browser's DNS (via --host-resolver-rules) so the
-    checked resolution and the connected resolution are the same one, closing the
-    DNS-rebinding gap that hostname-based navigation otherwise leaves open. This
-    mirrors what SsrfSafeTransport does for the httpx path.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ALLOWED_SCHEMES or not parsed.hostname:
-        raise ValueError(f"Unsupported or invalid URL: {url}")
-
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    ip = _validated_public_ip(parsed.hostname, port)
-    return parsed.hostname, port, ip
-
-
 class _PinnedSyncBackend(SyncBackend):
     """Network backend that validates + pins the resolved IP at connect time."""
 

@@ -11,7 +11,7 @@ client-side storage or authentication.
 - Run nightly schedule suggestion extraction from Supabase memos.
 - Run State A topic discovery from Supabase memos only when synced memos are marked dirty.
 - Store clustering results into `topic_clusters`, `topic_cluster_memos`, and `topic_memo_edges`.
-- Analyze inbox URLs (YouTube transcripts, metadata extraction, Playwright scraper fallbacks).
+- Analyze inbox URLs (YouTube transcripts, static HTML metadata extraction).
 - Guard all incoming URL requests against SSRF (anti-SSRF routing protection).
 - Provide unified daily maintenance endpoints for background jobs.
 
@@ -49,7 +49,7 @@ backend/
       types.py                      # DB model type defs
       utils.py                      # DB operation helpers
     features/                       # Core enrichment pipelines
-      inbox/                        # Web clipping, scraping, summary (Gemini/Playwright)
+      inbox/                        # Web clipping, static HTML extraction, summary (Gemini)
       memo/                         # Shared sentence chunking for schedule parsing
       schedule/                     # Nightly schedule candidate extraction
       topics/                       # State A topic clustering pipeline

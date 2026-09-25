@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 파이썬 의존성 설치
 COPY pyproject.toml .
 RUN pip install --no-cache-dir .
-RUN playwright install --with-deps chromium
 
 # 소스코드 복사
 COPY app ./app
