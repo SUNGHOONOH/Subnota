@@ -126,6 +126,53 @@ const makeCapsulePolygon = (
   return points;
 };
 
+// Largest bend between two outline segments. Small enough that the dashed
+// stroke reads as a curve rather than a polygon at any hull size.
+const HULL_ARC_STEP = Math.PI / 12;
+
+/**
+ * Minkowski sum of a convex hull and a circle: every edge moves out by
+ * `padding` and every corner becomes an arc of that radius around the note
+ * itself. Unlike pushing vertices away from the centroid, this never leaves
+ * a spike at a narrow corner — the outline is `padding` from the notes
+ * everywhere, so it reads as a rounded region at every shape and size.
+ */
+const makeRoundedHullPolygon = (
+  hull: KnowledgeGraphPoint[],
+  padding: number,
+): KnowledgeGraphPoint[] => {
+  let doubledArea = 0;
+  hull.forEach((point, index) => {
+    const next = hull[(index + 1) % hull.length];
+    doubledArea += point.x * next.y - next.x * point.y;
+  });
+  const orientation = doubledArea > 0 ? 1 : -1;
+  const outwardAngle = (from: KnowledgeGraphPoint, to: KnowledgeGraphPoint) =>
+    Math.atan2(-(to.x - from.x) * orientation, (to.y - from.y) * orientation);
+
+  const points: KnowledgeGraphPoint[] = [];
+  hull.forEach((point, index) => {
+    const previous = hull[(index - 1 + hull.length) % hull.length];
+    const next = hull[(index + 1) % hull.length];
+    const start = outwardAngle(previous, point);
+    const end = outwardAngle(point, next);
+    const fullTurn = Math.PI * 2;
+    const sweep =
+      orientation > 0
+        ? (((end - start) % fullTurn) + fullTurn) % fullTurn
+        : -((((start - end) % fullTurn) + fullTurn) % fullTurn);
+    const steps = Math.max(1, Math.ceil(Math.abs(sweep) / HULL_ARC_STEP));
+    for (let step = 0; step <= steps; step += 1) {
+      const angle = start + (sweep * step) / steps;
+      points.push({
+        x: point.x + Math.cos(angle) * padding,
+        y: point.y + Math.sin(angle) * padding,
+      });
+    }
+  });
+  return points;
+};
+
 /**
  * Builds a padded community boundary in viewport coordinates. One-note topics
  * become circles and two-note (or collinear) topics become capsules, so every
@@ -176,23 +223,7 @@ export const createCommunityPolygon = (
     return makeCapsulePolygon(hull[0], hull[1], safePadding);
   }
 
-  const center = hull.reduce(
-    (sum, point) => ({ x: sum.x + point.x / hull.length, y: sum.y + point.y / hull.length }),
-    { x: 0, y: 0 },
-  );
-
-  return hull.map(point => {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance === 0) {
-      return point;
-    }
-    return {
-      x: point.x + (dx / distance) * safePadding,
-      y: point.y + (dy / distance) * safePadding,
-    };
-  });
+  return makeRoundedHullPolygon(hull, safePadding);
 };
 
 export const isPointInCommunityPolygon = (
@@ -353,6 +384,24 @@ export const buildKnowledgeGraph = (
   return graph;
 };
 
+/**
+ * What forces a rebuild and a new layout. Labels are left out on purpose: a
+ * memo title changes on every keystroke of its first line, and re-running the
+ * layout for that froze the Topics view for seconds on large notebooks.
+ * Labels are patched onto the existing graph instead.
+ */
+export const getGraphStructureSignature = (
+  nodes: KnowledgeGraphNode[],
+  edges: KnowledgeGraphEdge[],
+  layout: 'force' | 'preset',
+) =>
+  JSON.stringify({
+    edges,
+    layout,
+    // JSON.stringify drops undefined, so the label never reaches the key.
+    nodes: nodes.map(node => ({ ...node, label: undefined })),
+  });
+
 // Topic-map layout: the x/y passed into buildKnowledgeGraph are only a seed.
 // Seeded ForceAtlas2 (similarity as edge weight) pulls related memos into
 // organic islands and pushes clusters apart; noverlap then removes stacking.
@@ -379,8 +428,7 @@ export const applyTopicNetworkLayout = (graph: Graph) => {
     );
   });
 
-  // ponytail: synchronous layout, fine up to a few thousand nodes; switch to
-  // graphology-layout-forceatlas2/worker if graph build ever janks the UI.
+  // Synchronous by design: the view runs this inside topicLayout.worker.ts.
   forceAtlas2.assign(graph, {
     iterations: 200,
     settings: {

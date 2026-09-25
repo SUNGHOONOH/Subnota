@@ -6,13 +6,13 @@ import { createNodeCompoundProgram, NodeCircleProgram } from 'sigma/rendering';
 import { Eye, EyeOff, FocusNode, Minus, Plus, RefreshCw } from '../../../components/icons';
 import TooltipIconButton from '../../../components/TooltipIconButton';
 import {
-  applyTopicNetworkLayout,
   buildKnowledgeGraph,
   createCommunityMemoGroups,
   createEdgeReducer,
   createCommunityPolygon,
   createNodeReducer,
   findCommunityRegionAtPoint,
+  getGraphStructureSignature,
   GRAPH_COLORS,
   KnowledgeGraphCommunity,
   KnowledgeGraphCommunityMembers,
@@ -20,6 +20,7 @@ import {
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
 } from './knowledgeGraph';
+import { runTopicNetworkLayout } from './topicLayoutClient';
 
 export type {
   KnowledgeGraphCommunity,
@@ -75,12 +76,6 @@ const NodeIconProgram = createNodeCompoundProgram([
   NodeCircleProgram,
   NodePictogramProgram,
 ]);
-
-const getGraphStructureSignature = (
-  nodes: KnowledgeGraphNode[],
-  edges: KnowledgeGraphEdge[],
-  layout: 'force' | 'preset',
-) => JSON.stringify({ edges, layout, nodes });
 
 const KnowledgeGraphView = ({
   activeNodeId,
@@ -145,12 +140,26 @@ const KnowledgeGraphView = ({
   const graphSignature = getGraphStructureSignature(nodes, edges, layout);
   if (graphCacheRef.current?.signature !== graphSignature) {
     const graph = buildKnowledgeGraph(nodes, edges);
-    if (layout === 'force') {
-      applyTopicNetworkLayout(graph);
-    }
     graphCacheRef.current = { graph, signature: graphSignature };
   }
   const graph = graphCacheRef.current.graph;
+
+  // The topic map starts on its seed positions and settles once the worker
+  // answers; a newer graph cancels the older layout.
+  useEffect(() => {
+    if (layout !== 'force' || graph.order < 2) return undefined;
+    const request = runTopicNetworkLayout(graph);
+    return request.cancel;
+  }, [graph, layout]);
+
+  // Title edits keep the graph (and its layout); only the label text moves.
+  useEffect(() => {
+    nodes.forEach(node => {
+      if (graph.hasNode(node.id) && graph.getNodeAttribute(node.id, 'label') !== node.label) {
+        graph.setNodeAttribute(node.id, 'label', node.label);
+      }
+    });
+  }, [graph, nodes]);
 
   // Sigma redraws while panning and zooming. Cache the memo membership of
   // each area so every frame only projects its known members to the viewport;

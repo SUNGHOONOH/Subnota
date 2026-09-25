@@ -32,7 +32,7 @@ describe('knowledge graph community polygons', () => {
     expect(isPointInCommunityPolygon({ x: 50, y: 24 }, polygon)).toBe(false);
   });
 
-  it('uses the convex hull for larger communities', () => {
+  it('uses a rounded convex hull for larger communities', () => {
     const polygon = createCommunityPolygon(
       [
         { x: 0, y: 0 },
@@ -44,9 +44,53 @@ describe('knowledge graph community polygons', () => {
       10,
     );
 
-    expect(polygon).toHaveLength(4);
+    expect(polygon.length).toBeGreaterThan(4);
     expect(isPointInCommunityPolygon({ x: 50, y: 50 }, polygon)).toBe(true);
     expect(isPointInCommunityPolygon({ x: 130, y: 50 }, polygon)).toBe(false);
+  });
+
+  it('rounds every corner with an arc of the padding radius', () => {
+    const square = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+      { x: 0, y: 100 },
+    ];
+    const padding = 20;
+    const polygon = createCommunityPolygon(square, padding);
+
+    // Every boundary point sits exactly `padding` away from the notes' hull.
+    const distanceToSquare = ({ x, y }: { x: number; y: number }) =>
+      Math.hypot(Math.max(0, -x, x - 100), Math.max(0, -y, y - 100));
+    polygon.forEach(point => {
+      expect(distanceToSquare(point)).toBeCloseTo(padding, 5);
+    });
+
+    // No sharp turns: the outline bends in small, even steps.
+    const turns = polygon.map((point, index) => {
+      const previous = polygon[(index - 1 + polygon.length) % polygon.length];
+      const next = polygon[(index + 1) % polygon.length];
+      const inAngle = Math.atan2(point.y - previous.y, point.x - previous.x);
+      const outAngle = Math.atan2(next.y - point.y, next.x - point.x);
+      return Math.abs(Math.atan2(Math.sin(outAngle - inAngle), Math.cos(outAngle - inAngle)));
+    });
+    expect(Math.max(...turns)).toBeLessThanOrEqual(Math.PI / 12 + 1e-9);
+  });
+
+  it('keeps a thin, pointy triangle round at its tip', () => {
+    const polygon = createCommunityPolygon(
+      [
+        { x: 0, y: 0 },
+        { x: 200, y: 10 },
+        { x: 0, y: 20 },
+      ],
+      16,
+    );
+    const tip = polygon.reduce((best, point) => (point.x > best.x ? point : best));
+    // The far edge is a 16px arc around the note at (200, 10), not a spike.
+    expect(tip.x).toBeCloseTo(216, 0);
+    expect(isPointInCommunityPolygon({ x: 205, y: 10 }, polygon)).toBe(true);
+    expect(isPointInCommunityPolygon({ x: 230, y: 10 }, polygon)).toBe(false);
   });
 
   it('selects the smallest containing region when hulls overlap', () => {
