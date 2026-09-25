@@ -1,0 +1,121 @@
+import Foundation
+import Supabase
+
+@MainActor
+@Observable
+final class SessionStore {
+  private(set) var userId: String?
+  /// 설정 화면이 보여줄 이메일. `userId` 와 항상 같이 움직인다 — 복원 경로에서
+  /// 빠지면 앱을 껐다 켠 뒤 설정이 빈칸을 보인다.
+  private(set) var email: String?
+  /// 앱 시작 시 세션 복원 중인지. 이 값만 RootView 의 전체 화면 스피너를 켠다.
+  private(set) var isRestoring = true
+  /// 폼 안에서 진행 중인 요청. 로그인 화면은 계속 보이고 컨트롤만 잠긴다 —
+  /// OAuth 중에 화면이 통째로 사라지면 사용자가 무슨 일이 벌어지는지 알 수 없다.
+  private(set) var isBusy = false
+  var errorMessage: String?
+  /// 가입 후 이메일 확인이 필요할 때 보여줄 안내.
+  var noticeMessage: String?
+
+  private let client = SupabaseClientProvider.shared
+
+  /// 앱 시작 시 저장된 세션을 복원한다. 실패는 정상 — 로그인 화면으로 간다.
+  func restore() async {
+    defer { isRestoring = false }
+    guard let user = try? await client.auth.session.user else { return }
+    adopt(user)
+  }
+
+  /// 로그인 성공의 유일한 통로. 여기 하나만 지나가게 해야 `email` 을 채우는 걸
+  /// 어느 경로에서 빠뜨리는 일이 없다.
+  private func adopt(_ user: User) {
+    userId = user.id.uuidString
+    email = user.email
+  }
+
+  func signIn(email: String, password: String) async {
+    await run(failureMessage: "로그인하지 못했습니다. 이메일과 비밀번호를 확인해 주세요.") {
+      let session = try await self.client.auth.signIn(email: email, password: password)
+      self.adopt(session.user)
+    }
+  }
+
+  /// 데스크탑과 같은 규칙: 8자 이상, 대·소문자와 숫자를 각각 포함
+  /// (`desktop/src/features/auth/authValidation.ts`).
+  static func isStrongPassword(_ password: String) -> Bool {
+    password.count >= 8
+      && password.contains(where: \.isLowercase)
+      && password.contains(where: \.isUppercase)
+      && password.contains(where: \.isNumber)
+  }
+
+  func signUp(email: String, password: String) async {
+    await run(failureMessage: "가입하지 못했습니다. 잠시 후 다시 시도해 주세요.") {
+      let response = try await self.client.auth.signUp(email: email, password: password)
+      if let session = response.session {
+        self.adopt(session.user)
+      } else {
+        // 이메일 확인이 켜져 있으면 세션 없이 돌아온다. 가입은 접수된 상태다.
+        self.noticeMessage = "확인 메일을 보냈습니다. 메일의 링크를 눌러 가입을 마쳐 주세요."
+      }
+    }
+  }
+
+  /// 데스크탑과 같은 리다이렉트를 쓴다 (`data.ts` 의 OAUTH_REDIRECT_URL).
+  /// 이 값은 Supabase 프로젝트에 이미 등록돼 있어 백엔드 설정이 필요 없다.
+  private static let oauthRedirect = URL(string: "subnota://auth/callback")!
+
+  /// Google·Kakao 로그인. supabase-swift 의 ASWebAuthenticationSession 오버로드가
+  /// 브라우저 시트와 콜백 회수를 모두 처리한다 — 우리가 URL 을 열거나 스킴을
+  /// 받아넘길 필요가 없다.
+  func signIn(with provider: Provider) async {
+    await run(failureMessage: "로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.") {
+      let session = try await self.client.auth.signInWithOAuth(
+        provider: provider,
+        redirectTo: Self.oauthRedirect
+      )
+      self.adopt(session.user)
+    }
+  }
+
+  func signOut() async {
+    try? await client.auth.signOut()
+    forgetSession()
+  }
+
+  /// 계정 삭제 뒤의 로그아웃. 서버 세션은 계정과 함께 이미 사라졌으므로 전역
+  /// 로그아웃은 실패한다 — 로컬 토큰만 버린다(데스크탑 `App.tsx` 의
+  /// `signOut({ scope: 'local' })`). 일반 로그아웃 동작은 건드리지 않는다.
+  func signOutAfterAccountDeletion() async {
+    try? await client.auth.signOut(scope: .local)
+    forgetSession()
+  }
+
+  private func forgetSession() {
+    userId = nil
+    email = nil
+  }
+
+  /// 폼 요청의 공통 껍데기. 사용자가 시트를 닫은 것은 실패가 아니므로 조용히 넘긴다.
+  private func run(
+    failureMessage: String,
+    _ body: @escaping () async throws -> Void
+  ) async {
+    errorMessage = nil
+    noticeMessage = nil
+    isBusy = true
+    defer { isBusy = false }
+    do {
+      try await body()
+    } catch is CancellationError {
+      // 사용자가 취소했다.
+    } catch {
+      // 사용자에게는 일반 문구를 보이되, 원인은 잃지 않는다. 이걸 삼키면
+      // OAuth 가 어디서 틀어졌는지 알아낼 방법이 없다.
+      #if DEBUG
+        print("[Subnota][auth] \(failureMessage) — \(String(reflecting: error))")
+      #endif
+      errorMessage = failureMessage
+    }
+  }
+}

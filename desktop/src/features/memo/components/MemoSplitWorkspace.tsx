@@ -8,6 +8,7 @@ import React, {
 import { format } from 'date-fns';
 import type { Editor } from '@tiptap/core';
 import { formatRelativeDay } from '../../../lib/relativeDay';
+import { normalizeChunkText } from '../../../lib/chunkText';
 import {
   type AppShortcutSettings,
   formatHotkeyHint,
@@ -1167,7 +1168,7 @@ const MemoSplitWorkspace = ({
                     undefined,
                     language,
                   ) || t('연결된 문장', 'Related sentence'),
-            text: ambientResult.chunkText,
+            text: normalizeChunkText(ambientResult.chunkText),
             hint: formatHotkeyHint(appShortcuts?.openAmbientDetail),
             onClick: () => openAmbientResult(ambientResult),
           }

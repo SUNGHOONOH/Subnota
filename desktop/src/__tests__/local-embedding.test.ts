@@ -154,7 +154,7 @@ describe('local-embedding IPC', () => {
       state: string;
     };
     expect(status.modelId).toBe(
-      'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8',
+      'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1',
     );
     expect(['absent', 'ready']).toContain(status.state);
   });
@@ -260,6 +260,7 @@ describe('local-embedding IPC', () => {
     expect(downloadMocks.downloadWeightsResumable).not.toHaveBeenCalled();
   });
 
+  // bge-m3 는 접두사를 쓰지 않는다 — 본문 그대로 worker 에 가야 한다.
   it('대화형 검색 요청을 Utility Process에 전달한다', async () => {
     seedVerifiedWeights();
     const result = await ipcHandlers['local-embed:embed'](trustedEvent, ['가', '나', '다']);
@@ -269,6 +270,22 @@ describe('local-embedding IPC', () => {
     expect(messagesFor('embed')).toEqual([
       expect.objectContaining({ mode: 'interactive', texts: ['가', '나', '다'] }),
     ]);
+  });
+
+  // 색인 경로는 문서 벡터가 기본이고, CSLS 채점에 쓸 질의 벡터도 같은 index
+  // 세션에서 만들 수 있어야 한다. bge-m3 는 접두사가 없어 두 요청의 본문이 같다.
+  it('색인은 문서·질의 딱지를 모두 받고, 모르는 딱지는 거부한다', async () => {
+    seedVerifiedWeights();
+    await ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크']);
+    await ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크'], 'query');
+
+    expect(messagesFor('embed')).toEqual([
+      expect.objectContaining({ mode: 'index', texts: ['본문 청크'] }),
+      expect.objectContaining({ mode: 'index', texts: ['본문 청크'] }),
+    ]);
+    await expect(
+      ipcHandlers['local-embed:index'](trustedEvent, ['본문 청크'], 'document'),
+    ).rejects.toThrow('Invalid embedding prefix');
   });
 
   it('색인 요청과 index 세션 해제를 Utility Process에 전달한다', async () => {
@@ -314,12 +331,13 @@ describe('local-embedding IPC', () => {
     expect(messagesFor('release-index')).toHaveLength(1);
   });
 
+  // 570MB를 받다 실패하는 것보다 시작 전에 막는 편이 낫다.
   it('디스크 여유 공간과 필요한 공간을 알려 준다', () => {
     const space = ipcHandlers['local-embed:disk-space'](trustedEvent) as {
       freeBytes: number | null;
       requiredBytes: number;
     };
-    expect(space.requiredBytes).toBeGreaterThan(569_000_000);
+    expect(space.requiredBytes).toBeGreaterThan(470_000_000);
     expect(space.freeBytes === null || space.freeBytes >= 0).toBe(true);
   });
 });
@@ -331,10 +349,10 @@ describe('pruneStaleModelCache', () => {
   beforeEach(() => {
     fs.rmSync(repoRoot, { force: true, recursive: true });
     fs.mkdirSync(path.join(repoRoot, revision, 'onnx'), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, revision, 'onnx', 'model.onnx'), 'keep');
+    fs.writeFileSync(path.join(repoRoot, revision, 'onnx', 'model_quantized.onnx'), 'keep');
     fs.writeFileSync(path.join(repoRoot, revision, 'tokenizer.json'), 'keep');
     fs.mkdirSync(path.join(repoRoot, 'onnx'), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, 'onnx', 'model.onnx.tmp.2170.s22kl9'), 'x'.repeat(40));
+    fs.writeFileSync(path.join(repoRoot, 'onnx', 'model_quantized.onnx.tmp.2170.s22kl9'), 'x'.repeat(40));
     fs.writeFileSync(path.join(repoRoot, 'tokenizer.json'), 'y'.repeat(10));
     fs.writeFileSync(path.join(repoRoot, '.DS_Store'), 'z');
   });
@@ -348,7 +366,9 @@ describe('pruneStaleModelCache', () => {
     const removed = pruneStaleModelCache(repoRoot, revision);
 
     expect(fs.readdirSync(repoRoot)).toEqual([revision]);
-    expect(removed).toBe(51);
+    expect(fs.existsSync(path.join(repoRoot, revision, 'onnx', 'model_quantized.onnx'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, revision, 'tokenizer.json'))).toBe(true);
+    expect(removed).toBe(51); // 40 + 10 + 1
   });
 
   it('캐시가 없어도 던지지 않는다', async () => {

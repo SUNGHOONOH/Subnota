@@ -247,8 +247,10 @@ items, where the top-level index points at the whole list.
 ### Centered memo vectors (nearby notes and automatic folders)
 
 Nearby notes (`searchNearbyMemos`) and automatic folders rank **whole memos**,
-not sentences. The worker subtracts the owner's mean chunk vector, re-normalizes
-each chunk and sums them per memo (`centeredMemos` in `local-database.ts`).
+not sentences. They reuse the ambient search's `memoVectorIndex` (each chunk's
+document vector centered on the owner's mean and re-normalized) and sum those
+per memo (`centeredMemos` in `local-database.ts`), so centering is computed once
+for ambient CSLS, folders and nearby notes.
 Raw bge-m3 cosine is high even between unrelated notes; on 73 hand-labelled
 memos centering raised folder precision to 0.97 and nearby P@5 from 0.54 to
 0.68, while per-chunk voting did worse than both. Scores are on the centered

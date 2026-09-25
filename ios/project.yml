@@ -1,0 +1,84 @@
+name: Subnota
+options:
+  bundleIdPrefix: com.subnota
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  SubnotaKit:
+    path: SubnotaKit
+  Supabase:
+    url: https://github.com/supabase-community/supabase-swift.git
+    from: 2.0.0
+
+targets:
+  Subnota:
+    type: application
+    platform: iOS
+    sources:
+      - path: Subnota
+    dependencies:
+      - package: SubnotaKit
+        product: SubnotaKit
+      # 온디바이스 검색(onnxruntime·토크나이저). 앱만 링크한다 — 확장에 넣으면
+      # 위젯 메모리 한도를 깬다.
+      - package: SubnotaKit
+        product: SubnotaSearch
+      - package: Supabase
+        product: Supabase
+      # 앱이 확장을 품는다. App Group entitlement 는 양쪽에 다 있어야 한다 —
+      # 한쪽만 붙이면 공유 큐가 서로 안 보인다.
+      - target: SubnotaShareExtension
+      - target: SubnotaWidgets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.subnota.app
+        INFOPLIST_FILE: Subnota/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Subnota/Subnota.entitlements
+        SWIFT_VERSION: "6.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+    configFiles:
+      Debug: Config.xcconfig
+      Release: Config.xcconfig
+
+  SubnotaShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SubnotaShareExtension
+    settings:
+      base:
+        # 확장의 번들 id 는 앱 id 로 시작해야 한다.
+        PRODUCT_BUNDLE_IDENTIFIER: com.subnota.app.share
+        INFOPLIST_FILE: SubnotaShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SubnotaShareExtension/SubnotaShareExtension.entitlements
+        SWIFT_VERSION: "6.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+  SubnotaWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SubnotaWidgets
+      # 앱 타겟의 파일을 그대로 같이 컴파일한다. 색과 로고를 두 벌 두면 위젯과
+      # 앱이 다른 제품처럼 보인다. `Typography` 는 빼 뒀다 — 잠금화면 액세서리는
+      # 시스템 폰트로 그리는 게 맞고, 폰트 파일 5MB 를 확장에 또 넣을 이유가 없다.
+      - path: Subnota/DesignSystem/Palette.swift
+      - path: Subnota/DesignSystem/SubnotaMark.swift
+    dependencies:
+      # 위젯이 App Group SQLite 를 직접 읽는다. 백엔드 왕복 없음.
+      - package: SubnotaKit
+        product: SubnotaKit
+    settings:
+      base:
+        # 확장의 번들 id 는 앱 id 로 시작해야 한다.
+        PRODUCT_BUNDLE_IDENTIFIER: com.subnota.app.widgets
+        INFOPLIST_FILE: SubnotaWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SubnotaWidgets/SubnotaWidgets.entitlements
+        SWIFT_VERSION: "6.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES

@@ -1,4 +1,5 @@
 import { hashText } from '../../lib/contentHash';
+import { hasSearchableContent, normalizeChunkText } from '../../lib/chunkText';
 import { chunkMemoText, isMeaningfulChunk } from '../../lib/memoChunker';
 import { MemoRow } from '../../types';
 
@@ -50,13 +51,17 @@ interface LocalMemoIndexApi {
       end: number;
       id: string;
       index: number;
+      queryVector: number[] | null;
       start: number;
       text: string;
       vector: number[] | null;
     }>,
   ) => Promise<{ stored: boolean }>;
   localDbSetOwner: (ownerId: string | null) => Promise<void>;
-  localEmbedForIndex: (texts: string[]) => Promise<number[][]>;
+  localEmbedForIndex: (
+    texts: string[],
+    prefix?: 'passage' | 'query',
+  ) => Promise<number[][]>;
   localEmbedReleaseIndexModel: () => Promise<void>;
   localEmbedStatus: () => Promise<{
     downloadedBytes: number;
@@ -73,8 +78,14 @@ interface LocalMemoIndexerOptions {
 const sourceContentHash = (memo: MemoRow) =>
   memo.content_hash || hashText(memo.content);
 
+// `isMeaningfulChunk`는 백엔드 chunking.py와 맞춘 계약이라 그대로 두고,
+// 색인에만 더 엄한 기준을 얹는다. 내용어가 둘 미만인 조각(`&nbsp;`, `1.`,
+// `교통`)은 코퍼스 한가운데에 놓여 아무 질의에나 1등으로 올라온다 —
+// 실측으로 1등이 쓰레기인 질의가 4.4%였고, 빼면 0%가 된다.
 export const indexableChunksForMemo = (memo: MemoRow) =>
-  chunkMemoText(memo.content).filter(chunk => isMeaningfulChunk(chunk.text));
+  chunkMemoText(memo.content).filter(
+    chunk => isMeaningfulChunk(chunk.text) && hasSearchableContent(chunk.text),
+  );
 
 export const createLocalMemoIndexer = (
   options: LocalMemoIndexerOptions = {},
@@ -192,12 +203,23 @@ export const createLocalMemoIndexer = (
         const vectors = [];
         for (const chunk of chunks) {
           if (reusableTexts.has(chunk.text)) {
-            vectors.push({ ...chunk, vector: null });
+            vectors.push({ ...chunk, queryVector: null, vector: null });
             continue;
           }
-          const [vector] = await api.localEmbedForIndex([chunk.text]);
+          // CSLS 채점은 청크마다 문서 벡터와 질의 벡터를 모두 요구한다.
+          // 청크당 임베딩이 2회라 색인 시간이 2배지만(실측 2.3초 → 4.6초),
+          // 배경 작업이라 체감되지 않는다.
+          // 임베딩에는 마크업을 벗긴 본문을 넣는다. 저장되는 `chunk.text`는
+          // 원문 그대로다 — 오프셋과 편집기 텍스트 매칭의 기준이라 손대면 안 된다.
+          const searchable = normalizeChunkText(chunk.text);
+          const [vector] = await api.localEmbedForIndex([searchable]);
           if (expectedGeneration !== generation) return;
-          vectors.push({ ...chunk, vector });
+          const [queryVector] = await api.localEmbedForIndex(
+            [searchable],
+            'query',
+          );
+          if (expectedGeneration !== generation) return;
+          vectors.push({ ...chunk, queryVector, vector });
           completedChunks += 1;
           emit({
             ...baseProgress,

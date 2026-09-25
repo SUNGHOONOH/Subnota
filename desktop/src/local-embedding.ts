@@ -5,6 +5,20 @@
  * ONNX Runtime 세션 생성 및 추론은 local-embedding-worker Utility Process가
  * 맡는다. native onnxruntime-node를 Worker Thread에 올리지 않으면서 main
  * process의 UI 제어 경로를 CPU 추론에서 분리하기 위한 구조다.
+ *
+ * 왜 로컬인가: 지금은 문장 하나를 검색할 때마다 백엔드 → HF Inference API
+ * 왕복이 일어난다. 실측상 로컬은 13ms로 일정한 반면 HF 경로는 100ms~수 초로
+ * 들쭉날쭉했다(콜드스타트). ambient처럼 곁에서 조용히 뜨는 기능은 평균보다
+ * 이 일관성이 중요하다. 호출 비용도 0이 된다.
+ *
+ * 왜 llama.cpp가 아닌가: node-llama-cpp로 먼저 붙였다가 걷어냈다. 같은 모델·
+ * 같은 양자화인데 llama.cpp 본체보다 벡터 품질이 확연히 낮았다(AUC -0.055,
+ * 짧은 문장에서 더 나쁨). 설정 문제가 아니었다 — 토큰열·풀링·causal_attn이
+ * 전부 동일했고 어떤 옵션을 줘도 결과가 비트 단위로 같았다.
+ * 자세한 근거는 docs/embedding-migration-plan.md 참고.
+ *
+ * 모델은 앱에 번들하지 않는다(570MB). 첫 사용 시 userData로 내려받고,
+ * 이후 실행부터는 로컬 캐시를 그대로 쓴다.
  */
 import { app, ipcMain, utilityProcess } from 'electron';
 import fs from 'node:fs';
@@ -33,6 +47,15 @@ import {
 export { EMBEDDING_MODEL_ID, EMBEDDING_VECTOR_DIMENSIONS };
 
 const WEIGHTS_URL = `https://huggingface.co/${EMBEDDING_MODEL_REPO}/resolve/${EMBEDDING_MODEL_REVISION}/${EMBEDDING_MODEL_WEIGHTS}`;
+
+/**
+ * 문서 벡터와 질의 벡터를 가르는 딱지. bge-m3는 접두사를 쓰지 않아 둘이 같은
+ * 값이 되지만, CSLS가 청크마다 질의 벡터를 따로 요구하고 iOS는 접두사 모델
+ * (e5-small)을 쓰므로 구분 자체는 남겨 둔다.
+ */
+export type EmbeddingPrefix = 'passage' | 'query';
+// ponytail: bge-m3는 접두사 없음. 접두사 모델로 바꾸면 여기만 고치면 된다.
+const prefixed = (_prefix: EmbeddingPrefix, text: string) => text;
 
 export interface LocalEmbeddingStatus {
   downloadedBytes: number;
@@ -434,14 +457,31 @@ export const ensureIndexModel = async (): Promise<void> => {
   await ensureRemoteExtractor('index');
 };
 
+// 한 건씩 임베딩하는 규칙(배치 금지)은 Utility Process 쪽 runtime 이 지킨다.
+// 접두사는 여기서 붙여 보낸다 — worker 는 받은 문자열을 그대로 임베딩만 한다.
+
+/** 검색 질의용. */
 export const embedTexts = async (texts: string[]): Promise<number[][]> => {
   await ensureModel();
-  return requestEmbeddingUtility<number[][]>('embed', { mode: 'interactive', texts });
+  return requestEmbeddingUtility<number[][]>('embed', {
+    mode: 'interactive',
+    texts: texts.map(text => prefixed('query', text)),
+  });
 };
 
-export const embedTextsForIndex = async (texts: string[]): Promise<number[][]> => {
+/**
+ * 색인용. CSLS 채점이 청크마다 질의 벡터도 요구하므로 같은 색인 세션에서
+ * 질의 쪽 벡터도 만들 수 있어야 한다.
+ */
+export const embedTextsForIndex = async (
+  texts: string[],
+  prefix: EmbeddingPrefix = 'passage',
+): Promise<number[][]> => {
   await ensureIndexModel();
-  return requestEmbeddingUtility<number[][]>('embed', { mode: 'index', texts });
+  return requestEmbeddingUtility<number[][]>('embed', {
+    mode: 'index',
+    texts: texts.map(text => prefixed(prefix, text)),
+  });
 };
 
 export const releaseIndexModel = async (): Promise<void> => {
@@ -451,8 +491,11 @@ export const releaseIndexModel = async (): Promise<void> => {
   setStatus({ ready: true, state: 'ready' });
 };
 
-const enqueueIndexEmbedding = (texts: string[]): Promise<number[][]> => {
-  const result = indexEmbeddingQueue.then(() => embedTextsForIndex(texts));
+const enqueueIndexEmbedding = (
+  texts: string[],
+  prefix: EmbeddingPrefix,
+): Promise<number[][]> => {
+  const result = indexEmbeddingQueue.then(() => embedTextsForIndex(texts, prefix));
   indexEmbeddingQueue = result.then(
     () => undefined,
     () => undefined,
@@ -513,13 +556,19 @@ ipcMain.handle('local-embed:embed', async (event, texts: unknown) => {
   return embedTexts(texts);
 });
 
-ipcMain.handle('local-embed:index', async (event, texts: unknown) => {
-  assertTrustedSender(event);
-  if (!validTexts(texts)) throw new Error('Invalid embedding input.');
-  if (texts.length === 0) return [];
-  if (texts.length > 64) throw new Error('Too many texts in one embedding request.');
-  return enqueueIndexEmbedding(texts);
-});
+ipcMain.handle(
+  'local-embed:index',
+  async (event, texts: unknown, prefix: unknown = 'passage') => {
+    assertTrustedSender(event);
+    if (!validTexts(texts)) throw new Error('Invalid embedding input.');
+    if (prefix !== 'passage' && prefix !== 'query') {
+      throw new Error('Invalid embedding prefix.');
+    }
+    if (texts.length === 0) return [];
+    if (texts.length > 64) throw new Error('Too many texts in one embedding request.');
+    return enqueueIndexEmbedding(texts, prefix);
+  },
+);
 
 ipcMain.handle('local-embed:release-index', async event => {
   assertTrustedSender(event);
