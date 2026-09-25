@@ -1713,8 +1713,8 @@ app.on('ready', () => {
           'Content-Security-Policy': [
             "default-src 'self'; " +
             `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${POSTHOG_ASSETS_ORIGIN}; ` +
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-            "font-src 'self' data: https://fonts.gstatic.com; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "font-src 'self' data:; " +
             `connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.run.app ${POSTHOG_API_ORIGIN} ${POSTHOG_ASSETS_ORIGIN}; ` +
             // https: matches the packaged-app CSP — inbox thumbnails and
             // domain favicons are remote images.
