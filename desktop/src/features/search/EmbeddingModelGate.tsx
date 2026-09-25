@@ -3,10 +3,10 @@ import { Modal } from '@mantine/core';
 import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 /**
- * 검색 모델(약 570MB) 다운로드를 시작하는 명시적 관문.
+ * 검색 모델 두 개(약 760MB)의 다운로드를 시작하는 명시적 관문.
  *
  * 왜 숨기지 않는가: 예전에는 첫 색인이 돌면서 조용히 내려받았다. 사용자는
- * 메모를 쓰다가 이유도 모른 채 570MB를 받게 되고, 얼마나 걸리는지도 알 수
+ * 메모를 쓰다가 이유도 모른 채 약 760MB를 받게 되고, 얼마나 걸리는지도 알 수
  * 없었다. 로컬 퍼스트 앱 구축 회고들이 공통으로 지적하는 지점이라
  * (모델 다운로드는 온보딩의 명시적 단계로 다뤄야 한다) 관문으로 끌어올렸다.
  *
@@ -17,7 +17,7 @@ import { localize, useUiLanguage } from '../../lib/uiLanguage';
  */
 
 // 영어 UI에 한국어 라벨이 끼어들지 않도록 언어별로 갖는다.
-const MODEL_SIZE_LABEL = { en: 'about 570MB', ko: '약 570MB' };
+const MODEL_SIZE_LABEL = { en: 'about 760MB', ko: '약 760MB' };
 
 interface EmbeddingModelGateProps {
   isOpen: boolean;
@@ -47,7 +47,7 @@ const EmbeddingModelGate = ({
     };
   }, [isOpen]);
 
-  // 공간이 모자라면 받기 전에 알린다 — 570MB를 받다 실패하는 것보다 낫다.
+  // 공간이 모자라면 받기 전에 알린다 — 760MB를 받다 실패하는 것보다 낫다.
   const [shortfallMb, setShortfallMb] = useState<number | null>(null);
   useEffect(() => {
     if (!isOpen) return;
@@ -64,8 +64,8 @@ const EmbeddingModelGate = ({
         <h2 className="embedding-gate-title">{t('연관 문장 검색 준비', 'Prepare related-passage search')}</h2>
         <p className="embedding-gate-body">
           {t(
-            `검색에 필요한 파일을 한 번 내려받습니다. ${MODEL_SIZE_LABEL.ko}, 기기에만 저장됩니다.`,
-            `Download the ${MODEL_SIZE_LABEL.en} file needed for search once. It stays on this device.`,
+            `검색에 필요한 모델 파일을 내려받습니다. ${MODEL_SIZE_LABEL.ko}, 기기에만 저장됩니다.`,
+            `Download the ${MODEL_SIZE_LABEL.en} of model files needed for search. They stay on this device.`,
           )}
         </p>
         {isOffline && (

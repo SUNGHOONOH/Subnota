@@ -572,9 +572,10 @@ export default function SettingsModal(props: SettingsModalProps) {
             }
             const next = await window.electronAPI?.localEmbedDownloadModel?.();
             setEmbeddingStatus(next ?? null);
-            if (!next || next.state !== 'ready') {
+            if (!next || next.state !== 'ready' || !next.topicReady) {
               throw new Error(
-                next?.error ??
+                next?.topicError ??
+                  next?.error ??
                   t(
                     '검색 모델을 받지 못했습니다.',
                     'Could not download the search model.',

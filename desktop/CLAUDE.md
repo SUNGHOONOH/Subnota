@@ -120,6 +120,10 @@ See `docs/CODEMAP.md` for the full path map and data flows.
   leak into the CLS position, so the same sentence produces a different vector.
   Index and query vectors must come from one implementation, one model, one
   quantization — otherwise similarity ranking degrades without any error.
+  The embedding Utility Process also loads A.X-Encoder-base for background
+  topic-word extraction; run its MLM prompts one sentence at a time. BGE-M3
+  embeds those topic words into a separate optional relatedness vector. Only
+  the manual ambient list combines similarity and relatedness (5 + 3 slots).
 - **Reference opens must not take over the focused pane.** Ambient results,
   graph nodes, Topics chips and the calendar's source note open in the preview
   panel. Opening them as tabs hides the very thing the user was comparing

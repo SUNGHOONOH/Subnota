@@ -63,7 +63,8 @@ raw IPC access.
 | `src/auto-updater.ts` | Packaged macOS Squirrel.Mac native update feed. Returns inactive on Windows. |
 | `src/update-checker.ts` | GitHub latest-release fallback; selects DMG on macOS and Setup EXE on Windows. |
 | `src/window-close-handler.ts` | Waits for renderer save/flush before closing. |
-| `src/local-embedding.ts` | On-device embeddings via ONNX Runtime (Transformers.js, pinned `Xenova/bge-m3` q8 revision). Model download/cache, separate interactive vs background-index sessions, `local-embed:*` IPC. |
+| `src/local-embedding.ts` | Downloads/caches pinned local BGE-M3 and SKT A.X ONNX int8 files. The Utility Process runs interactive BGE and background BGE/A.X sessions behind `local-embed:*` IPC. |
+| `src/lib/topicWords.ts` | A.X MLM prompt, token filtering, and top-8 topic-word selection; `scripts/export-ax-encoder.py` reproduces the ONNX conversion. |
 
 ## Platform capability matrix
 
@@ -228,6 +229,14 @@ Two invariants live in code comments and regression tests. Do not undo them:
 - **`EMBEDDING_MODEL_ID` gates the local index.** Changing model, engine or
   quantization invalidates every stored vector; the signature column exists so
   stale vectors are discarded rather than silently mixed.
+- **Topic vectors have a separate signature.** Each indexed memo chunk retains
+  its BGE body/query vectors while an optional A.X topic-word vector is
+  backfilled when A.X becomes available. A.X failure never discards BGE data.
+- **Manual ambient list only:** one BGE query searches body and topic-vector
+  CSLS indexes independently. The first five similarity hits (memos/links) are
+  followed by up to three unique relatedness memo hits; missing slots use the
+  remaining similarity hits. Scores are not mixed or re-sorted. Automatic
+  ambient search, nearby notes, and folder classification stay similarity-only.
 
 The writing stage selects both the query text and delay. Clear completion signals
 use 3 seconds; an unfinished sentence uses 4 seconds so a brief pause while

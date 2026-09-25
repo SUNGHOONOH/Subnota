@@ -46,6 +46,9 @@ const embeddingModelText = (
 ) => {
   if (!status) return localize(language, '상태를 확인하는 중...', 'Checking status…');
   if (status.state === 'ready') {
+    if (!status.topicReady) {
+      return `${localize(language, '본문 검색 준비됨 · 주제 연관 모델 받기 필요', 'Similarity search ready · topic model download needed')} · ${formatBytes(status.downloadedBytes)}`;
+    }
     return `${localize(language, '준비됨', 'Ready')} · ${formatBytes(status.downloadedBytes)}`;
   }
   if (status.state === 'downloading') {
@@ -168,22 +171,30 @@ export default function SettingsSyncSection({
       </Section>
       <Section
         description={t(
-          '연관 문장 검색에 쓰는 파일입니다. 지우면 다음 검색 때 다시 받습니다.',
-          'This file powers related-passage search. It downloads again on your next search if removed.',
+          '유사·연관 문장 검색에 쓰는 모델 파일입니다. 지우면 다시 받아야 합니다.',
+          'These models power similarity and related-passage search. They must be downloaded again if removed.',
         )}
         title={t('검색 모델', 'Search model')}
       >
         <Row
           action={
             embeddingStatus?.state === 'ready' ? (
-              <RowAction
-                disabled={isWorking}
-                onClick={() =>
-                  run(async () => onDeleteEmbeddingModel(), t('검색 모델을 삭제했습니다.', 'Search model deleted.'))
-                }
-              >
-                {t('삭제', 'Delete')}
-              </RowAction>
+              <Group gap={12} wrap="nowrap">
+                {!embeddingStatus.topicReady && (
+                  <RowAction
+                    disabled={isWorking}
+                    onClick={() => run(async () => onDownloadEmbeddingModel(), t('주제 연관 모델을 받았습니다.', 'Topic model downloaded.'))}
+                  >
+                    {t('주제 모델 받기', 'Download topic model')}
+                  </RowAction>
+                )}
+                <RowAction
+                  disabled={isWorking}
+                  onClick={() => run(async () => onDeleteEmbeddingModel(), t('검색 모델을 삭제했습니다.', 'Search models deleted.'))}
+                >
+                  {t('삭제', 'Delete')}
+                </RowAction>
+              </Group>
             ) : embeddingStatus?.state === 'absent' ||
               embeddingStatus?.state === 'failed' ? (
               <RowAction

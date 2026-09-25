@@ -26,6 +26,8 @@ const THIRD_PARTY_MODEL_URLS = {
   desktopLicense: 'https://opensource.org/license/mit/',
   desktopModel:
     'https://huggingface.co/Xenova/bge-m3/tree/4de13258303883538bd53b696b452bf8099f0858',
+  topicModel: 'https://huggingface.co/Hoon03/subnota-ax-encoder-int8-onnx',
+  topicLicense: 'https://www.apache.org/licenses/LICENSE-2.0',
 } as const;
 
 const SettingsAboutSection = ({
@@ -50,7 +52,7 @@ const SettingsAboutSection = ({
       />
     </Section>
     <Section
-      description={t('Subnota가 사용하는 임베딩 모델과 해당 라이선스입니다. 전체 고지는 저장소의 THIRD_PARTY_NOTICES.md에서 확인할 수 있습니다.', 'Embedding models used by Subnota and their licenses. See THIRD_PARTY_NOTICES.md for the complete notice.')}
+      description={t('Subnota가 사용하는 임베딩·주제어 모델과 라이선스입니다. 전체 고지는 저장소의 THIRD_PARTY_NOTICES.md에서 확인할 수 있습니다.', 'Embedding and topic-word models used by Subnota and their licenses. See THIRD_PARTY_NOTICES.md for the complete notice.')}
       title={t('오픈소스 라이선스', 'Open-source licenses')}
     >
       <Row
@@ -104,6 +106,20 @@ const SettingsAboutSection = ({
         }
         description={t('Xenova/bge-m3 · MIT · 로컬 다운로드 · ONNX q8 · revision 4de1325', 'Xenova/bge-m3 · MIT · local download · ONNX q8 · revision 4de1325')}
         label={t('데스크톱 임베딩 모델', 'Desktop embedding model')}
+      />
+      <Row
+        action={
+          <Group gap={12} wrap="nowrap">
+            <RowAction onClick={() => void window.electronAPI?.openExternal(THIRD_PARTY_MODEL_URLS.topicModel)}>
+              {t('모델 카드', 'Model card')}
+            </RowAction>
+            <RowAction onClick={() => void window.electronAPI?.openExternal(THIRD_PARTY_MODEL_URLS.topicLicense)}>
+              {t('라이선스', 'License')}
+            </RowAction>
+          </Group>
+        }
+        description={t('SKT A.X-Encoder-base · Apache-2.0 · 비공식 ONNX int8 변환 · 기기 내 실행', 'SKT A.X-Encoder-base · Apache-2.0 · unofficial ONNX int8 conversion · on-device')}
+        label={t('데스크톱 주제어 모델', 'Desktop topic-word model')}
       />
     </Section>
     <Section title={t('약관 및 문의', 'Legal & contact')}>

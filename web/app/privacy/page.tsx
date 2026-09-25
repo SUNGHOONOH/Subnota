@@ -483,8 +483,8 @@ export default function PrivacyPage() {
           해당 제공자의 설정과 정책을 따라야 합니다.
         </li>
         <li>
-          로컬 임베딩: 데스크톱 앱의 Xenova/bge-m3 모델은 기기에서 실행되며, 해당
-          임베딩 계산을 위해 메모가 외부로 전송되지 않습니다. 백엔드 온라인 임베딩은
+          로컬 검색: 데스크톱 앱의 Xenova/bge-m3 임베딩 모델과 SKT A.X-Encoder-base 기반
+          주제어 모델은 기기에서 실행되며, 해당 계산을 위해 메모가 외부로 전송되지 않습니다. 백엔드 온라인 임베딩은
           Hugging Face Inference를 통해 BAAI/bge-m3 모델로 처리합니다.
         </li>
       </ul>
