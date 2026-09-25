@@ -1,6 +1,6 @@
 import { createNavigationContainerRef } from '@react-navigation/native';
 
-export type RootTabName = 'Memo' | 'Calendar' | 'Inbox' | 'Briefing';
+export type RootTabName = 'Memo' | 'Calendar' | 'Inbox';
 
 export const navigationRef = createNavigationContainerRef<Record<RootTabName, undefined>>();
 

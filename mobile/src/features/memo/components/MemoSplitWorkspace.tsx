@@ -12,7 +12,6 @@ import {
 
 import { MemoChunk } from '../../../lib/memoChunker';
 import { Memo, useMemoStore } from '../../../store/useMemoStore';
-import BriefingScreen from '../../briefing/BriefingScreen';
 import CalendarScreen from '../../calendar/CalendarScreen';
 import InboxScreen from '../../inbox/InboxScreen';
 import { NetworkSearchResult } from '../../network/services/networkService';
@@ -24,7 +23,6 @@ export type MemoSplitPaneView =
   | 'memo'
   | 'inbox'
   | 'calendar'
-  | 'briefing'
   | 'network'
   | 'source';
 
@@ -53,7 +51,6 @@ export interface MemoSplitPaneState extends MemoSplitEditorState {
 }
 
 const VIEW_LABELS: Record<MemoSplitPaneView, string> = {
-  briefing: '브리핑',
   calendar: '캘린더',
   inbox: '수집함',
   memo: '노트',
@@ -64,7 +61,6 @@ const MENU_VIEWS: MemoSplitPaneView[] = [
   'memo',
   'inbox',
   'calendar',
-  'briefing',
   'network',
 ];
 const splitFontFamily =
@@ -160,10 +156,6 @@ const getSourceLabel = (result: NetworkSearchResult) => {
 
 const SplitCalendarPane = React.memo(function SplitCalendarPane() {
   return <CalendarScreen />;
-});
-
-const SplitBriefingPane = React.memo(function SplitBriefingPane() {
-  return <BriefingScreen />;
 });
 
 const SplitInboxPane = React.memo(function SplitInboxPane() {
@@ -481,10 +473,6 @@ const MemoSplitWorkspace = ({
   ) => {
     if (editor.view === 'calendar') {
       return <SplitCalendarPane />;
-    }
-
-    if (editor.view === 'briefing') {
-      return <SplitBriefingPane />;
     }
 
     if (editor.view === 'inbox') {

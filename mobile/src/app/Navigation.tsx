@@ -1,12 +1,11 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
-import { CalendarDays, Coffee, Inbox, PenLine } from 'lucide-react-native';
+import { CalendarDays, Inbox, PenLine } from 'lucide-react-native';
 import { Keyboard, TextInput, Pressable } from 'react-native';
 
 import MemoScreen from '../features/memo/MemoScreen';
 import CalendarScreen from '../features/calendar/CalendarScreen';
-import BriefingScreen from '../features/briefing/BriefingScreen';
 import InboxScreen from '../features/inbox/InboxScreen';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 
@@ -18,10 +17,6 @@ const MemoTabIcon = ({ color, size }: { color: string; size: number }) => (
 
 const CalendarTabIcon = ({ color, size }: { color: string; size: number }) => (
   <CalendarDays color={color} size={size} />
-);
-
-const BriefingTabIcon = ({ color, size }: { color: string; size: number }) => (
-  <Coffee color={color} size={size} />
 );
 
 const InboxTabIcon = ({ color, size }: { color: string; size: number }) => (
@@ -90,14 +85,6 @@ const Navigation = () => {
           options={{
             tabBarLabel: '수집함',
             tabBarIcon: InboxTabIcon,
-          }}
-        />
-        <Tab.Screen
-          name="Briefing"
-          component={BriefingScreen}
-          options={{
-            tabBarLabel: '브리핑',
-            tabBarIcon: BriefingTabIcon,
           }}
         />
       </Tab.Navigator>
