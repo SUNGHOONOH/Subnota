@@ -25,7 +25,7 @@ def summarize_youtube_url(url: str | None) -> tuple[DatabaseRow | None, str | No
     if not settings.gemini_api_key or not url or genai is None or genai_types is None:
         return None, None
 
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = _create_genai_client()
     summary, model = generate_summary_content(
         client=client,
         contents=genai_types.Content(
@@ -65,13 +65,23 @@ def summarize_text(
         f"{title_label}: {title}\n\n{body_label}:\n"
         f"{trimmed[:MAX_EXTRACTED_TEXT_CHARS]}"
     )
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = _create_genai_client()
     summary, model = generate_summary_content(
         client=client,
         contents=prompt,
         models=model_constants.TEXT_SUMMARY_MODELS,
     )
     return parse_summary_payload(summary), model
+
+
+def _create_genai_client() -> Any:
+    """Allow at most two SDK retries after the initial Gemini request."""
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=genai_types.HttpOptions(
+            retry_options=genai_types.HttpRetryOptions(attempts=3)
+        ),
+    )
 
 
 def summary_prompt_for_content(text: str | None) -> str:

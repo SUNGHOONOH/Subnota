@@ -1040,6 +1040,7 @@ const MemoSplitWorkspace = ({
             onDelete: onDeleteInboxItem,
             onOpenDetail: (item) =>
               onOpenPreview?.([inboxSessionToSourceResult(item)]),
+            onRetrySummary: onRetryInboxSummary,
             onSaveUrl: onSaveInboxUrl,
             onToggleLike: onToggleInboxLike,
           }}

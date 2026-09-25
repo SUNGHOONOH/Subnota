@@ -1346,7 +1346,6 @@ const App = () => {
     language: appSettings.uiLanguage,
     pendingInboxDeleteIdsRef,
     pendingInboxTombstoneWritesRef,
-    refreshInbox,
     session,
     setError,
     setInboxItems,

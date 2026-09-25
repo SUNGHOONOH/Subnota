@@ -69,7 +69,8 @@ describe('링크 저장함 카드', () => {
   // 같은 항목의 키워드가 격자에서는 코랄, 웹 요약 패널에서는 중성이었다.
   it('키워드 칩이 웹 요약 패널과 같은 중성 칩이다', () => {
     expect(inboxSource).toContain('variant="default"');
-    expect(inboxSource).not.toContain('variant="light"');
+    expect(inboxSource).toContain('className="inbox-summary-retry"');
+    expect(inboxSource).toContain('color="red"');
     expect(detailSource).toContain('variant="default"');
   });
 
@@ -81,10 +82,14 @@ describe('링크 저장함 카드', () => {
     expect(styles).not.toContain('linear-gradient(135deg, var(--app-color-border)');
   });
 
-  it('요약 중이거나 실패한 링크가 카드에서 상태를 숨기지 않는다', () => {
+  it('요약 중은 문구로, 실패는 항상 보이는 재시도 표시로 알린다', () => {
     expect(inboxSource).toContain("t('요약 중입니다…', 'Creating summary…')");
-    expect(inboxSource).toContain("t('요약 실패', 'Summary failed')");
     expect(inboxSource).toContain("item.summaryStatus === 'failed'");
+    expect(inboxSource).toContain('className="inbox-summary-retry"');
+    expect(inboxSource).toContain("t('요약 실패 · 다시 시도', 'Summary failed · retry')");
+    expect(styles).toMatch(
+      /\.inbox-card-actions \.inbox-summary-retry\s*\{[\s\S]*?opacity:\s*1/,
+    );
     expect(inboxSource).toContain('role="status"');
   });
 

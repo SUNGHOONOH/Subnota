@@ -7424,6 +7424,10 @@ html:not([data-desktop-platform='macos']) .fatal-render-error::before {
   opacity: 1;
 }
 
+.inbox-workspace .inbox-card-actions .inbox-summary-retry {
+  opacity: 1;
+}
+
 /* ⋯ 메뉴 안의 링크 저장 폼 */
 .inbox-new-form {
   padding: 2px 10px 8px;

@@ -33,7 +33,7 @@ describe('Inbox item actions boundary', () => {
     expect(actionSource).toContain('http 또는 https 웹페이지 주소만 저장할 수 있습니다.');
   });
 
-  it('keeps local-first save, cache promotion, and delayed refresh together', () => {
+  it('keeps local-first save and promotes the final summary status with bounded polling', () => {
     const localCreate = actionSource.indexOf('createLocalInboxSession(');
     const optimisticInsert = actionSource.indexOf(
       'setInboxItems((previous) => [localItem, ...previous])',
@@ -45,7 +45,9 @@ describe('Inbox item actions boundary', () => {
     const queueRemoval = actionSource.indexOf(
       'removeLocalInboxSessionIfNotDeleted(',
     );
-    const delayedRefresh = actionSource.indexOf('void refreshInbox();');
+    const delayedRefresh = actionSource.indexOf(
+      'void refreshSavedSummary(item, currentSession, ownerId);',
+    );
 
     expect(localCreate).toBeGreaterThanOrEqual(0);
     expect(localCreate).toBeLessThan(optimisticInsert);
@@ -53,7 +55,8 @@ describe('Inbox item actions boundary', () => {
     expect(remoteCreate).toBeLessThan(cacheWrite);
     expect(cacheWrite).toBeLessThan(queueRemoval);
     expect(delayedRefresh).toBeGreaterThan(queueRemoval);
-    expect(actionSource).toContain('}, 2500);');
+    expect(actionSource).toContain('for (const delayMs of [2500, 5000, 8000])');
+    expect(actionSource).toContain("updated.summaryStatus === 'pending'");
   });
 
   it('durably tombstones deletes before selecting server or pending-client paths', () => {

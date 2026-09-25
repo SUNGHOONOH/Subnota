@@ -26,6 +26,7 @@ interface InboxWorkspaceProps {
   isLoading: boolean;
   onDelete: (id: string) => void;
   onOpenDetail: (item: InboxSession) => void;
+  onRetrySummary: (item: InboxSession) => Promise<void>;
   onSaveUrl: (url: string) => Promise<unknown>;
   onToggleLike: (id: string, liked: boolean) => void;
 }
@@ -77,6 +78,7 @@ const InboxWorkspace = ({
   isLoading,
   onDelete,
   onOpenDetail,
+  onRetrySummary,
   onSaveUrl,
   onToggleLike,
 }: InboxWorkspaceProps) => {
@@ -90,6 +92,32 @@ const InboxWorkspace = ({
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(() => new Set());
+  const [retryFailedIds, setRetryFailedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const retrySummary = async (item: InboxSession) => {
+    if (retryingIds.has(item.id)) return;
+
+    setRetryingIds(previous => new Set(previous).add(item.id));
+    setRetryFailedIds(previous => {
+      const next = new Set(previous);
+      next.delete(item.id);
+      return next;
+    });
+    try {
+      await onRetrySummary(item);
+    } catch {
+      setRetryFailedIds(previous => new Set(previous).add(item.id));
+    } finally {
+      setRetryingIds(previous => {
+        const next = new Set(previous);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -230,12 +258,12 @@ const InboxWorkspace = ({
           const duration = formatDuration(item.duration);
           const oneLiner = item.summaryOneLiner ?? item.summary;
           const excerpt = item.thumbnailUrl ? null : item.summary ?? item.summaryOneLiner;
+          const summaryFailed =
+            item.summaryStatus === 'failed' || Boolean(item.summaryError);
           const summaryStatusLabel =
             item.summaryStatus === 'pending'
               ? t('요약 중입니다…', 'Creating summary…')
-              : item.summaryStatus === 'failed'
-                ? t('요약 실패', 'Summary failed')
-                : null;
+              : null;
           const favicon = faviconUrlFor(item.domain);
           return (
             <Card
@@ -311,7 +339,7 @@ const InboxWorkspace = ({
                     </Text>
                   )}
                   {summaryStatusLabel && item.thumbnailUrl && !oneLiner && (
-                    <Text c={item.summaryStatus === 'failed' ? 'red' : 'dimmed'} fz="xs" role="status">
+                    <Text c="dimmed" fz="xs" role="status">
                       {summaryStatusLabel}
                     </Text>
                   )}
@@ -336,6 +364,28 @@ const InboxWorkspace = ({
               {/* 삭제는 동작이라 hover에만, 좋아요는 상태라 눌린 것만 항상 보인다
                   — 목록에서 좋아요한 항목을 구분하려면 그래야 한다. */}
               <Group className="inbox-card-actions" gap={4} wrap="nowrap">
+                {summaryFailed && (
+                  <ActionIcon
+                    aria-label={retryFailedIds.has(item.id)
+                      ? t('요약 재시도 실패 · 다시 시도', 'Retry failed · try again')
+                      : t('요약 실패 · 다시 시도', 'Summary failed · retry')}
+                    className="inbox-summary-retry"
+                    color="red"
+                    disabled={retryingIds.has(item.id)}
+                    loading={retryingIds.has(item.id)}
+                    onClick={event => {
+                      event.stopPropagation();
+                      void retrySummary(item);
+                    }}
+                    radius="sm"
+                    title={retryFailedIds.has(item.id)
+                      ? t('요약 재시도 실패 · 다시 시도', 'Retry failed · try again')
+                      : t('요약 실패 · 다시 시도', 'Retry summary')}
+                    variant="light"
+                  >
+                    <span aria-hidden="true">!</span>
+                  </ActionIcon>
+                )}
                 <ActionIcon
                   aria-label={item.liked ? t('좋아요 취소', 'Unlike') : t('좋아요', 'Like')}
                   className={item.liked ? 'inbox-like liked' : 'inbox-like'}

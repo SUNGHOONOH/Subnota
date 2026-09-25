@@ -31,6 +31,7 @@ export interface InboxSession {
   summaryOneLiner: string | null;
   summaryProvider: string | null;
   summarySearchText: string | null;
+  summaryError?: string | null;
   summaryStatus: InboxSummaryStatus;
   thumbnailUrl: string | null;
   title: string | null;
@@ -64,6 +65,8 @@ interface InboxSessionRow {
     channel_title?: string | null;
     duration?: string | null;
     published_at?: string | null;
+    summary_error?: string | null;
+    error?: string | null;
   } | null;
 }
 
@@ -288,6 +291,7 @@ const mapInboxSession = (row: InboxSessionRow): InboxSession => ({
   summaryOneLiner: row.summary_one_liner,
   summaryProvider: row.summary_provider,
   summarySearchText: row.summary_search_text,
+  summaryError: row.metadata?.summary_error ?? row.metadata?.error ?? null,
   summaryStatus: row.summary_status,
   thumbnailUrl: row.thumbnail_url,
   title: row.title,

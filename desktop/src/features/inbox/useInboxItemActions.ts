@@ -11,6 +11,7 @@ import {
   createInboxSession,
   deleteInboxSession,
   deleteInboxSessionByClientId,
+  fetchInboxSessions,
 } from '../../services/backend/inboxService';
 import {
   cacheLocalInboxItem,
@@ -43,7 +44,6 @@ interface UseInboxItemActionsOptions {
   language: UiLanguage;
   pendingInboxDeleteIdsRef: InboxIdSetRef;
   pendingInboxTombstoneWritesRef: InboxTombstoneWritesRef;
-  refreshInbox: () => Promise<void>;
   session: Session | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setInboxItems: Dispatch<SetStateAction<InboxSession[]>>;
@@ -61,7 +61,6 @@ export const useInboxItemActions = ({
   language,
   pendingInboxDeleteIdsRef,
   pendingInboxTombstoneWritesRef,
-  refreshInbox,
   session,
   setError,
   setInboxItems,
@@ -71,6 +70,50 @@ export const useInboxItemActions = ({
     if (sourceType === 'youtube') return 'YouTube';
     if (sourceType === 'instagram') return 'Instagram';
     return t('링크', 'Link');
+  };
+
+  const refreshSavedSummary = async (
+    item: InboxSession,
+    currentSession: Session,
+    ownerId: string,
+  ) => {
+    const clientId = item.clientId;
+    for (const delayMs of [2500, 5000, 8000]) {
+      await new Promise<void>(resolve => {
+        window.setTimeout(resolve, delayMs);
+      });
+      if (!isCurrentSession(currentSession)) return;
+      if (
+        (clientId && deletedPendingInboxClientIdsRef.current.has(clientId)) ||
+        (clientId && (await isLocalInboxSessionDeleted(clientId, ownerId)))
+      ) {
+        return;
+      }
+
+      let updated: InboxSession | undefined;
+      try {
+        updated = (await fetchInboxSessions(currentSession)).find(
+          candidate => candidate.id === item.id,
+        );
+      } catch {
+        continue;
+      }
+      if (!updated || updated.summaryStatus === 'pending') continue;
+      if (!isCurrentSession(currentSession)) return;
+      if (clientId && (await isLocalInboxSessionDeleted(clientId, ownerId))) {
+        return;
+      }
+
+      const completedItem = updated;
+      await cacheLocalInboxItem(completedItem, ownerId);
+      if (!isCurrentSession(currentSession)) return;
+      setInboxItems(previous =>
+        previous.map(previousItem =>
+          previousItem.id === completedItem.id ? completedItem : previousItem,
+        ),
+      );
+      return;
+    }
   };
 
   // 반환값은 웹 클리핑 알림이 성공/실패를 가리는 데 쓴다. 로컬 우선 저장이라
@@ -197,9 +240,9 @@ export const useInboxItemActions = ({
           item.title ?? item.originalUrl ?? item.canonicalUrl ?? normalizedUrl,
         url: item.originalUrl ?? item.canonicalUrl ?? normalizedUrl,
       });
-      window.setTimeout(() => {
-        void refreshInbox();
-      }, 2500);
+      if (item.summaryStatus === 'pending') {
+        void refreshSavedSummary(item, currentSession, ownerId);
+      }
       // 알림 문구가 "저장은 됐지만 요약은 실패"를 구분할 수 있게 실어 보낸다.
       return { summaryStatus: item.summaryStatus };
     } catch (caught) {
