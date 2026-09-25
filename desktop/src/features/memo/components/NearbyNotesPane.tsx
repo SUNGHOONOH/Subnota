@@ -4,6 +4,7 @@ import { NETWORK_MIN_SIMILARITY } from '../../../lib/constants';
 import { MemoChunk } from '../../../lib/memoChunker';
 import { localize } from '../../../lib/uiLanguage';
 import type { MemoRow } from '../../../types';
+import { isSameTopicSimilarity } from '../folderOrganization';
 import { LOCAL_SEARCH_ERROR_MESSAGE } from '../../../services/local/localMemoSearch';
 import {
   isNetworkSearchRetryableMessage,
@@ -189,9 +190,13 @@ const NearbyNotesPane = ({
             }
             const chunkId = nodeId.slice('network:'.length);
             const result = results.find((item) => item.chunkId === chunkId);
-            return result
-              ? `${getResultTitle(result, memos, language)} · ${t('유사도', 'Similarity')} ${Math.round(result.similarity * 100)}%`
-              : null;
+            if (!result) return null;
+            // 중심화 점수는 퍼센트로 읽히지 않는다 — 잘 맞는 메모도 30% 안팎이다.
+            // 폴더 자동분류와 같은 척도라 그 문턱으로 "같은 주제"를 가른다.
+            const relation = isSameTopicSimilarity(result.similarity)
+              ? t('같은 주제', 'Same topic')
+              : t('관련 있음', 'Related');
+            return `${getResultTitle(result, memos, language)} · ${relation}`;
           }}
           nodes={graph.nodes}
           showActiveNodeControl={false}

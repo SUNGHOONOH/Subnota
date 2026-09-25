@@ -6,6 +6,7 @@ import {
   createTopicFolderMemberships,
   getFolderRecommendations,
   getFolderSeedCount,
+  isSameTopicSimilarity,
   toAutomaticMemberships,
 } from '../features/memo/folderOrganization';
 import { MemoFolder, MemoFolderMembership, TopicCluster } from '../types';
@@ -136,5 +137,15 @@ describe('folder organization', () => {
       name: 'Databases',
       topicId: 'topic-db',
     }]);
+  });
+});
+
+// 주변 메모 그래프 툴팁이 쓴다. 폴더 자동분류와 같은 문턱이어야 "같은 주제"가
+// 폴더에 들어갈 만큼 가깝다는 뜻이 된다.
+describe('isSameTopicSimilarity', () => {
+  it('폴더 자동분류 문턱(0.40)에서 같은 주제와 관련 있음을 가른다', () => {
+    expect(isSameTopicSimilarity(0.4)).toBe(true);
+    expect(isSameTopicSimilarity(0.39)).toBe(false);
+    expect(isSameTopicSimilarity(0.1)).toBe(false);
   });
 });

@@ -64,6 +64,13 @@ export const AUTOMATIC_FOLDER_MIN_SEEDS = 2;
 const AUTOMATIC_FOLDER_THRESHOLD = 0.4;
 const AUTOMATIC_FOLDER_MARGIN = 0.03;
 
+/** Nearby notes are scored on the same centered-mean scale, so a note that
+ * would be filed into the same folder reads as "same topic" there too. The
+ * folder compares against a seed average rather than one note, so this is a
+ * close proxy, not the measured condition itself. */
+export const isSameTopicSimilarity = (similarity: number) =>
+  similarity >= AUTOMATIC_FOLDER_THRESHOLD;
+
 /** Seeds are notes the user filed (directly or by importing a Topic).
  * Automatic filings never count, so one wrong guess cannot train the next. */
 const isSeed = (membership: MemoFolderMembership) =>
