@@ -25,7 +25,7 @@ import { formatRelativeDay } from '../../lib/relativeDay';
 import { findPreviewHighlight } from '../../lib/previewHighlight';
 import { normalizeChunkText } from '../../lib/chunkText';
 import EmptyState from '../../components/EmptyState';
-import SimilarityBadge from '../../components/SimilarityBadge';
+import { SimilarityBadge } from '../../components/SimilarityBadge';
 import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 export interface PreviewPanelState {

@@ -1,3 +1,4 @@
+import { normalizeChunkText } from '../../../lib/chunkText';
 import type { InboxSession } from '../../../services/backend/inboxService';
 import type { NetworkSearchResult } from '../../../services/local/memoSearchTypes';
 import { getSourceLabel } from '../memoSplitWorkspaceUtils';
@@ -64,7 +65,10 @@ const SourcePaneBody = ({
       )}
       <div className="source-summary-card">
         <h5>{t('추천에 사용된 요약', 'Summary used for this recommendation')}</h5>
-        <p>{result.chunkText || t('요약이 없습니다.', 'No summary is available.')}</p>
+        <p>
+          {normalizeChunkText(result.chunkText) ||
+            t('요약이 없습니다.', 'No summary is available.')}
+        </p>
       </div>
     </div>
   );

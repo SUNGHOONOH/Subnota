@@ -5,7 +5,7 @@ type LocalWriteFlushReason =
   | 'shutdown'
   | 'window-close';
 
-// 로컬 임베딩 모델(multilingual-e5-small ONNX fp32)의 준비 상태. 모델은 앱에 번들하지 않고
+// 로컬 임베딩 모델(bge-m3 ONNX q8)의 준비 상태. 모델은 앱에 번들하지 않고
 // 첫 사용 시 userData로 내려받으므로, 렌더러가 진행률을 보여줄 수 있어야 한다.
 interface LocalEmbeddingStatusBridge {
   downloadedBytes: number;
