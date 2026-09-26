@@ -122,8 +122,10 @@ See `docs/CODEMAP.md` for the full path map and data flows.
   quantization — otherwise similarity ranking degrades without any error.
   The embedding Utility Process also loads A.X-Encoder-base for background
   topic-word extraction; run its MLM prompts one sentence at a time. BGE-M3
-  embeds those topic words into a separate optional relatedness vector. Only
-  the manual ambient list combines similarity and relatedness (5 + 3 slots).
+  embeds those topic words into a separate optional relatedness vector.
+  Similarity and relatedness are ranked separately and never summed; the badge
+  follows the search path, not the score. Automatic search shows similarity
+  only. See `src/features/search/README.md` for which path shows what.
 - **Reference opens must not take over the focused pane.** Ambient results,
   graph nodes, Topics chips and the calendar's source note open in the preview
   panel. Opening them as tabs hides the very thing the user was comparing
