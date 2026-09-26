@@ -52,6 +52,7 @@ const OWNER_CENTER = '55555555-5555-4555-8555-555555555555';
 const OWNER_TOPIC = '66666666-6666-4666-8666-666666666666';
 const OWNER_MIGRATION = '77777777-7777-4777-8777-777777777777';
 const OWNER_INBOX_CSLS = '88888888-8888-4888-8888-888888888888';
+const OWNER_SINGLE_LINK = '99999999-9999-4999-8999-999999999999';
 const CURRENT_SIGNATURE =
   'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1';
 let databasePath = '';
@@ -700,6 +701,28 @@ describe('local memo vector SQLite store', () => {
     expect(after.find(item => item.inboxSessionId === 'csls-link-2')).toBeUndefined();
     expect(after.find(item => item.inboxSessionId === 'csls-link-0')?.similarity)
       .not.toBeCloseTo(exact.similarity);
+  });
+
+  it('링크가 하나뿐이어도 중심화 뒤 사라지지 않고 검색된다', async () => {
+    const owner = OWNER_SINGLE_LINK;
+    const event = eventFor(9);
+    await invoke('local-db:set-owner', event, owner);
+    for (let index = 0; index < 4; index += 1) {
+      const memoId = `single-link-memo-${index}`;
+      const content = `메모 ${index}`;
+      await upsertMemo(event, owner, memo(memoId, content, hashText(content)));
+      await replaceVectors(event, owner, memoId, hashText(content), content,
+        [vectorChunk(content, embeddingVector(index % 2 ? -1 : 1, index < 2 ? 1 : -1))]);
+    }
+    const record = { ...inboxRecord('하나뿐인 링크'), id: 'single-link' };
+    const sourceText = [record.title, record.summary, ...record.keywords].join('\n');
+    await invoke('local-db:upsert', event, owner, 'inbox', record.id, record);
+    await invoke('local-db:replace-inbox-vector', event, owner,
+      record.id, hashText(sourceText), sourceText, embeddingVector(1, 0));
+
+    const results = await invoke('local-db:search-inbox-vectors', event,
+      owner, embeddingVector(1, 0), 5, -2) as Array<{ inboxSessionId: string }>;
+    expect(results.map(item => item.inboxSessionId)).toEqual(['single-link']);
   });
 
   it('isolates owners and removes vectors through both delete paths', async () => {

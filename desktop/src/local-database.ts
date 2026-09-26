@@ -734,6 +734,8 @@ const WORKER_SOURCE = String.raw`
 
   // CSLS 이웃 수. iOS 구현과 같은 값이어야 한다.
   const CSLS_NEIGHBORS = 10;
+  // 링크 중심화 평균에 섞는 메모 평균의 가중(가상의 링크 수). 근거는 searchInboxVectors.
+  const LINK_MEAN_PRIOR = 10;
 
   const float32FromBlob = bytes => {
     if (bytes.byteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
@@ -1114,12 +1116,20 @@ const WORKER_SOURCE = String.raw`
     let index = inboxScoringByOwner.get(args.ownerId);
     if (!index) {
       const rows = [...liveInboxVectors(args.ownerId)];
+      const memoIndex = memoVectorIndex(args.ownerId);
+      // 링크 평균을 메모 문서 평균 쪽으로 가중 LINK_MEAN_PRIOR만큼 당긴다.
+      // 링크가 1개면 자기 평균을 빼는 순간 벡터가 0이 되어 검색에서 사라지고,
+      // 2~3개면 서로 반대 방향으로 밀린다. 실측(메모 1,093청크 × 링크 5개):
+      // 가중 10에서 관련 통과 40/52 그대로, 무관 통과 52 → 35. 메모 평균만
+      // 쓰면 관련 통과가 4/52로 무너진다 — 링크 요약문은 고유한 치우침이 있다.
       const mean = new Float64Array(VECTOR_BYTES / Float32Array.BYTES_PER_ELEMENT);
       for (const row of rows) {
         for (let axis = 0; axis < mean.length; axis += 1) mean[axis] += row.vector[axis];
       }
-      for (let axis = 0; axis < mean.length; axis += 1) mean[axis] /= rows.length || 1;
-      const memoIndex = memoVectorIndex(args.ownerId);
+      for (let axis = 0; axis < mean.length; axis += 1) {
+        mean[axis] = (mean[axis] + LINK_MEAN_PRIOR * (memoIndex.documentMean[axis] ?? 0)) /
+          (rows.length + LINK_MEAN_PRIOR);
+      }
       const entries = [];
       for (const row of rows) {
         const document = centeredVector(row.vector, mean);
