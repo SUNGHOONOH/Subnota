@@ -1,78 +1,61 @@
-# Subnota Supabase Database
+# Subnota Supabase
 
-This directory contains the database schema migrations, local seed data, and Edge Function configurations for Subnota.
+`migrations/` contains the versioned schema changes. The production migration
+history and its mapping to local migration filenames are documented in
+[`db.md`](db.md). Production was checked read-only on 2026-09-27: it has 39
+recorded migrations through `20260925020000` and the cleanup migrations from
+2026-09-25 are already applied.
 
-## Database Migrations
-These files are the local schema source and historical reference. Do not paste
-the full list into the SQL Editor or replay it against production; check the
-production history mapping below first.
+## Current schema
 
-```text
-supabase/migrations/20260519_final_schema.sql
-supabase/migrations/20260525_topic_memo_edges_patch.sql
-supabase/migrations/20260528_inbox_sessions.sql
-supabase/migrations/20260530_inbox_session_embeddings.sql
-supabase/migrations/20260531_inbox_structured_summaries.sql
-supabase/migrations/20260602_hnsw_vector_indexes.sql
-supabase/migrations/20260611_inbox_client_id.sql
-supabase/migrations/20260611_memo_category.sql
-supabase/migrations/20260613_inbox_sessions_updated_order.sql
-supabase/migrations/20260620_topic_memo_embedding_cache.sql
-supabase/migrations/20260621_network_index_consistency.sql
-supabase/migrations/20260622_desktop_reliability.sql
-supabase/migrations/20260623000000_memo_chunk_edges.sql
-supabase/migrations/20260623000100_db_security_and_edge_consistency.sql
-supabase/migrations/20260623000200_rls_performance.sql
-supabase/migrations/20260623000300_drop_ivfflat_indexes.sql
-supabase/migrations/20260623104359_memo_content_anchor_and_cron.sql
-supabase/migrations/20260623110725_topic_dirty_nonempty_only.sql
-supabase/migrations/20260623194520_schedule_inbox_atomic_replace.sql
-supabase/migrations/20260624000000_fk_indexes.sql
-supabase/migrations/20260624000100_memo_tombstones_and_revision.sql
-supabase/migrations/20260624000200_memo_conflict_copy_rpc.sql
-supabase/migrations/20260625000000_calendar_completed_at.sql
-supabase/migrations/20260626000000_growth_events.sql
-supabase/migrations/20260626000100_trees.sql
-supabase/migrations/20260627145059_memo_similarity_edges.sql
-supabase/migrations/20260629000000_inbox_keywords_liked.sql
-supabase/migrations/20260706000100_memo_conflict_merge_optin.sql
-supabase/migrations/20260706020000_fix_network_rate_limit_timestamp.sql
-supabase/migrations/20260707190355_topic_memo_inbox_edges.sql
-supabase/migrations/20260708000000_topic_cluster_inbox_items.sql
-supabase/migrations/20260812113011_calendar_block_category_id.sql
-supabase/migrations/20260824075337_revoke_tombstone_trigger_execute.sql
-supabase/migrations/20260908090000_retire_daily_briefing_and_server_memo_chunks.sql
+The current public schema has 18 tables, all with RLS enabled:
+
+- Identity and user data: `profiles`, `memos`, `calendar_blocks`,
+  `schedule_inbox`
+- Topics and memo relationships: `topic_clusters`, `topic_cluster_memos`,
+  `topic_memo_embedding_cache`, `memo_similarity_edges`
+- Saved links and topic links: `inbox_sessions`, `inbox_session_embeddings`,
+  `topic_cluster_inbox_items`, `topic_memo_inbox_edges`
+- Completion history: `activity_completions`, `daily_completions`
+- Folder organization: `memo_folders`, `memo_folder_memberships`,
+  `memo_folder_exclusions`
+- Backend-only sync ledger: `memo_tombstones`
+
+`topic_memo_edges` and `trees` are retired. `memo_folders` no longer has the
+`description` or `classifier_terms` columns; automatic classification uses
+on-device models in the desktop app.
+
+## Seed and reset safety
+
+**Never run `supabase/seed/seed.sql` in the Supabase SQL Editor or against a
+linked/production database.** It is an old test fixture with unscoped `DELETE`
+statements and references tables/columns removed from the current schema. It can
+erase real user data on a schema where those statements still apply.
+
+The current `config.toml` enables seeding with `sql_paths = ["./seed.sql"]`,
+which resolves to `supabase/seed.sql`; that file does not exist. The old fixture
+is at `supabase/seed/seed.sql`, so the configured path and the tracked fixture
+do not match. Do not fix this by pointing the config at the old fixture. There
+is currently no safe, current-schema seed fixture.
+
+For a disposable local database, use only the local stack and skip seed files:
+
+```sh
+supabase start
+supabase db reset --local --no-seed
 ```
 
-## Production history
+This reset deletes and recreates the **local** database. Do not add `--linked`:
+`supabase db reset --linked` drops and rebuilds the remote database. If test data
+is needed later, create a current-schema fixture that inserts/upserts only
+dedicated test rows, then verify it against a disposable local database before
+enabling it.
 
-Production currently has 35 recorded migrations through
-`20260908090000`. The live schema reflects the feature
-SQL represented by the local files, but several production entries use
-generated timestamps because some SQL was executed manually before being
-recorded in migration history. The inbox-topic membership change is recorded in
-production as `20260707181903_topic_cluster_inbox_items` and
-`20260707182219_topic_cluster_inbox_items_service_grant`; the local
-`20260708000000_topic_cluster_inbox_items.sql` is the consolidated equivalent.
-The local tombstone privilege migration is recorded in production as
-`20260824075409_revoke_tombstone_trigger_execute`.
+## Production migration safety
 
-`20260908090000_retire_daily_briefing_and_server_memo_chunks.sql` was applied
-and recorded on 2026-09-08. It removes the server-side memo-chunk graph,
-Daily Briefing, and the old network-search cache; local desktop search and the
-schedule/Topics pipelines remain.
-
-Do **not** run a blanket `supabase db push` until the local filenames and
-production history mapping are deliberately reconciled. Re-applying a local
-alias would duplicate an already reflected schema change.
-
-## Schema Entities
-The migrations define and configure the following database structures:
-* `profiles` — User profile storage
-* `memos` — User memos (local-first synced rows)
-* `calendar_blocks` — Scheduled items, completion timestamps, and an optional local-category reference
-* `schedule_inbox` — Daily schedule suggestion items
-* `topic_clusters`, `topic_cluster_memos`, & `topic_memo_edges` — Graph clusters and memo edge representations
-* `inbox_sessions` & summary embeddings — Clipped URLs, YouTube transcripts, and metadata
-* `activity_completions` & `daily_completions` — Completion ledger behind the monthly report
-* `trees` — Left over from the pixel-tree/forest feature, which was cut from the product; nothing reads it
+Production history includes manually recorded/generated versions that do not
+always match the local migration filename. Do not use a blanket
+`supabase db push` until the mapping in [`db.md`](db.md) is reconciled. For a
+schema change, create and review a new migration, check the linked migration
+history and live schema, then apply only the intended change. Never replay the
+full migration directory in the SQL Editor.

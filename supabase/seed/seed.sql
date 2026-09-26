@@ -1,5 +1,7 @@
--- Subnota test seed: wipe all per-user data + insert 40 Korean memos + 14 calendar blocks.
--- Single-user DB (one profiles row). MCP/service-role bypasses RLS. Run in Supabase SQL editor.
+-- HISTORICAL TEST FIXTURE — DO NOT RUN against Supabase production or a linked DB.
+-- This script contains unscoped DELETEs and references retired tables/columns.
+-- It can erase real data on an older compatible schema. Use only after replacing
+-- it with a reviewed, current-schema fixture in a disposable local database.
 begin;
 -- 1) wipe all per-user test data (FK-safe child->parent order)
 delete from topic_memo_edges;

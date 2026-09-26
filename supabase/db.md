@@ -1,6 +1,9 @@
 # Subnota database handoff
 
-Last verified: 2026-09-25 (Asia/Seoul)
+Database schema, migration history, and Supabase advisors last verified:
+2026-09-27 (Asia/Seoul). Cloud Run, Cloud Scheduler, and Secret Manager details
+below are operational snapshots last checked on 2026-09-25; they were not
+re-queried during this documentation update.
 
 This document describes the production Supabase database after the security and
 memo graph consistency migration. It is intended as the starting point for any
@@ -9,8 +12,12 @@ agent changing database code.
 ## Product and access model
 
 Subnota is login-first and local-first. A user must authenticate before their
-local data is synchronized. Desktop/mobile clients access user-owned memo,
-calendar, topic, schedule and graph-read data through Supabase RLS.
+local data is synchronized. Desktop clients and the in-progress native Swift
+iOS app access user-owned memo, calendar, topic, schedule and graph-read data
+through Supabase RLS. The legacy React Native client source has been removed
+from this repository; that does not update or revoke already distributed
+mobile builds. The native Swift app in `ios/` is still in development and is
+not yet a release target.
 Backend-only ingestion, embedding, maintenance and replacement operations go
 through FastAPI on Cloud Run with the Supabase `service_role`.
 
@@ -26,10 +33,10 @@ Google Secret Manager.
 
 ## Source of truth and migration workflow
 
-The production schema was verified from the live catalog on 2026-09-25. The
-canonical production migration history is the 37-row
-`supabase_migrations.schema_migrations` table, whose latest recorded version is
-`20260925000000`. `20260906075256_memo_folders` was applied by hand earlier; on
+The production schema and migration history were checked read-only on
+2026-09-27. The canonical production migration history contains 39 rows in
+`supabase_migrations.schema_migrations`, through `20260925020000`.
+`20260906075256_memo_folders` was applied by hand earlier; on
 2026-09-25 its two missing `memo_id` indexes were created in production so the
 schema matches the file, and the version was then recorded under the same name.
 
@@ -50,9 +57,14 @@ final edge migration:
 | `20260625000000_calendar_completed_at.sql` | `20260626054851_calendar_completed_at` | reflected in production |
 | `20260626000000_growth_events.sql` | `20260626055812_growth_events` | reflected in production |
 | `20260626000100_trees.sql` | `20260626062143_trees` | reflected in production |
+| `20260727125200_state_b_memo_search.sql` | `20260727130644_state_b_memo_search` | reflected in production |
 | `20260708000000_topic_cluster_inbox_items.sql` | `20260707181903_topic_cluster_inbox_items` + `20260707182219_topic_cluster_inbox_items_service_grant` | reflected in production |
 | `20260812113011_calendar_block_category_id.sql` | `20260812113112_calendar_block_category_id` | reflected in production |
+| No local file (applied manually) | `20260815071841_profile_time_zone` | reflected in production |
 | `20260824075337_revoke_tombstone_trigger_execute.sql` | `20260824075409_revoke_tombstone_trigger_execute` | reflected in production |
+| `20260925000000_drop_unused_memo_match_functions.sql` | `20260925000000_drop_unused_memo_match_functions` | reflected in production |
+| `20260925010000_drop_retired_trees_and_unused_columns.sql` | `20260925010000_drop_retired_trees_and_unused_columns` | reflected in production |
+| `20260925020000_drop_topic_memo_edges_and_folder_text_columns.sql` | `20260925020000_drop_topic_memo_edges_and_folder_text_columns` | reflected in production |
 
 The production history is intentionally not duplicated with the local
 filenames. Do not mark these local aliases as new applied migrations and do not
@@ -78,10 +90,10 @@ reproducible chain; new production changes belong in a new migration.
 
 The project CLI configuration is `supabase/config.toml`.
 
-## Public tables (20)
+## Public tables (18)
 
-All public tables have RLS enabled. Tables marked *(pending removal)* are
-dropped by a migration listed under "Pending migrations" below.
+All current public tables have RLS enabled. The retired tables `trees` and
+`topic_memo_edges` are not present in production.
 
 ### User-facing, owner-scoped
 
@@ -94,19 +106,15 @@ dropped by a migration listed under "Pending migrations" below.
 - `schedule_inbox`: backend-generated schedule suggestions; owner read/update.
 - `topic_clusters`: State A topic clusters.
 - `topic_cluster_memos`: topic membership rows.
-- `topic_memo_edges`: memo relationships inside topics. *(pending removal —
-  only the legacy RN app reads it; the desktop map uses `memo_similarity_edges`)*
 - `topic_memo_embedding_cache`: whole-memo embeddings used by topic discovery.
 - `memo_similarity_edges`: persisted memo-level similarity graph.
 - `topic_cluster_inbox_items`: inbox sessions attached to a topic cluster.
 - `topic_memo_inbox_edges`: memo-to-inbox links inside a topic cluster.
 - `activity_completions`: append-only first-completion ledger.
 - `daily_completions`: append-only fully-completed-day ledger.
-- `trees`: growth-tree snapshots of the abolished calendar gamification, 0 rows.
-  *(pending removal)*
 - `memo_folders`: user folders; `organization_mode` is `manual` or `automatic`.
-  `description` and `classifier_terms` are unused since 2026-09-25 *(pending
-  removal)*: automatic folders classify on-device with local embeddings.
+  Automatic folders classify on-device with local embeddings. The table does
+  not have `description` or `classifier_terms` columns.
 - `memo_folder_memberships`: memo-in-folder rows; `assignment_source` is
   `user`, `topic_import` or `automatic`.
 - `memo_folder_exclusions`: notes a user took out of an automatic folder, so
@@ -128,8 +136,7 @@ The following functions are backend-only. `anon` and `authenticated` must not
 have `EXECUTE`; `service_role` must have it. Privileged functions pin their
 `search_path`.
 
-- `find_dirty_memo_user_ids` (the backend calls the 3-argument version; the old
-  2-argument overload is pending removal)
+- `find_dirty_memo_user_ids` (the current 3-argument version)
 - `fetch_dirty_memos`
 - `replace_topic_map`
 - `rebuild_user_memo_similarity_edges`
@@ -167,27 +174,25 @@ through the migration workflow and explicitly hardened.
 `handle_new_user`, `set_updated_at` and `rls_auto_enable` are trigger helpers,
 not public RPC endpoints. Their direct application-role execution is revoked.
 
-## Pending migrations
+## Applied cleanup migrations (2026-09-25)
 
-Both files exist locally and are **not** applied or recorded yet.
+The live migration history confirms all three local cleanup migrations are
+applied through `20260925020000`:
 
-1. `20260925010000_drop_retired_trees_and_unused_columns.sql` — safe to apply
-   now. Drops `trees`, the 2-argument `find_dirty_memo_user_ids`,
-   `memos.last_indexed_at`, `memos.last_synced_at`, `profiles.briefing_time` and
-   `profiles.push_token`. Verified unused by the released desktop (v1.0.4), the
-   deployed backend, the iOS app and every public function body.
-2. `20260925020000_drop_topic_memo_edges_and_folder_text_columns.sql` — apply
-   only when both are true:
-   - the backend that no longer writes `topic_memo_edges` is deployed (the
-     v1.0.4-era backend deletes from and inserts into it directly), and
-   - no desktop at or before v1.0.4 is still in use (v1.0.4 selects and upserts
-     `memo_folders.description`/`classifier_terms` by name).
-   It keeps the `replace_topic_map` signature (`p_edges` is accepted and
-   ignored), drops `topic_memo_edges`, and drops the two folder columns.
+- `20260925000000_drop_unused_memo_match_functions.sql` removed unused vector
+  matching RPCs.
+- `20260925010000_drop_retired_trees_and_unused_columns.sql` removed `trees`,
+  the old two-argument `find_dirty_memo_user_ids`, and retired memo/profile
+  columns.
+- `20260925020000_drop_topic_memo_edges_and_folder_text_columns.sql` removed
+  `topic_memo_edges` and the folder text columns. It preserves the
+  `replace_topic_map` signature; its legacy `p_edges` argument is accepted but
+  ignored.
 
-After applying either, record it with
-`supabase migration repair --status applied <version> --linked`, run the
-advisors, and move the entry into the relevant section of this document.
+The released v1.0.4 desktop client still requests the removed folder columns.
+The planned v1.0.5 release must use the current schema-compatible desktop code.
+Until older clients are updated, their local folder cache can remain visible,
+but folder reads/writes to Supabase are not compatible with this schema.
 
 ## Local memo search retirement
 
@@ -201,13 +206,9 @@ The old `/network/search` endpoint, its query-vector cache, and its rate-limit
 state are removed by the retirement migration. Topics and saved-link topic
 attachments continue using their separate server embeddings.
 
-Applied 2026-09-25 and recorded as `20260925000000`:
-`20260925000000_drop_unused_memo_match_functions.sql` dropped
-`match_topic_memo_embeddings` and `match_inbox_session_embeddings`. Nothing called
-them (verified in client, backend and the live catalog before dropping). Advisors
-after the change: only the documented `extension_in_public`,
-`auth_leaked_password_protection`, and the intended client RPC
-`upsert_memo_if_base_hash` (SECURITY DEFINER, executable by `authenticated`).
+The cleanup migration also removed `match_topic_memo_embeddings` and
+`match_inbox_session_embeddings`; code and live-catalog checks found no callers.
+Current advisor findings are recorded under “Known deferred work” below.
 
 ## Schedule parsing anchor and maintenance cron
 
@@ -229,7 +230,8 @@ Do not use `memos.updated_at` as the parsing anchor. Maintenance writes such as
 `schedule_scanned_hash`, `indexed_content_hash`, and topic/index state updates
 touch `updated_at` through the trigger and would shift relative dates.
 
-Current Cloud Scheduler jobs in `us-central1`:
+Cloud Scheduler snapshot from 2026-09-25 (`us-central1`; recheck before changing
+or relying on these jobs):
 
 | Job | Schedule | Time zone | Endpoint |
 | --- | --- | --- | --- |
@@ -244,12 +246,12 @@ because topic discovery intentionally ignores empty content.
 `subnota-memo-chunks-index-dirty` was paused on 2026-09-08 and is no longer an
 active maintenance job.
 
-## Security state after 2026-08-24
+## Security and operations notes
 
 - Inbox tables and inbox embeddings are backend-only.
-- The previously exposed backend admin key was rotated; old Secret Manager
-  versions 1 and 2 are disabled; version 3 is enabled. Retrieve the current key
-  from Secret Manager only when an authorized maintenance call is required.
+- Historical Secret Manager note (not rechecked 2026-09-27): the previously
+  exposed backend admin key was rotated; versions 1 and 2 were disabled and
+  version 3 was enabled. Verify the live secret version before any maintenance.
 - Production migration history contains the applied `profile_time_zone`
   migration at `20260815071841`.
 - The live schema reflects all current local feature migrations, but several
@@ -275,25 +277,33 @@ Applied and pushed to production 2026-06-23:
   advisor finding. Confirm HNSW query plans with `EXPLAIN ANALYZE` once data
   reaches representative scale.
 
-Advisor exceptions intentionally left as-is (2026-07-15): `unindexed_foreign_keys`
-(deferred FK work, INFO), `unused_index` (small dataset, INFO), `rls_enabled_no_policy`
-(backend-only deny-by-default, INFO), `auth_leaked_password_protection` (deferred, WARN),
-`extension_in_public` (pgvector move deferred, WARN).
+Supabase advisors were checked on 2026-09-27. Findings intentionally left as-is:
+
+- Security INFO: `rls_enabled_no_policy` on `inbox_sessions`,
+  `inbox_session_embeddings`, and `memo_tombstones`. These are backend-only and
+  intentionally deny client access.
+- Security WARN: `extension_in_public` for pgvector; moving it requires a
+  separate dependency-aware migration.
+- Security WARN: `authenticated_security_definer_function_executable` for
+  `upsert_memo_if_base_hash`. This authenticated client RPC is intentional; keep
+  its ownership/base-hash checks intact and revisit before changing its grants.
+- Security WARN: leaked-password protection is disabled in Supabase Auth.
+- Performance INFO: five foreign keys lack covering indexes; nine indexes have
+  not been used. With the current small dataset these are measurement/review
+  candidates, not automatic deletion instructions.
 
 Still deferred:
 
-- Add missing FK indexes identified by the Supabase performance advisor,
-  prioritizing real delete/join paths. Revisit as tables grow.
+- Review the five currently reported unindexed foreign keys and add indexes only
+  where query plans and delete/join paths justify them.
 - Add explicit `TO authenticated` to the `topic_cluster_inbox_items` read policy.
 - Add ownership validation or composite user-scoped constraints to topic join
   tables before multiple backend writers are introduced.
-- Add a per-user advisory lock around `replace_topic_map` if topic discovery can
-  overlap across cron, manual, or retry paths.
-- Serialize `replace_topic_map` per user if concurrent topic jobs become real.
+- Serialize `replace_topic_map` per user if topic discovery can overlap across
+  cron, manual, or retry paths.
 - Remove `memos.synced_content_hash` only after first removing its writes from
-  every client (still written by iOS/macOS/Windows on each memo upsert), then
-  dropping the column (expand-contract). (synced_content_hash to be revisited
-  after the IVFFlat removal lands.)
+  every active client, then dropping the column (expand-contract). The native
+  iOS app is still in development; confirm its writes before removing the field.
 - pgvector remains in `public`. Moving the extension is a separate migration
   with broad dependency impact and is not a quick advisor cleanup.
 - Supabase Auth leaked-password protection is currently disabled and should be
