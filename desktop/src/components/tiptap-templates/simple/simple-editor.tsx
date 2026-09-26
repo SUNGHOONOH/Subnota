@@ -212,6 +212,7 @@ export interface AmbientGhost {
   text: string;
   hint?: string;
   onClick: () => void;
+  moreResults?: { ariaLabel: string; label: string; onClick: () => void };
 }
 
 const ambientGhostPluginKey = new PluginKey<AmbientGhost | null>("ambientGhost")
@@ -247,6 +248,16 @@ const createAmbientGhostElement = (ghost: AmbientGhost) => {
   }
 
   wrapper.append(button)
+  if (ghost.moreResults) {
+    const more = document.createElement("button")
+    more.className = "ambient-ghost-more"
+    more.type = "button"
+    more.setAttribute("aria-label", ghost.moreResults.ariaLabel)
+    more.textContent = ghost.moreResults.label
+    more.addEventListener("mousedown", event => event.preventDefault())
+    more.addEventListener("click", ghost.moreResults.onClick)
+    wrapper.append(more)
+  }
   return wrapper
 }
 
@@ -473,6 +484,8 @@ export function SimpleEditor({
     ambientGhost?.hint,
     ambientGhost?.key,
     ambientGhost?.meta,
+    ambientGhost?.moreResults?.ariaLabel,
+    ambientGhost?.moreResults?.label,
     ambientGhost?.text,
     ambientGhost?.to,
     editor,

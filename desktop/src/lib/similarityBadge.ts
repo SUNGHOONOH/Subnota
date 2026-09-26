@@ -16,9 +16,8 @@ export type MatchKind = 'similarity' | 'relatedness';
 // 완전 동일·유사함의 윗부분만 오답과 깨끗이 갈리고(틈: -0.005 ~ 0.113),
 // 그 아래는 유사함·관련됨·오답이 전부 겹친다. 근거는 constants.ts 참고.
 //
-// 그래서 배지는 "이 위 = 유사, 아래 = 관련"으로만 말한다. 자동검색은 문턱
-// 위만 띄우므로 사실상 늘 'similar' 고, 'related' 는 사용자가 직접 연
-// 더보기 목록(문턱 없음)에서만 나온다.
+// 자동검색의 단건은 유사 결과만 띄운다. 수동검색의 단건과 목록에는
+// 주제어 경로의 관련 결과도 나타날 수 있다.
 const SIMILAR_THRESHOLD = AMBIENT_MIN_SIMILARITY;
 
 export const similarityTier = (score: number): SimilarityTier | null => {
@@ -28,7 +27,7 @@ export const similarityTier = (score: number): SimilarityTier | null => {
 
 const LABELS: Record<SimilarityTier, [korean: string, english: string]> = {
   related: ['관련', 'Related'],
-  similar: ['비슷함', 'Similar'],
+  similar: ['유사', 'Similar'],
 };
 
 export const matchKindTier = (kind: MatchKind): SimilarityTier =>

@@ -35,6 +35,9 @@ describe('ambient search interaction boundary', () => {
     expect(source).toContain('if (!indexed || !isCurrentAmbientTarget(target))');
     expect(source).toContain("mode: manualTarget ? 'manual' : 'auto'");
     expect(source).toContain('manualAmbientTargetRef.current = manualTarget;');
+    expect(source).toContain("mode === 'auto'");
+    expect(source).toContain("response.results.find(result => result.matchKind === 'similarity') ?? null");
+    expect(source).toContain(': response.results[0] ?? null');
   });
 
   it('keeps automatic search behind the existing focus/session/settings gate', () => {

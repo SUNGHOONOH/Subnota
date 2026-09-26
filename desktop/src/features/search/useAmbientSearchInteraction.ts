@@ -9,7 +9,6 @@ import {
 } from '../../lib/ambientSearch';
 import {
   AMBIENT_EMPTY_NOTICE_MS,
-  AMBIENT_MAX_RESULT_COUNT,
   AMBIENT_MIN_CHARS,
   AMBIENT_MIN_SIMILARITY,
 } from '../../lib/constants';
@@ -23,6 +22,7 @@ import type {
   NetworkSearchResult,
 } from '../../services/local/memoSearchTypes';
 import { createAmbientSearchHandlers } from './ambientSearchHandlers';
+import type { AmbientListCache } from './ambientResultCounts';
 
 const MANUAL_AMBIENT_SEARCH_NOTICE_MIN_MS = 700;
 
@@ -41,6 +41,7 @@ interface UseAmbientSearchInteractionOptions {
   setAmbientEmptyEditorId: Dispatch<SetStateAction<string | null>>;
   setAmbientError: Dispatch<SetStateAction<string | null>>;
   setAmbientResult: Dispatch<SetStateAction<NetworkSearchResult | null>>;
+  setAmbientListCache: Dispatch<SetStateAction<AmbientListCache | null>>;
   setAmbientTarget: Dispatch<SetStateAction<AmbientSearchTarget | null>>;
   setManualAmbientSearchNotice: Dispatch<
     SetStateAction<{ id: number; startedAt: number } | null>
@@ -68,6 +69,7 @@ export const useAmbientSearchInteraction = ({
   setAmbientEmptyEditorId,
   setAmbientError,
   setAmbientResult,
+  setAmbientListCache,
   setAmbientTarget,
   setManualAmbientSearchNotice,
 }: UseAmbientSearchInteractionOptions) => {
@@ -83,11 +85,12 @@ export const useAmbientSearchInteraction = ({
   const manualAmbientSearchNoticeIdRef = useRef(0);
   const ambientRunnerRef = useRef<AmbientSearchRunner>(
     createAmbientSearchRunner<MemoChunk, NetworkSearchResult>({
-      search: async (target, signal) => {
+      search: async (target, signal, mode) => {
         const ownerId = getLocalWorkspaceOwner();
         try {
           const response: NetworkSearchResponse = await searchLocalMemoChunks({
-            limit: AMBIENT_MAX_RESULT_COUNT,
+            includeRelatedness: true,
+            limit: 8,
             memoId: target.memoId,
             minimumSimilarity: AMBIENT_MIN_SIMILARITY,
             ownerId,
@@ -97,7 +100,12 @@ export const useAmbientSearchInteraction = ({
           if (getLocalWorkspaceOwner() !== ownerId) {
             throw new DOMException('Local workspace changed.', 'AbortError');
           }
-          return response;
+          return {
+            ...response,
+            primaryResult: mode === 'auto'
+              ? response.results.find(result => result.matchKind === 'similarity') ?? null
+              : response.results[0] ?? null,
+          };
         } catch (error) {
           if (getLocalWorkspaceOwner() !== ownerId) {
             throw new DOMException('Local workspace changed.', 'AbortError');
@@ -194,6 +202,7 @@ export const useAmbientSearchInteraction = ({
     manualAmbientTargetRef.current = null;
     setAmbientTarget(null);
     setAmbientResult(null);
+    setAmbientListCache(null);
     setAmbientError(null);
     setAmbientDisplayEditorId(null);
     setAmbientEmptyEditorId(null);
@@ -209,6 +218,7 @@ export const useAmbientSearchInteraction = ({
     setAmbientEmptyEditorId,
     setAmbientError,
     setAmbientResult,
+    setAmbientListCache,
     showEmptyNotice: showAmbientEmptyNotice,
   });
 
@@ -223,6 +233,7 @@ export const useAmbientSearchInteraction = ({
       manualAmbientTargetRef.current = manualTarget;
       setAmbientTarget(manualTarget);
       setAmbientResult(null);
+      setAmbientListCache(null);
       setAmbientError(null);
       setAmbientDisplayEditorId(null);
       setAmbientEmptyEditorId(null);

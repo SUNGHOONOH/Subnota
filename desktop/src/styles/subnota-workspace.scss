@@ -1184,6 +1184,12 @@ html.dark .session-rail {
   margin-inline-end: 4px;
 }
 
+.preview-more-results-count {
+  color: var(--legacy-ink-soft);
+  font-size: 0.9em;
+  margin-inline-start: 6px;
+}
+
 .preview-more-results-btn:hover,
 .preview-more-results-btn:focus-visible {
   color: var(--legacy-accent);
@@ -2504,10 +2510,26 @@ html.dark .date-schedule-meridiem button.active {
    흐리게 만들 때 요소 전체 opacity를 쓰지 않는다 — 배경까지 흐려져 탁해진다.
    텍스트와 선에만 투명도를 섞어 회색 참조물처럼 읽히게 한다. */
 .ambient-ghost-widget {
-  display: block;
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
   margin: 10px 0 14px;
   min-height: 24px;
   pointer-events: auto;
+}
+
+.ambient-ghost-more {
+  background: transparent;
+  border: 0;
+  color: var(--legacy-accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 2px 0;
+}
+
+.ambient-ghost-more:hover {
+  text-decoration: underline;
 }
 
 .ambient-ghost {

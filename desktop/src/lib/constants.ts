@@ -6,7 +6,6 @@ export const AMBIENT_HEADING_DELAY_MS = 3000;
 export const AMBIENT_BOUNDARY_DELAY_MS = 3000;
 export const AMBIENT_IDLE_DELAY_MS = 4000;
 export const AMBIENT_EMPTY_NOTICE_MS = 2200;
-export const AMBIENT_MAX_RESULT_COUNT = 1;
 export const AMBIENT_MIN_CHARS = 12;
 // [이력] 아래 0.75/0.70은 bge-m3 + 원본 코사인 기준이었다. KLUE-STS 519쌍을
 // 당시 배포 스택(Transformers.js + ONNX q8, 단건)으로 측정했고, 무관(0~1점)의
@@ -28,12 +27,10 @@ export const AMBIENT_MIN_CHARS = 12;
 // 이 틈이 이 데이터에서 **유일하게 깨끗한 경계**다. 그 아래로는 유사함
 // (-0.179~0.084)·관련됨(-0.502~-0.079)·오답(-0.260~0.023)이 전부 겹쳐서
 // 어떤 값으로도 못 가른다. 그래서 자동검색은 이 위만 띄우고(정밀도 우선),
-// 연상은 아래 목록 쪽 순위로만 쓴다.
+// 관련 경로는 수동 검색과 수동 목록에서만 별도 순위로 보여 준다.
 export const AMBIENT_MIN_SIMILARITY = 0.1;
-// 더보기 목록은 사용자가 버튼을 눌러 명시적으로 연다. 물었는데 "없습니다"를
-// 띄우면 기능이 고장 난 것처럼 보이므로 문턱을 두지 않고 순위만 쓴다.
-// (검증이 허용하는 하한이 -2다.)
-export const AMBIENT_LIST_MIN_SIMILARITY = -2;
+// 더보기 목록도 유사 결과에는 같은 문턱을 적용한다. 관련 결과는 점수
+// 문턱 없이 수동 검색에서만 순위로 보여 준다.
 // 주변 메모는 중심화한 메모 평균끼리의 코사인이다(원래 코사인과 척도가 다르다).
 // 메모 73개 손라벨 측정: 다른 주제 쌍 90%가 0.17 아래, 같은 주제 중앙값 0.23.
 // 사용자가 직접 연 목록이라 넉넉하게 0.10부터 보여 준다.

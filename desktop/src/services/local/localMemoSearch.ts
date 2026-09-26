@@ -2,6 +2,7 @@ import { hashText } from '../../lib/contentHash';
 import { hasSearchableContent, normalizeChunkText } from '../../lib/chunkText';
 import { chunkMemoText, isMeaningfulChunk } from '../../lib/memoChunker';
 import type { MemoChunk } from '../../lib/memoChunker';
+import { AMBIENT_MIN_SIMILARITY } from '../../lib/constants';
 import type {
   NetworkSearchResponse,
   NetworkSearchResult,
@@ -137,7 +138,9 @@ export const mergeManualSearchResults = (
   relatedness: NetworkSearchResult[],
   limit: number,
 ): NetworkSearchResult[] => {
-  const first = similarity.slice(0, Math.min(5, limit));
+  const first = similarity
+    .filter(result => result.similarity >= AMBIENT_MIN_SIMILARITY)
+    .slice(0, Math.min(5, limit));
   const seen = new Set(first.map(result => result.memoId ?? result.inboxSessionId));
   const related: NetworkSearchResult[] = [];
   for (const result of relatedness) {
@@ -146,14 +149,7 @@ export const mergeManualSearchResults = (
     related.push(result);
     seen.add(result.memoId);
   }
-  const selected = [...first, ...related];
-  for (const result of similarity.slice(first.length)) {
-    if (selected.length >= limit) break;
-    if (seen.has(result.memoId ?? result.inboxSessionId)) continue;
-    selected.push(result);
-    seen.add(result.memoId ?? result.inboxSessionId);
-  }
-  return selected;
+  return [...first, ...related];
 };
 
 export const searchLocalMemoChunks = async ({
@@ -223,7 +219,9 @@ export const searchLocalMemoChunks = async ({
   const inboxResults = inboxRows.map(toInboxResult);
   const similarity = [...memoResults, ...inboxResults]
     .sort((left, right) => right.similarity - left.similarity);
-  let results = similarity.slice(0, limit);
+  let results = includeRelatedness
+    ? mergeManualSearchResults(similarity, [], limit)
+    : similarity.slice(0, limit);
   if (includeRelatedness && api.localDbSearchTopicMemoVectors) {
     try {
       const relatedRows = await api.localDbSearchTopicMemoVectors(ownerId, queryVector, memoId, candidateLimit);
@@ -235,8 +233,7 @@ export const searchLocalMemoChunks = async ({
       );
     } catch {
       throwIfAborted(signal);
-      // Relatedness is a supplementary manual path; a missing topic index must
-      // leave the existing similarity results usable.
+      // 주제어 인덱스가 없어도 같은 문턱과 최대 5건의 유사 결과를 유지한다.
     }
   }
 

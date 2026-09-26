@@ -44,13 +44,13 @@ const createApi = () => ({
 });
 
 describe('local memo search', () => {
-  it('수동 목록만 유사성 5칸 뒤에 중복 없는 연관성 3칸을 붙이고 부족하면 유사성으로 채운다', async () => {
+  it('수동 목록은 기준을 넘은 유사 최대 5건과 중복 없는 관련 최대 3건만 보여준다', async () => {
     const api = createApi();
     api.localDbSearchMemoVectors.mockResolvedValue(
       Array.from({ length: 8 }, (_, index) => searchRow({
         chunkId: `chunk-${index}`,
         memoId: `memo-${index}`,
-        similarity: 1 - index / 10,
+        similarity: 0.51 - index / 10,
       })),
     );
     api.localDbSearchTopicMemoVectors.mockResolvedValue([
@@ -59,15 +59,47 @@ describe('local memo search', () => {
     ]);
     const response = await searchLocalMemoChunks({
       api, includeRelatedness: true, limit: 8, memoId: null,
-      minimumSimilarity: -2, ownerId: null, queryText: '수동 검색 문장입니다.',
+      minimumSimilarity: 0.1, ownerId: null, queryText: '수동 검색 문장입니다.',
     });
     expect(response.results.map(result => [result.memoId, result.matchKind])).toEqual([
       ['memo-0', 'similarity'], ['memo-1', 'similarity'],
       ['memo-2', 'similarity'], ['memo-3', 'similarity'],
       ['memo-4', 'similarity'], ['memo-9', 'relatedness'],
-      ['memo-5', 'similarity'], ['memo-6', 'similarity'],
     ]);
     expect(api.localEmbed).toHaveBeenCalledTimes(1);
+  });
+
+  it('유사 결과가 없어도 관련 결과 최대 3건을 반환한다', async () => {
+    const api = createApi();
+    api.localDbSearchMemoVectors.mockResolvedValue([]);
+    api.localDbSearchTopicMemoVectors.mockResolvedValue(
+      Array.from({ length: 5 }, (_, index) => searchRow({
+        chunkId: `related-${index}`, memoId: `related-memo-${index}`, similarity: -0.5,
+      })),
+    );
+    const response = await searchLocalMemoChunks({
+      api, includeRelatedness: true, limit: 8, memoId: null,
+      minimumSimilarity: 0.1, ownerId: null, queryText: '연관 검색 문장입니다.',
+    });
+    expect(response.results.map(result => result.memoId)).toEqual([
+      'related-memo-0', 'related-memo-1', 'related-memo-2',
+    ]);
+    expect(response.results.every(result => result.matchKind === 'relatedness')).toBe(true);
+  });
+
+  it('메모와 링크 모두 문턱 아래인 유사 결과는 목록에서 거른다', async () => {
+    const api = createApi();
+    api.localDbSearchMemoVectors.mockResolvedValue([searchRow({ similarity: 0.09 })]);
+    api.localDbSearchInboxVectors.mockResolvedValue([{
+      chunkId: 'inbox-low', chunkText: '무관한 링크', createdAt: null,
+      inboxSessionId: 'link-low', similarity: 0.08, sourceLabel: null,
+      sourceType: null, sourceUrl: null, thumbnailUrl: null, title: null,
+    }]);
+    const response = await searchLocalMemoChunks({
+      api, includeRelatedness: true, limit: 8, memoId: null,
+      minimumSimilarity: 0.1, ownerId: null, queryText: '문턱 확인 문장입니다.',
+    });
+    expect(response.results).toEqual([]);
   });
 
   it('자동 단건 검색은 연관 경로를 호출하지 않는다', async () => {
@@ -83,12 +115,19 @@ describe('local memo search', () => {
 
   it('연관 인덱스 오류가 있어도 수동 검색은 유사 결과를 보여준다', async () => {
     const api = createApi();
+    api.localDbSearchMemoVectors.mockResolvedValue(
+      Array.from({ length: 8 }, (_, index) => searchRow({
+        chunkId: `fallback-${index}`, memoId: `fallback-memo-${index}`,
+        similarity: 0.8 - index / 10,
+      })),
+    );
     api.localDbSearchTopicMemoVectors.mockRejectedValue(new Error('topic index unavailable'));
     const response = await searchLocalMemoChunks({
       api, includeRelatedness: true, limit: 8, memoId: null,
-      minimumSimilarity: -2, ownerId: null, queryText: '수동 검색 문장입니다.',
+      minimumSimilarity: 0.1, ownerId: null, queryText: '수동 검색 문장입니다.',
     });
-    expect(response.results.map(result => result.matchKind)).toEqual(['similarity']);
+    expect(response.results).toHaveLength(5);
+    expect(response.results.every(result => result.matchKind === 'similarity')).toBe(true);
   });
   it('대화형 단건 임베딩으로 현재 메모를 제외해 로컬 벡터를 검색한다', async () => {
     const api = createApi();

@@ -117,6 +117,7 @@ import { useSessionSidebarToggle } from './features/workspace/useSessionSidebarT
 import { useScheduleInboxPanelNavigation } from './features/workspace/useScheduleInboxPanelNavigation';
 import { syncPendingLocalWorkspace as syncPendingLocalWorkspaceOutbox } from './features/workspace/syncPendingLocalWorkspace';
 import { useAmbientListPreview } from './features/search/useAmbientListPreview';
+import { getAdditionalSearchCounts, type AmbientListCache } from './features/search/ambientResultCounts';
 import {
   type MemoCloudSyncInput,
 } from './features/memo/memoCloudSync';
@@ -190,6 +191,7 @@ const App = () => {
   );
   const [ambientResult, setAmbientResult] =
     useState<NetworkSearchResult | null>(null);
+  const [ambientListCache, setAmbientListCache] = useState<AmbientListCache | null>(null);
   const [ambientError, setAmbientError] = useState<string | null>(null);
   const [ambientDisplayEditorId, setAmbientDisplayEditorId] = useState<
     string | null
@@ -921,6 +923,7 @@ const App = () => {
     setAmbientEmptyEditorId,
     setAmbientError,
     setAmbientResult,
+    setAmbientListCache,
     setAmbientTarget,
     setManualAmbientSearchNotice,
   });
@@ -944,6 +947,7 @@ const App = () => {
   });
 
   const { openAmbientListInPreview } = useAmbientListPreview({
+    ambientListCache,
     ambientTarget,
     ambientTargetRef,
     flushLocalMemoIndexForUser,
@@ -1284,6 +1288,7 @@ const App = () => {
       openAmbientDetail: () => {
         if (ambientResult) {
           handleOpenPreview([ambientResult], 'detail', {
+            additionalCounts: getAdditionalSearchCounts(ambientResult, ambientListCache?.results ?? []),
             promotionTooltip: t(
               '새 메모 탭으로 열기',
               'Open in a new note tab',
@@ -1533,6 +1538,9 @@ const App = () => {
                   ambientError={ambientError}
                   ambientPendingEditorId={ambientTarget?.editorId ?? null}
                   ambientResult={ambientResult}
+                  ambientListResults={ambientListCache?.results ?? []}
+                  ambientListQueryText={ambientListCache?.target.queryText ?? ''}
+                  onOpenAmbientList={() => void openAmbientListInPreview()}
                   onMemoEditorBlur={handleMemoEditorBlur}
                   onRunAmbientSearch={runAmbientSearchNow}
                   onCreateFolderFromTopic={(draft) => {
@@ -1654,7 +1662,7 @@ const App = () => {
         onPromotePreview={promotePreviewResult}
         onResizeStart={handlePreviewResizeStart}
         onRetryInboxSummary={retryInboxSummary}
-        onRetryPreview={() => void openAmbientListInPreview()}
+        onRetryPreview={() => void openAmbientListInPreview(true)}
         onSelectPreviewResult={(result) =>
           setPreviewPanel((prev) =>
             prev ? { ...prev, mode: 'detail', result } : prev,

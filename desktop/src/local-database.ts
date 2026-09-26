@@ -193,6 +193,7 @@ const WORKER_SOURCE = String.raw`
   };
   const vectorRowsByOwner = new Map();
   const inboxVectorRowsByOwner = new Map();
+  const inboxScoringByOwner = new Map();
 
   // A model, quantization, or implementation change creates a different vector
   // space. Old rows must be removed, not mixed with vectors from this build.
@@ -207,6 +208,7 @@ const WORKER_SOURCE = String.raw`
 
   const deleteMemoVectors = (ownerId, memoId) => {
     vectorRowsByOwner.delete(ownerId);
+    inboxScoringByOwner.delete(ownerId);
     db.prepare('DELETE FROM local_memo_chunk_vectors WHERE owner_id = ? AND memo_id = ?')
       .run(ownerId, memoId);
     db.prepare('DELETE FROM local_memo_vector_state WHERE owner_id = ? AND memo_id = ?')
@@ -215,6 +217,7 @@ const WORKER_SOURCE = String.raw`
 
   const deleteInboxVector = (ownerId, inboxSessionId) => {
     inboxVectorRowsByOwner.delete(ownerId);
+    inboxScoringByOwner.delete(ownerId);
     db.prepare(
       'DELETE FROM local_inbox_vectors WHERE owner_id = ? AND inbox_session_id = ?'
     ).run(ownerId, inboxSessionId);
@@ -223,6 +226,7 @@ const WORKER_SOURCE = String.raw`
   const clearOwner = ownerId => {
     vectorRowsByOwner.delete(ownerId);
     inboxVectorRowsByOwner.delete(ownerId);
+    inboxScoringByOwner.delete(ownerId);
     db.prepare('DELETE FROM local_records WHERE owner_id = ?').run(ownerId);
     db.prepare('DELETE FROM local_memo_chunk_vectors WHERE owner_id = ?').run(ownerId);
     db.prepare('DELETE FROM local_memo_vector_state WHERE owner_id = ?').run(ownerId);
@@ -288,6 +292,7 @@ const WORKER_SOURCE = String.raw`
       // search (search joins through the state row). The next index pass can
       // reuse exact chunk_text matches even when positional chunk ids moved.
       vectorRowsByOwner.delete(ownerId);
+      inboxScoringByOwner.delete(ownerId);
       db.prepare(
         'DELETE FROM local_memo_vector_state WHERE owner_id = ? AND memo_id = ?'
       ).run(ownerId, memoId);
@@ -648,6 +653,7 @@ const WORKER_SOURCE = String.raw`
       args.vector.byteLength
     );
     inboxVectorRowsByOwner.delete(args.ownerId);
+    inboxScoringByOwner.delete(args.ownerId);
     db.prepare(
       'INSERT INTO local_inbox_vectors ' +
       '(owner_id, inbox_session_id, source_content_hash, embedding_signature, vector, indexed_at) ' +
@@ -863,7 +869,7 @@ const WORKER_SOURCE = String.raw`
       queryMean[axis] /= documents.length || 1;
     }
 
-    const vectorIndex = { documentMean: documentMean, entries: [], queryMean: queryMean, topicEntries: [] };
+    const vectorIndex = { documentMean: documentMean, entries: [], queryMean: queryMean, queryReferences: [], topicEntries: [] };
     const centeredDocuments = [];
     const centeredQueries = [];
     for (let position = 0; position < entries.length; position += 1) {
@@ -880,6 +886,7 @@ const WORKER_SOURCE = String.raw`
       centeredDocuments.push(document);
       centeredQueries.push(query);
     }
+    vectorIndex.queryReferences = centeredQueries;
 
     // r_i: 문서 i에 대한 코퍼스 전체 질의 벡터 점수의 상위 10개 평균.
     // j === i를 빼지 않는다 — p_i와 d_i는 접두사가 달라 서로 다른 벡터다.
@@ -1104,23 +1111,46 @@ const WORKER_SOURCE = String.raw`
     }
     if (queryMagnitudeSquared === 0) return [];
 
-    const queryMagnitude = Math.sqrt(queryMagnitudeSquared);
-    const candidates = [];
-    for (const { inboxSessionId, record, vector } of liveInboxVectors(args.ownerId)) {
-      let dotProduct = 0;
-      let candidateMagnitudeSquared = 0;
-      for (let index = 0; index < vector.length; index += 1) {
-        dotProduct += args.queryVector[index] * vector[index];
-        candidateMagnitudeSquared += vector[index] * vector[index];
+    let index = inboxScoringByOwner.get(args.ownerId);
+    if (!index) {
+      const rows = [...liveInboxVectors(args.ownerId)];
+      const mean = new Float64Array(VECTOR_BYTES / Float32Array.BYTES_PER_ELEMENT);
+      for (const row of rows) {
+        for (let axis = 0; axis < mean.length; axis += 1) mean[axis] += row.vector[axis];
       }
-      if (candidateMagnitudeSquared === 0) continue;
-      const similarity = Math.max(
-        -1,
-        Math.min(
-          1,
-          dotProduct / (queryMagnitude * Math.sqrt(candidateMagnitudeSquared))
-        )
-      );
+      for (let axis = 0; axis < mean.length; axis += 1) mean[axis] /= rows.length || 1;
+      const memoIndex = memoVectorIndex(args.ownerId);
+      const entries = [];
+      for (const row of rows) {
+        const document = centeredVector(row.vector, mean);
+        if (!document) continue;
+        const referenceScores = Float64Array.from(
+          memoIndex.queryReferences,
+          reference => dotProductOf(reference, document),
+        );
+        entries.push({
+          ...row,
+          document,
+          hubPenalty: topNeighborMean(referenceScores, referenceScores.length),
+        });
+      }
+      index = {
+        entries,
+        queryMean: memoIndex.queryMean.length > 0
+          ? memoIndex.queryMean
+          : new Float64Array(mean.length),
+      };
+      inboxScoringByOwner.set(args.ownerId, index);
+    }
+    const query = centeredVector(args.queryVector, index.queryMean);
+    if (!query) return [];
+    const scores = Float64Array.from(index.entries,
+      entry => dotProductOf(query, entry.document));
+    const queryPenalty = topNeighborMean(scores, scores.length);
+    const candidates = [];
+    for (let position = 0; position < index.entries.length; position += 1) {
+      const { inboxSessionId, record, hubPenalty } = index.entries[position];
+      const similarity = 2 * scores[position] - queryPenalty - hubPenalty;
       if (similarity < args.minimumSimilarity) continue;
       candidates.push({ inboxSessionId, record, similarity });
     }

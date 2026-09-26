@@ -24,6 +24,7 @@ export interface AmbientSearchHandlers<TChunk, TResult> {
     queryChunk: TChunk,
     result: TResult,
   ) => void;
+  onResults?: (target: AmbientSearchTarget, results: TResult[]) => void;
   onStart?: (target: AmbientSearchTarget) => void;
 }
 
@@ -57,7 +58,8 @@ export const createAmbientSearchRunner = <TChunk, TResult>({
   search: (
     target: AmbientSearchTarget,
     signal: AbortSignal,
-  ) => Promise<{ queryChunk: TChunk; results: TResult[] }>;
+    mode: AmbientSearchMode,
+  ) => Promise<{ primaryResult?: TResult | null; queryChunk: TChunk; results: TResult[] }>;
 }) => {
   type PendingRequest = {
     handlers: AmbientSearchHandlers<TChunk, TResult>;
@@ -109,14 +111,17 @@ export const createAmbientSearchRunner = <TChunk, TResult>({
     active = request;
     request.handlers.onStart?.(request.snapshot);
 
-    void search(request.snapshot, request.controller.signal)
+    void search(request.snapshot, request.controller.signal, request.mode)
       .then(response => {
         if (request.cancelled || active?.id !== request.id) return;
         if (request.mode === 'auto') {
           lastAutomaticTargetKey = request.targetKey;
         }
-        const topResult = response.results[0] ?? null;
+        const topResult = response.primaryResult === undefined
+          ? response.results[0] ?? null
+          : response.primaryResult;
         if (topResult) {
+          request.handlers.onResults?.(request.snapshot, response.results);
           request.handlers.onResult?.(
             request.snapshot,
             response.queryChunk,
@@ -179,9 +184,10 @@ export const createAmbientSearchRunner = <TChunk, TResult>({
 
       const snapshot: AmbientSearchTarget = { ...target, queryText };
       if (
-        (queued && sameTarget(queued.snapshot, snapshot)) ||
+        (queued && queued.mode === mode && sameTarget(queued.snapshot, snapshot)) ||
         (active &&
           !active.cancelled &&
+          active.mode === mode &&
           sameTarget(active.snapshot, snapshot))
       ) {
         return false;

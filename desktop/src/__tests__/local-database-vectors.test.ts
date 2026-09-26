@@ -51,6 +51,7 @@ const OWNER_REPLACE = '44444444-4444-4444-8444-444444444444';
 const OWNER_CENTER = '55555555-5555-4555-8555-555555555555';
 const OWNER_TOPIC = '66666666-6666-4666-8666-666666666666';
 const OWNER_MIGRATION = '77777777-7777-4777-8777-777777777777';
+const OWNER_INBOX_CSLS = '88888888-8888-4888-8888-888888888888';
 const CURRENT_SIGNATURE =
   'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1';
 let databasePath = '';
@@ -66,6 +67,7 @@ const eventSearch = eventFor(4);
 const eventReplace = eventFor(5);
 const eventCenter = eventFor(6);
 const eventTopic = eventFor(7);
+const eventInboxCsls = eventFor(8);
 
 const invoke = (channel: string, event: unknown, ...args: unknown[]) => {
   const handler = electronState.ipcHandlers[channel];
@@ -603,13 +605,26 @@ describe('local memo vector SQLite store', () => {
       ),
     ).resolves.toEqual({ stored: true });
 
+    // 중심화에는 링크 코퍼스가 필요하다. 단일 링크만 있으면 평균을
+    // 뺀 벡터가 0이 된다.
+    for (const [id, vector] of [
+      ['inbox-vector-other-a', embeddingVector(0, 1)],
+      ['inbox-vector-other-b', embeddingVector(-1, 0)],
+    ] as const) {
+      const other = { ...inboxRecord(`다른 링크 ${id}`), id };
+      const otherText = [other.title, other.summary, ...other.keywords].join('\n');
+      await invoke('local-db:upsert', eventA, OWNER_A, 'inbox', id, other);
+      await invoke('local-db:replace-inbox-vector', eventA, OWNER_A, id,
+        hashText(otherText), otherText, vector);
+    }
+
     const results = (await invoke(
       'local-db:search-inbox-vectors',
       eventA,
       OWNER_A,
       embeddingVector(1, 0),
       5,
-      0.75,
+      -2,
     )) as Array<{
       inboxSessionId: string;
       similarity: number;
@@ -619,7 +634,7 @@ describe('local memo vector SQLite store', () => {
       inboxSessionId: record.id,
       sourceUrl: record.canonicalUrl,
     });
-    expect(results[0].similarity).toBeCloseTo(1);
+    expect(Number.isFinite(results[0].similarity)).toBe(true);
 
     await invoke(
       'local-db:upsert',
@@ -636,6 +651,55 @@ describe('local memo vector SQLite store', () => {
         expect.objectContaining({ inboxSessionId: record.id }),
       ]),
     );
+  });
+
+  it('링크 검색도 중심화와 메모 질의 허브 벌점을 적용하고 삭제 후 다시 계산한다', async () => {
+    const owner = OWNER_INBOX_CSLS;
+    await invoke('local-db:set-owner', eventInboxCsls, owner);
+    const query = embeddingVector(1, 0);
+    const search = () => invoke('local-db:search-inbox-vectors', eventInboxCsls,
+      owner, query, 5, -2) as Promise<Array<{ inboxSessionId: string; similarity: number }>>;
+    let scoreWithTwoLinks: number | undefined;
+    for (const [index, vector] of [
+      embeddingVector(1, 0), embeddingVector(0, 1), embeddingVector(-1, 0),
+    ].entries()) {
+      const id = `csls-link-${index}`;
+      const record = { ...inboxRecord(`링크 요약 ${index}`), id };
+      const sourceText = [record.title, record.summary, ...record.keywords].join('\n');
+      await invoke('local-db:upsert', eventInboxCsls, owner, 'inbox', id, record);
+      await invoke('local-db:replace-inbox-vector', eventInboxCsls, owner,
+        id, hashText(sourceText), sourceText, vector);
+      if (index === 1) {
+        scoreWithTwoLinks = (await search()).find(item =>
+          item.inboxSessionId === 'csls-link-0')?.similarity;
+      }
+    }
+
+    const before = await search();
+    const scoreBeforeHub = before.find(item => item.inboxSessionId === 'csls-link-0')?.similarity;
+    if (scoreBeforeHub === undefined) throw new Error('Expected first link score');
+    if (scoreWithTwoLinks === undefined) throw new Error('Expected two-link score');
+    expect(scoreBeforeHub).not.toBeCloseTo(scoreWithTwoLinks);
+
+    // 평균 질의 방향은 0으로 유지하되 x 방향 허브 참조를 만든다.
+    for (let index = 0; index < 20; index += 1) {
+      const memoId = `csls-memo-${index}`;
+      const content = `질의 기준 ${index}`;
+      const vector = embeddingVector(index < 10 ? 1 : -1, 0);
+      await upsertMemo(eventInboxCsls, owner, memo(memoId, content, hashText(content)));
+      await replaceVectors(eventInboxCsls, owner, memoId, hashText(content), content,
+        [vectorChunk(content, vector)]);
+    }
+    const withHub = await search();
+    const exact = withHub.find(item => item.inboxSessionId === 'csls-link-0');
+    if (!exact) throw new Error('Expected indexed link');
+    expect(exact.similarity).toBeLessThan(scoreBeforeHub);
+
+    await invoke('local-db:delete', eventInboxCsls, owner, 'inbox', 'csls-link-2');
+    const after = await search();
+    expect(after.find(item => item.inboxSessionId === 'csls-link-2')).toBeUndefined();
+    expect(after.find(item => item.inboxSessionId === 'csls-link-0')?.similarity)
+      .not.toBeCloseTo(exact.similarity);
   });
 
   it('isolates owners and removes vectors through both delete paths', async () => {

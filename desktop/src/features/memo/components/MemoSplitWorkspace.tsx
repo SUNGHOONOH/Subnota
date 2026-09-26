@@ -41,6 +41,11 @@ import { InboxSession } from '../../../services/backend/inboxService';
 import { isMeaningfulChunk, MemoChunk } from '../../../lib/memoChunker';
 import type { AmbientSearchTarget } from '../../../lib/ambientSearch';
 import {
+  additionalSearchCountsAriaLabel,
+  additionalSearchCountsLabel,
+  getAdditionalSearchCounts,
+} from '../../search/ambientResultCounts';
+import {
   NetworkSearchResult,
 } from '../../../services/local/memoSearchTypes';
 import {
@@ -137,6 +142,9 @@ interface MemoSplitWorkspaceProps {
   ambientError?: string | null;
   ambientPendingEditorId?: string | null;
   ambientResult?: NetworkSearchResult | null;
+  ambientListResults?: NetworkSearchResult[];
+  ambientListQueryText?: string;
+  onOpenAmbientList?: () => void;
   onMemoEditorBlur?: (memoId: string) => void;
   onRunAmbientSearch?: (target?: AmbientSearchTarget) => void;
   canAddPane?: boolean;
@@ -175,6 +183,7 @@ interface MemoSplitWorkspaceProps {
     options?: {
       promotionTooltip?: string;
       showMoreResults?: boolean;
+      additionalCounts?: { similarity: number; relatedness: number };
     },
   ) => void;
   panes: MemoSplitPaneState[];
@@ -260,6 +269,9 @@ const MemoSplitWorkspace = ({
   ambientError = null,
   ambientPendingEditorId = null,
   ambientResult = null,
+  ambientListResults = [],
+  ambientListQueryText = '',
+  onOpenAmbientList,
   onMemoEditorBlur,
   onRunAmbientSearch,
   canAddPane = true,
@@ -1147,10 +1159,13 @@ const MemoSplitWorkspace = ({
     // 초안이 화면에서 사라져 추천을 확인하는 의미가 없어진다.
     const openAmbientResult = (result: NetworkSearchResult) => {
       onOpenPreview?.([result], 'detail', {
+        additionalCounts: getAdditionalSearchCounts(result, ambientListResults),
         promotionTooltip: t('새 메모 탭으로 열기', 'Open in a new note tab'),
         showMoreResults: true,
       });
     };
+    const additionalCounts = getAdditionalSearchCounts(ambientResult, ambientListResults);
+    const hasMoreResults = additionalCounts.similarity + additionalCounts.relatedness > 0;
     const ambientGhost: AmbientGhost | null =
       pane.id === focusedPane?.id &&
       editor.id === ambientEditorId &&
@@ -1159,9 +1174,15 @@ const MemoSplitWorkspace = ({
         ? {
             from: ambientAnchor.from,
             to: ambientAnchor.to,
-            key: ambientResult.chunkId,
+            key: `${ambientResult.chunkId}:${ambientResult.matchKind}:${ambientListQueryText}:${ambientListResults.map(result => result.chunkId).join(',')}`,
             meta:
-              ambientResult.sourceKind === 'inbox'
+              ambientResult.matchKind === 'relatedness'
+                ? `${t('관련', 'Related')} · ${formatRelativeDay(
+                    ambientResult.memoCreatedAt ?? ambientResult.createdAt,
+                    undefined,
+                    language,
+                  ) || t('연결된 문장', 'Related sentence')}`
+                : ambientResult.sourceKind === 'inbox'
                 ? t('저장한 링크', 'Saved link')
                 : formatRelativeDay(
                     ambientResult.memoCreatedAt ?? ambientResult.createdAt,
@@ -1171,6 +1192,11 @@ const MemoSplitWorkspace = ({
             text: normalizeChunkText(ambientResult.chunkText),
             hint: formatHotkeyHint(appShortcuts?.openAmbientDetail),
             onClick: () => openAmbientResult(ambientResult),
+            moreResults: hasMoreResults && onOpenAmbientList ? {
+              ariaLabel: additionalSearchCountsAriaLabel(additionalCounts, t),
+              label: additionalSearchCountsLabel(additionalCounts, t),
+              onClick: onOpenAmbientList,
+            } : undefined,
           }
         : null;
     const selectedAmbientText =

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { AMBIENT_MIN_SIMILARITY } from '../lib/constants';
-import { similarityTier } from '../lib/similarityBadge';
+import { matchKindLabel, similarityTier } from '../lib/similarityBadge';
 
 describe('similarityTier', () => {
   it('자동검색 문턱이 두 축을 가르는 경계다', () => {
@@ -9,9 +9,16 @@ describe('similarityTier', () => {
     expect(similarityTier(AMBIENT_MIN_SIMILARITY - 0.01)).toBe('related');
   });
 
-  it('문턱 아래도 배지가 있다 — 더보기 목록은 문턱이 없다', () => {
+  it('점수 분류는 문턱 아래를 관련 단계로 구분한다', () => {
     expect(similarityTier(-0.5)).toBe('related');
     expect(similarityTier(-1.9)).toBe('related');
+  });
+
+  it('실제 결과 배지는 유사와 관련을 한국어·영어로 표시한다', () => {
+    expect(matchKindLabel('similarity', 'ko')).toBe('유사');
+    expect(matchKindLabel('similarity', 'en')).toBe('Similar');
+    expect(matchKindLabel('relatedness', 'ko')).toBe('관련');
+    expect(matchKindLabel('relatedness', 'en')).toBe('Related');
   });
 
   // CSLS 점수는 상한이 1이 아니다. 코사인 시절 가정이 남아 있으면 여기서 깨진다.

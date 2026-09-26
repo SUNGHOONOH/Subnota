@@ -99,6 +99,45 @@ describe('createAmbientSearchRunner', () => {
     );
   });
 
+  it('수동 검색 모드를 검색기에 전달하고 관련 결과 1위를 선택할 수 있다', async () => {
+    const search = vi.fn(async () => ({ queryChunk: 'q', results: ['related'], primaryResult: 'related' }));
+    const onResult = vi.fn();
+    const onResults = vi.fn();
+    const runner = createAmbientSearchRunner<string, string>({ search });
+    runner.run(target('관련 결과를 찾는 문장'), { onResult, onResults }, { mode: 'manual' });
+    await flush();
+    expect(search.mock.calls[0]?.[2]).toBe('manual');
+    expect(onResult.mock.calls[0]?.[2]).toBe('related');
+    expect(onResults).toHaveBeenCalledWith(expect.any(Object), ['related']);
+  });
+
+  it('같은 문맥의 자동 검색 중에도 명시적인 수동 검색은 새 요청으로 전환한다', async () => {
+    const first = createDeferred<Response>();
+    const search = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ queryChunk: 'q', results: ['manual-related'] });
+    const runner = createAmbientSearchRunner<string, string>({ search });
+    const selected = target('같은 문맥을 직접 검색합니다');
+    expect(runner.run(selected)).toBe(true);
+    expect(runner.run(selected, {}, { mode: 'manual' })).toBe(true);
+    first.resolve({ queryChunk: 'q', results: [] });
+    await flush();
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search.mock.calls[1]?.[2]).toBe('manual');
+  });
+
+  it('자동 검색은 관련 목록을 계산해도 유사 결과가 없으면 표시하지 않는다', async () => {
+    const onEmpty = vi.fn();
+    const onResult = vi.fn();
+    const runner = createAmbientSearchRunner<string, string>({
+      search: async () => ({ queryChunk: 'q', results: ['related'], primaryResult: null }),
+    });
+    runner.run(target('자동 검색에서 유사 결과 없는 문장'), { onEmpty, onResult });
+    await flush();
+    expect(onEmpty).toHaveBeenCalledOnce();
+    expect(onResult).not.toHaveBeenCalled();
+  });
+
   it('새 문맥은 진행 중 요청을 무효화하고 정리 후 최신 요청만 실행한다', async () => {
     const first = createDeferred<Response>();
     const second = createDeferred<Response>();

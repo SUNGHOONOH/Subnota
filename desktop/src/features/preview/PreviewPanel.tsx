@@ -26,9 +26,11 @@ import { findPreviewHighlight } from '../../lib/previewHighlight';
 import { normalizeChunkText } from '../../lib/chunkText';
 import EmptyState from '../../components/EmptyState';
 import { SimilarityBadge } from '../../components/SimilarityBadge';
+import { additionalSearchCountsLabel } from '../search/ambientResultCounts';
 import { localize, useUiLanguage } from '../../lib/uiLanguage';
 
 export interface PreviewPanelState {
+  additionalCounts?: { similarity: number; relatedness: number };
   /**
    * 목록을 불러오지 못했을 때의 문구. ⌘⏎는 "패널을 열어 달라"는 요청이라
    * 실패도 패널 안에서 답해야 한다 — 편집기로 시선을 되돌리면 사용자는
@@ -159,6 +161,7 @@ const PreviewPanel = ({
   }, [state.result?.chunkId]);
 
   const {
+    additionalCounts,
     error,
     isAmbientList = false,
     mode,
@@ -299,6 +302,11 @@ const PreviewPanel = ({
               type="button"
             >
               {t('결과 더보기', 'More results')}
+              {additionalCounts && additionalCounts.similarity + additionalCounts.relatedness > 0 && (
+                <span className="preview-more-results-count">
+                  {additionalSearchCountsLabel(additionalCounts, t)}
+                </span>
+              )}
             </button>
           )}
           {onCollapse && (

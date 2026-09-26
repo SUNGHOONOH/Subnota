@@ -18,13 +18,20 @@ describe('ambient list preview action', () => {
 
   it('preserves the bounded local search contract and stale-target guard', () => {
     expect(source).toContain('limit: 8');
-    expect(source).toContain('minimumSimilarity: AMBIENT_LIST_MIN_SIMILARITY');
+    expect(source).toContain('minimumSimilarity: AMBIENT_MIN_SIMILARITY');
     expect(source).toContain('memoId: target.memoId');
     expect(source).toContain('ownerId');
     expect(source).toContain('queryText: target.queryText');
     expect(source).toContain('getLocalWorkspaceOwner() !== ownerId');
     expect(source).toContain('ambientTargetRef.current?.editorId !== target.editorId');
     expect(source).toContain('ambientTargetRef.current?.queryText !== target.queryText');
+  });
+
+  it('최초 검색 목록을 재사용하고 재시도에서만 새로 검색한다', () => {
+    expect(source).toContain('ambientListCache');
+    expect(source).toContain('if (!refresh && ambientListCache');
+    expect(source).toContain('handleOpenPreview(ambientListCache.results');
+    expect(source).toContain('const response = await searchLocalMemoChunks({');
   });
 
   it('opens only non-empty results and keeps the preview promotion metadata', () => {

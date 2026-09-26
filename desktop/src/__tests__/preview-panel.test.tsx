@@ -161,6 +161,14 @@ describe('목록 열기 실패', () => {
 });
 
 describe('PreviewPanel', () => {
+  it('더보기 버튼에 남은 유사·관련 결과 수를 표시하고 0건은 생략한다', () => {
+    const html = markup({
+      additionalCounts: { similarity: 2, relatedness: 0 },
+      mode: 'detail', result: result(), results: [], showMoreResults: true,
+    }, undefined, vi.fn());
+    expect(html).toContain('유사 2');
+    expect(html).not.toContain('관련 0');
+  });
   it('상세 모드는 청크만 감싸고 앞뒤 본문을 그대로 보여준다', () => {
     const html = markup({ mode: 'detail', result: result(), results: [] });
 
@@ -191,7 +199,7 @@ describe('PreviewPanel', () => {
     expect(html).toContain('메모 · 작성 2일 전 · 수정 어제');
     // 퍼센트는 CSLS 점수에서 뜻을 잃었다(0~1이 아니라 대략 -0.5 ~ 1.5).
     // 검색 경로에 따라 배지를 선택한다.
-    expect(html).toContain('비슷함');
+    expect(html).toContain('유사');
     expect(html).not.toContain('유사도 80%');
   });
 

@@ -8,6 +8,8 @@ import type {
 import type { MemoChunk } from '../../lib/memoChunker';
 import { formatLocalMemoSearchErrorMessage } from '../../services/local/localMemoSearch';
 import type { NetworkSearchResult } from '../../services/local/memoSearchTypes';
+import { getLocalWorkspaceOwner } from '../../services/local/offlineStore';
+import type { AmbientListCache } from './ambientResultCounts';
 
 interface CreateAmbientSearchHandlersOptions {
   isCurrentTarget: (target: AmbientSearchTarget) => boolean;
@@ -15,6 +17,7 @@ interface CreateAmbientSearchHandlersOptions {
   setAmbientEmptyEditorId: Dispatch<SetStateAction<string | null>>;
   setAmbientError: Dispatch<SetStateAction<string | null>>;
   setAmbientResult: Dispatch<SetStateAction<NetworkSearchResult | null>>;
+  setAmbientListCache: Dispatch<SetStateAction<AmbientListCache | null>>;
   showEmptyNotice: (editorId: string) => void;
 }
 
@@ -24,17 +27,20 @@ export const createAmbientSearchHandlers = ({
   setAmbientEmptyEditorId,
   setAmbientError,
   setAmbientResult,
+  setAmbientListCache,
   showEmptyNotice,
 }: CreateAmbientSearchHandlersOptions): AmbientSearchHandlers<
   MemoChunk,
   NetworkSearchResult
 > => ({
+  onStart: () => setAmbientListCache(null),
   // 자동 검색의 "없음"·"오류"는 그리지 않는다. 사용자가 요청한 적이 없어
   // 알릴 것도 없고, 글 쓰는 중에 실패가 튀어나오면 방해만 된다. 다만
   // 이전 결과는 지워야 하므로 상태 정리는 그대로 한다.
   onEmpty: (target: AmbientSearchTarget, mode: AmbientSearchMode) => {
     if (!isCurrentTarget(target)) return;
     setAmbientResult(null);
+    setAmbientListCache(null);
     setAmbientError(null);
     if (mode !== 'manual') {
       setAmbientDisplayEditorId(null);
@@ -55,6 +61,7 @@ export const createAmbientSearchHandlers = ({
     const message = formatLocalMemoSearchErrorMessage(error);
     if (!message) return;
     setAmbientResult(null);
+    setAmbientListCache(null);
     setAmbientEmptyEditorId(null);
     if (mode !== 'manual') {
       setAmbientError(null);
@@ -73,5 +80,13 @@ export const createAmbientSearchHandlers = ({
     setAmbientResult(result);
     setAmbientError(null);
     setAmbientDisplayEditorId(target.editorId);
+  },
+  onResults: (target, results) => {
+    if (!isCurrentTarget(target)) return;
+    setAmbientListCache({
+      ownerId: getLocalWorkspaceOwner(),
+      results,
+      target,
+    });
   },
 });

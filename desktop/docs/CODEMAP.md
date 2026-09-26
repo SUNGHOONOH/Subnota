@@ -205,7 +205,7 @@ React Native WebView bridge.
 | `src/services/supabase/memoSync.ts` | Memo sync and conflict behavior. |
 | `src/services/backend/inboxService.ts` | Inbox metadata/summary backend client. |
 | `src/services/local/localMemoIndexer.ts` | Chunks memos and writes vectors to the local index. Filters noise chunks with `isMeaningfulChunk`. |
-| `src/services/local/localMemoSearch.ts` | Local cosine search over `local_memo_chunk_vectors`, excluding the current memo and near-duplicates. |
+| `src/services/local/localMemoSearch.ts` | Local centered-CSLS search over memo and Inbox vectors, excluding the current memo; manually merges similarity and topic relatedness results. |
 | `src/features/memo/useAutomaticMemoFolderAssignments.ts` | Files unfiled notes into automatic folders through `local-db:classify-folder-memos` (stored vectors only, no model at run time). |
 | `src/services/local/localInboxIndexer.ts` | Same, for saved web summaries. |
 
@@ -232,11 +232,19 @@ Two invariants live in code comments and regression tests. Do not undo them:
 - **Topic vectors have a separate signature.** Each indexed memo chunk retains
   its BGE body/query vectors while an optional A.X topic-word vector is
   backfilled when A.X becomes available. A.X failure never discards BGE data.
-- **Manual ambient list only:** one BGE query searches body and topic-vector
-  CSLS indexes independently. The first five similarity hits (memos/links) are
-  followed by up to three unique relatedness memo hits; missing slots use the
-  remaining similarity hits. Scores are not mixed or re-sorted. Automatic
-  ambient search, nearby notes, and folder classification stay similarity-only.
+- **Ambient result policy:** one BGE query searches body and stored topic-vector
+  indexes independently. Automatic ghost shows only a similarity hit; manual
+  selection may show a relatedness hit if similarity has none. The list holds
+  up to five similarity hits scoring at least 0.10, then up to three unique
+  relatedness memo hits without a score threshold. Missing slots stay empty;
+  scores are not mixed or re-sorted. The ghost's additional-result counts use
+  this same cached list, and opening it does not search again. Explicit retry
+  refreshes the index and list. A.X never runs at search time.
+- **Inbox ambient scoring:** links are centered on the live link-vector mean
+  and scored with the same CSLS form as memo chunks. The link hub penalty uses
+  memo chunk query vectors; the link index cache is invalidated by link or memo
+  vector writes. Whole-memo nearby search uses its separate centered-cosine
+  function and threshold unchanged.
 
 The writing stage selects both the query text and delay. Clear completion signals
 use 3 seconds; an unfinished sentence uses 4 seconds so a brief pause while
