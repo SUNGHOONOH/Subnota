@@ -5,12 +5,17 @@ type LocalWriteFlushReason =
   | 'shutdown'
   | 'window-close';
 
-// 로컬 임베딩 모델(bge-m3 ONNX q8)의 준비 상태. 모델은 앱에 번들하지 않고
-// 첫 사용 시 userData로 내려받으므로, 렌더러가 진행률을 보여줄 수 있어야 한다.
+// 로컬 임베딩 모델(한·영 사전 BGE-M3 ONNX q8 + A.X)의 준비 상태. 모델은 앱에
+// 번들하지 않고 첫 사용 시 userData로 내려받으므로, 렌더러가 진행률을 보여줄 수
+// 있어야 한다.
 interface LocalEmbeddingStatusBridge {
   downloadedBytes: number;
   error?: string;
   modelId: string;
+  /** 지금 받아야 할 크기(이미 있는 파일 제외). 받기 창 문구에 쓴다. */
+  pendingDownloadBytes?: number;
+  /** 업데이트로 남은 옛 모델 크기. 0보다 크면 받기 창이 "교체" 문구로 뜬다. */
+  retiredModelBytes?: number;
   ready: boolean;
   state: 'absent' | 'downloading' | 'loading' | 'ready' | 'failed';
   totalBytes: number;

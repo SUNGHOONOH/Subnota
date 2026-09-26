@@ -102,17 +102,17 @@ vi.mock('electron', () => ({
 
 const trustedEvent = { senderFrame: { url: 'http://localhost:5173/' } };
 const testUserDataRoot = '/tmp/subnota-test-userdata';
-const testModelRoot = `${testUserDataRoot}/Models/Embedding/Xenova/bge-m3`;
-const legacyModelRoot = `${testUserDataRoot}/models/Xenova/bge-m3`;
+const testModelRoot = `${testUserDataRoot}/Models/Embedding/Hoon03/subnota-bge-m3-koen-int8-onnx`;
+const legacyModelRoot = `${testUserDataRoot}/models/Hoon03/subnota-bge-m3-koen-int8-onnx`;
 const testWeightsPath = path.join(
   testModelRoot,
-  '4de13258303883538bd53b696b452bf8099f0858/onnx/model_quantized.onnx',
+  '3b2aa404f867251423f68c5c51b23d91688ab97b/onnx/model_quantized.onnx',
 );
 
 const seedVerifiedWeights = () => {
   fs.mkdirSync(path.dirname(testWeightsPath), { recursive: true });
   fs.closeSync(fs.openSync(testWeightsPath, 'w'));
-  fs.truncateSync(testWeightsPath, 569_694_530);
+  fs.truncateSync(testWeightsPath, 406_126_989);
 };
 
 const messagesFor = (method: string) =>
@@ -155,7 +155,7 @@ describe('local-embedding IPC', () => {
       state: string;
     };
     expect(status.modelId).toBe(
-      'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1',
+      'Hoon03/subnota-bge-m3-koen-int8-onnx@3b2aa404f867251423f68c5c51b23d91688ab97b:onnx-q8:cls:norm1',
     );
     expect(['absent', 'ready']).toContain(status.state);
   });
@@ -178,7 +178,7 @@ describe('local-embedding IPC', () => {
     const legacyPath = path.join(legacyModelRoot, 'onnx/model_quantized.onnx');
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
     fs.closeSync(fs.openSync(legacyPath, 'w'));
-    fs.truncateSync(legacyPath, 569_694_530);
+    fs.truncateSync(legacyPath, 406_126_989);
     const partialPath = `${testWeightsPath}.part`;
     fs.mkdirSync(path.dirname(partialPath), { recursive: true });
     fs.writeFileSync(partialPath, 'stale partial');
@@ -196,16 +196,16 @@ describe('local-embedding IPC', () => {
   it('다운로드 완료 후 Utility Process에서 세션을 준비하고 ready를 유지한다', async () => {
     downloadMocks.downloadWeightsResumable.mockImplementation(async options => {
       options.onProgress({
-        downloadedBytes: 569_694_530,
-        totalBytes: 569_694_530,
+        downloadedBytes: 406_126_989,
+        totalBytes: 406_126_989,
       });
     });
 
     await ipcHandlers['local-embed:download-model'](trustedEvent);
 
     expect(ipcHandlers['local-embed:status'](trustedEvent)).toMatchObject({
-      downloadedBytes: 759_687_819,
-      totalBytes: 759_687_819,
+      downloadedBytes: 596_120_278,
+      totalBytes: 596_120_278,
       topicReady: true,
       state: 'ready',
     });
@@ -219,8 +219,8 @@ describe('local-embedding IPC', () => {
   it('A.X 파일 다운로드가 실패해도 BGE 검색 준비 상태를 유지한다', async () => {
     downloadMocks.downloadWeightsResumable.mockImplementation(async options => {
       if (String(options.url).endsWith('/config.json')) throw new Error('A.X download failed');
-      if (String(options.url).includes('Xenova/bge-m3')) {
-        options.onProgress({ downloadedBytes: 569_694_530, totalBytes: 569_694_530 });
+      if (String(options.url).includes('Hoon03/subnota-bge-m3-koen-int8-onnx')) {
+        options.onProgress({ downloadedBytes: 406_126_989, totalBytes: 406_126_989 });
       }
     });
     await ipcHandlers['local-embed:download-model'](trustedEvent);
@@ -230,6 +230,40 @@ describe('local-embedding IPC', () => {
       topicReady: false,
       topicError: 'A.X download failed',
     });
+  });
+
+  // 업데이트로 모델이 바뀐 사용자. 옛 다국어 사전 모델(570MB)은 새 모델을 받아
+  // 검증한 뒤에만 지운다 — 받다가 실패해도 중간 상태로 남지 않게.
+  const retiredWeights = path.join(
+    testUserDataRoot,
+    'Models/Embedding/Xenova/bge-m3/4de13258303883538bd53b696b452bf8099f0858/onnx/model_quantized.onnx',
+  );
+  const seedRetiredModel = () => {
+    fs.mkdirSync(path.dirname(retiredWeights), { recursive: true });
+    fs.writeFileSync(retiredWeights, 'x'.repeat(1_000));
+  };
+
+  it('옛 모델이 남아 있으면 교체 안내에 쓸 크기와 받을 크기를 알려 준다', () => {
+    seedRetiredModel();
+    expect(ipcHandlers['local-embed:status'](trustedEvent)).toMatchObject({
+      pendingDownloadBytes: 596_120_278,
+      retiredModelBytes: 1_000,
+      state: 'absent',
+    });
+  });
+
+  it('새 모델을 받아 검증한 뒤 옛 모델 폴더를 지운다', async () => {
+    seedRetiredModel();
+    await ipcHandlers['local-embed:download-model'](trustedEvent);
+    expect(fs.existsSync(path.join(testUserDataRoot, 'Models/Embedding/Xenova/bge-m3'))).toBe(false);
+    expect(ipcHandlers['local-embed:status'](trustedEvent)).toMatchObject({ retiredModelBytes: 0 });
+  });
+
+  it('새 모델 받기가 실패하면 옛 모델을 지우지 않는다', async () => {
+    seedRetiredModel();
+    downloadMocks.downloadWeightsResumable.mockRejectedValue(new Error('offline'));
+    await ipcHandlers['local-embed:download-model'](trustedEvent);
+    expect(fs.existsSync(retiredWeights)).toBe(true);
   });
 
   it('모델 삭제는 BGE와 A.X 캐시를 함께 제거한다', async () => {
@@ -369,20 +403,20 @@ describe('local-embedding IPC', () => {
     expect(messagesFor('release-index')).toHaveLength(1);
   });
 
-  // 약 760MB 모델과 여유 공간을 포함한 필요량을 받기 전에 확인한다.
+  // 약 600MB 모델과 여유 공간을 포함한 필요량을 받기 전에 확인한다.
   it('디스크 여유 공간과 필요한 공간을 알려 준다', () => {
     const space = ipcHandlers['local-embed:disk-space'](trustedEvent) as {
       freeBytes: number | null;
       requiredBytes: number;
     };
-    expect(space.requiredBytes).toBeGreaterThan(900_000_000);
+    expect(space.requiredBytes).toBeGreaterThan(700_000_000);
     expect(space.freeBytes === null || space.freeBytes >= 0).toBe(true);
   });
 });
 
 describe('pruneStaleModelCache', () => {
   const repoRoot = path.join('/tmp', `subnota-prune-${process.pid}`);
-  const revision = '4de13258303883538bd53b696b452bf8099f0858';
+  const revision = '3b2aa404f867251423f68c5c51b23d91688ab97b';
 
   beforeEach(() => {
     fs.rmSync(repoRoot, { force: true, recursive: true });

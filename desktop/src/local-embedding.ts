@@ -17,8 +17,11 @@
  * 전부 동일했고 어떤 옵션을 줘도 결과가 비트 단위로 같았다.
  * 자세한 근거는 docs/embedding-migration-plan.md 참고.
  *
- * 모델은 앱에 번들하지 않는다(BGE-M3와 A.X 합계 약 760MB). 첫 사용 시
- * userData로 내려받고, 이후 실행부터는 로컬 캐시를 그대로 쓴다.
+ * 모델은 앱에 번들하지 않는다(한·영 사전 BGE-M3와 A.X 합계 약 600MB). 첫 사용
+ * 시 userData로 내려받고, 이후 실행부터는 로컬 캐시를 그대로 쓴다. 앱을 지웠다
+ * 다시 깔아도 캐시는 남으므로(macOS·Windows 모두 제거 시 userData를 지우지
+ * 않는다) 크기·해시를 확인해 그대로 쓴다. 업데이트로 모델이 바뀌면 새 모델을
+ * 검증한 뒤 옛 모델 폴더(RETIRED_EMBEDDING_MODEL_REPOS)를 지운다.
  */
 import { app, ipcMain, utilityProcess } from 'electron';
 import fs from 'node:fs';
@@ -32,6 +35,7 @@ import {
   EMBEDDING_MODEL_SHA256,
   EMBEDDING_MODEL_WEIGHTS,
   EMBEDDING_REQUIRED_DISK_BYTES,
+  RETIRED_EMBEDDING_MODEL_REPOS,
   EMBEDDING_VECTOR_DIMENSIONS,
   TOPIC_MODEL_BYTES,
   TOPIC_MODEL_FILES,
@@ -166,6 +170,47 @@ const currentStatus = (): LocalEmbeddingStatus => {
     }
   }
   return status;
+};
+
+// 업데이트로 검색 모델이 바뀐 사용자에게 남아 있는 옛 모델 폴더(두 캐시 위치 모두).
+const retiredModelDirectories = () =>
+  RETIRED_EMBEDDING_MODEL_REPOS.flatMap(repo => [
+    path.join(cacheDirectory(), repo),
+    path.join(getLegacyModelCacheDirectory(), repo),
+  ]);
+
+const retiredModelBytes = () =>
+  retiredModelDirectories().reduce((total, target) => {
+    try {
+      return total + directorySize(target);
+    } catch {
+      return total;
+    }
+  }, 0);
+
+/**
+ * 렌더러가 받기 창을 그릴 때 쓰는 상태. 받을 크기는 이미 있는 파일을 빼고
+ * 계산하고, 옛 모델 크기가 0보다 크면 "업데이트로 바뀜" 문구를 쓴다.
+ */
+const statusForRenderer = () => {
+  const current = currentStatus();
+  return {
+    ...current,
+    pendingDownloadBytes:
+      (current.ready ? 0 : EMBEDDING_MODEL_BYTES) + (current.topicReady ? 0 : TOPIC_MODEL_TOTAL_BYTES),
+    retiredModelBytes: retiredModelBytes(),
+  };
+};
+
+// 새 모델을 검증한 뒤에만 부른다. 받다가 실패하면 옛 모델은 그대로 남는다.
+const removeRetiredModels = () => {
+  for (const target of retiredModelDirectories()) {
+    try {
+      fs.rmSync(target, { force: true, recursive: true });
+    } catch {
+      // 정리는 부가 작업이다. 실패해도 새 모델 사용을 막지 않는다.
+    }
+  }
 };
 
 const utilityErrorMessage = (error: unknown) =>
@@ -429,6 +474,7 @@ const prepareWeightsForInference = async (allowDownload = true) => {
       path.join(cacheDirectory(), EMBEDDING_MODEL_REPO),
       EMBEDDING_MODEL_REVISION,
     );
+    removeRetiredModels();
   }
 };
 
@@ -603,7 +649,7 @@ const validTexts = (texts: unknown): texts is string[] =>
 
 ipcMain.handle('local-embed:status', event => {
   assertTrustedSender(event);
-  return currentStatus();
+  return statusForRenderer();
 });
 
 ipcMain.handle('local-embed:ensure-model', async event => {

@@ -6,29 +6,30 @@ artifact used by each client remain auditable.
 
 ## Backend embedding model
 
-- Model: `dragonkue/BGE-m3-ko`
-- Revision: `7074d66aa46562342193ca4feb3d89bf9dad71b4`
-- License: Apache License 2.0
-- Attribution: `dragonkue`
-- Base model attribution: `BAAI/bge-m3` (MIT License)
+- Model: `BAAI/bge-m3`
+- Revision: `5617a9f61b028005a4858fdac845db406aefb181`
+- License: MIT License
+- Attribution: BAAI
 - Usage: requested through the Hugging Face Inference API; model weights are not
   bundled with Subnota.
-- Source: <https://huggingface.co/dragonkue/BGE-m3-ko/tree/7074d66aa46562342193ca4feb3d89bf9dad71b4>
-- Base model source: <https://huggingface.co/BAAI/bge-m3>
-- License text: <https://www.apache.org/licenses/LICENSE-2.0>
+- Source: <https://huggingface.co/BAAI/bge-m3/tree/5617a9f61b028005a4858fdac845db406aefb181>
+- License text: <https://opensource.org/license/mit/>
 
 ## Desktop local embedding model
 
-- Model: `Xenova/bge-m3`
-- Revision: `4de13258303883538bd53b696b452bf8099f0858`
-- Variant: `onnx/model_quantized.onnx` (`q8`)
+- Original model: `BAAI/bge-m3` by BAAI
+- Original revision: `5617a9f61b028005a4858fdac845db406aefb181`
 - License: MIT License
-- Attribution: `Xenova`
-- Base model attribution: `BAAI/bge-m3` (MIT License)
+- Original source: <https://huggingface.co/BAAI/bge-m3>
+- Distributed artifact: <https://huggingface.co/Hoon03/subnota-bge-m3-koen-int8-onnx/tree/3b2aa404f867251423f68c5c51b23d91688ab97b>
+- Modification: unofficial Subnota conversion. Tokens whose text contains a
+  letter outside Hangul and ASCII were removed from the vocabulary (250,002 to
+  91,471 tokens; kept embedding rows unchanged), then exported to ONNX and
+  dynamically quantized to int8. No training was performed. Tokenizer and
+  configuration files derive from `Xenova/bge-m3`
+  (revision `4de13258303883538bd53b696b452bf8099f0858`, MIT License).
 - Usage: downloaded to the user's local application data on first use; model
   weights are not bundled in the installer.
-- Source: <https://huggingface.co/Xenova/bge-m3/tree/4de13258303883538bd53b696b452bf8099f0858>
-- Base model source: <https://huggingface.co/BAAI/bge-m3>
 - License text: <https://opensource.org/license/mit/>
 
 ## Desktop local topic-word model

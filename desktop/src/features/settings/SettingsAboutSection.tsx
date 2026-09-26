@@ -23,12 +23,11 @@ interface SettingsAboutSectionProps {
 }
 
 const THIRD_PARTY_MODEL_URLS = {
-  backendLicense: 'https://www.apache.org/licenses/LICENSE-2.0',
+  backendLicense: 'https://opensource.org/license/mit/',
   backendModel:
     'https://huggingface.co/BAAI/bge-m3/tree/5617a9f61b028005a4858fdac845db406aefb181',
   desktopLicense: 'https://opensource.org/license/mit/',
-  desktopModel:
-    'https://huggingface.co/Xenova/bge-m3/tree/4de13258303883538bd53b696b452bf8099f0858',
+  desktopModel: 'https://huggingface.co/Hoon03/subnota-bge-m3-koen-int8-onnx',
   topicModel: 'https://huggingface.co/Hoon03/subnota-ax-encoder-int8-onnx',
   topicLicense: 'https://www.apache.org/licenses/LICENSE-2.0',
 } as const;
@@ -89,7 +88,7 @@ const SettingsAboutSection = ({
             </RowAction>
           </Group>
         }
-        description="BAAI/bge-m3 · Apache-2.0 · Hugging Face Inference · revision 5617a9f"
+        description="BAAI/bge-m3 · MIT · Hugging Face Inference · revision 5617a9f"
         label={t('백엔드 임베딩 모델', 'Backend embedding model')}
       />
       <Row
@@ -115,7 +114,7 @@ const SettingsAboutSection = ({
             </RowAction>
           </Group>
         }
-        description={t('Xenova/bge-m3 · MIT · 로컬 다운로드 · ONNX q8 · revision 4de1325', 'Xenova/bge-m3 · MIT · local download · ONNX q8 · revision 4de1325')}
+        description={t('BAAI/bge-m3 · MIT · 한국어·영어 사전으로 줄인 비공식 ONNX int8 변환 · 기기 내 실행', 'BAAI/bge-m3 · MIT · unofficial ONNX int8 conversion with Korean and English vocabulary · on-device')}
         label={t('데스크톱 임베딩 모델', 'Desktop embedding model')}
       />
       <Row

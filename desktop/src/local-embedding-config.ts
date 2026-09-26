@@ -1,10 +1,16 @@
-export const EMBEDDING_MODEL_REPO = 'Xenova/bge-m3';
-export const EMBEDDING_MODEL_REVISION = '4de13258303883538bd53b696b452bf8099f0858';
+// BAAI/bge-m3 에서 한국어·영어 밖 문자의 토큰만 뺀 int8 이식본(사전 250,002 → 91,471).
+// 한·영 문장의 벡터는 원본과 같다(Transformers.js 기준 코사인 ≥ 0.99999). 만든 방법과
+// 검증은 저장소의 모델 카드에 있다. 다른 언어를 지원하려면 원본에서 그 문자의 토큰을
+// 다시 골라 새 파일을 올린다.
+export const EMBEDDING_MODEL_REPO = 'Hoon03/subnota-bge-m3-koen-int8-onnx';
+export const EMBEDDING_MODEL_REVISION = '3b2aa404f867251423f68c5c51b23d91688ab97b';
 export const EMBEDDING_MODEL_DTYPE = 'q8';
 export const EMBEDDING_MODEL_WEIGHTS = 'onnx/model_quantized.onnx';
-export const EMBEDDING_MODEL_BYTES = 569_694_530;
+export const EMBEDDING_MODEL_BYTES = 406_126_989;
 export const EMBEDDING_MODEL_SHA256 =
-  '0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d';
+  '1d2146b78742f6801528e971a2b4cd03f42d675d66d705c4e15fa34307f781c4';
+/** 예전 검색 모델. 새 모델을 받아 검증한 뒤 지운다(업데이트로 남은 570MB). */
+export const RETIRED_EMBEDDING_MODEL_REPOS = ['Xenova/bge-m3'] as const;
 export const TOPIC_MODEL_REPO = 'Hoon03/subnota-ax-encoder-int8-onnx';
 export const TOPIC_MODEL_REVISION = 'ce7ce9a158b28352fed762f86aab028385bc5f23';
 export const TOPIC_MODEL_WEIGHTS = 'onnx/model_quantized.onnx';

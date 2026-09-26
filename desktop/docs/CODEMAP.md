@@ -63,7 +63,7 @@ raw IPC access.
 | `src/auto-updater.ts` | Packaged macOS Squirrel.Mac native update feed. Returns inactive on Windows. |
 | `src/update-checker.ts` | GitHub latest-release fallback; selects DMG on macOS and Setup EXE on Windows. |
 | `src/window-close-handler.ts` | Waits for renderer save/flush before closing. |
-| `src/local-embedding.ts` | Downloads/caches pinned local BGE-M3 and SKT A.X ONNX int8 files. The Utility Process runs interactive BGE and background BGE/A.X sessions behind `local-embed:*` IPC. |
+| `src/local-embedding.ts` | Downloads/caches pinned local BGE-M3 (Korean+English vocabulary, `Hoon03/subnota-bge-m3-koen-int8-onnx`) and SKT A.X ONNX int8 files, and removes the retired `Xenova/bge-m3` cache once the new model is verified. The Utility Process runs interactive BGE and background BGE/A.X sessions behind `local-embed:*` IPC. |
 | `src/lib/topicWords.ts` | A.X MLM prompt, token filtering, and top-8 topic-word selection; `scripts/export-ax-encoder.py` reproduces the ONNX conversion. |
 
 ## Platform capability matrix

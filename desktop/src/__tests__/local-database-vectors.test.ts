@@ -54,7 +54,7 @@ const OWNER_MIGRATION = '77777777-7777-4777-8777-777777777777';
 const OWNER_INBOX_CSLS = '88888888-8888-4888-8888-888888888888';
 const OWNER_SINGLE_LINK = '99999999-9999-4999-8999-999999999999';
 const CURRENT_SIGNATURE =
-  'Xenova/bge-m3@4de13258303883538bd53b696b452bf8099f0858:onnx-q8:cls:norm1';
+  'Hoon03/subnota-bge-m3-koen-int8-onnx@3b2aa404f867251423f68c5c51b23d91688ab97b:onnx-q8:cls:norm1';
 let databasePath = '';
 let temporaryDirectory = '';
 

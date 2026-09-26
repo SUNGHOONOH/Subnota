@@ -55,7 +55,7 @@ describe('local embedding runtime', () => {
 
     expect(pipelineCalls[0]?.[2]).toMatchObject({
       dtype: 'q8',
-      revision: '4de13258303883538bd53b696b452bf8099f0858',
+      revision: '3b2aa404f867251423f68c5c51b23d91688ab97b',
       session_options: { intraOpNumThreads: 2 },
     });
     await runtime.releaseIndex();
