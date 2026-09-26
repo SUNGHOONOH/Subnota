@@ -19,6 +19,30 @@ interface UseEmbeddingModelDownloadOptions {
   setModelDownload: Dispatch<SetStateAction<LocalMemoIndexProgress | null>>;
 }
 
+/**
+ * 받기가 끝난 뒤 실패로 알릴지 정한다. A.X만 실패해도 실패다 — 유사 검색은
+ * 되지만 관련 결과가 빠진다. 실패 표시의 "다시 시도"가 같은 받기를 다시
+ * 부르고, 이미 받은 BGE는 건너뛰므로 A.X만 다시 받는다.
+ */
+export const modelDownloadFailure = (
+  result: { error?: string; ready: boolean; topicError?: string; topicReady: boolean },
+  t: (korean: string, english: string) => string,
+): string | null => {
+  if (!result.ready) {
+    return result.error ?? t(
+      '검색 준비 파일을 받지 못했습니다.',
+      'Could not download the files needed for search.',
+    );
+  }
+  if (!result.topicReady) {
+    return result.topicError ?? t(
+      '관련 검색 파일을 받지 못했습니다.',
+      'Could not download the files needed for related search.',
+    );
+  }
+  return null;
+};
+
 export const useEmbeddingModelDownload = ({
   getCurrentOwnerId,
   getInboxItems,
@@ -71,21 +95,7 @@ export const useEmbeddingModelDownload = ({
 
     try {
       const result = await api.localEmbedDownloadModel();
-      if (!result.ready) {
-        setModelDownload(
-          toProgress(
-            'failed',
-            result.downloadedBytes,
-            result.totalBytes,
-            result.error ??
-              t(
-                '검색 준비 파일을 받지 못했습니다.',
-                'Could not download the files needed for search.',
-              ),
-          ),
-        );
-      } else {
-        setModelDownload(null);
+      if (result.ready) {
         scheduleLocalMemoIndexReconcile(
           getMemos(),
           getIndexOwnerId(),
@@ -93,6 +103,12 @@ export const useEmbeddingModelDownload = ({
         );
         scheduleLocalInboxIndexReconcile(getInboxItems(), getIndexOwnerId());
       }
+      const failure = modelDownloadFailure(result, t);
+      setModelDownload(
+        failure === null
+          ? null
+          : toProgress('failed', result.downloadedBytes, result.totalBytes, failure),
+      );
     } finally {
       window.clearInterval(timer);
     }

@@ -1663,6 +1663,11 @@ const App = () => {
         onResizeStart={handlePreviewResizeStart}
         onRetryInboxSummary={retryInboxSummary}
         onRetryPreview={() => void openAmbientListInPreview(true)}
+        onDownloadTopicModel={() => {
+          // 받는 동안과 실패는 하단 진행 표시가 맡는다(다시 시도 포함).
+          setPreviewPanel((prev) => (prev ? { ...prev, topicModelMissing: false } : prev));
+          void startModelDownload();
+        }}
         onSelectPreviewResult={(result) =>
           setPreviewPanel((prev) =>
             prev ? { ...prev, mode: 'detail', result } : prev,

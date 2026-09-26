@@ -1231,7 +1231,8 @@ html.dark .session-rail {
   margin: 0;
 }
 
-.preview-error button {
+.preview-error button,
+.preview-topic-model-prompt button {
   background: transparent;
   border: 1px solid var(--app-color-border);
   border-radius: var(--legacy-radius-pill);
@@ -1246,18 +1247,30 @@ html.dark .session-rail {
     border-color var(--legacy-motion-fast);
 }
 
-.preview-error button:hover {
+.preview-error button:hover,
+.preview-topic-model-prompt button:hover {
   background: var(--app-color-state-hover);
   border-color: var(--app-color-border-strong);
 }
 
-.preview-error button:active {
+.preview-error button:active,
+.preview-topic-model-prompt button:active {
   transform: scale(var(--legacy-press-scale));
 }
 
 .preview-list {
   display: grid;
   gap: 6px;
+}
+
+.preview-topic-model-prompt {
+  align-items: center;
+  color: var(--app-color-muted);
+  display: flex;
+  font-size: var(--legacy-font-size-sm);
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 2px 0;
 }
 
 .preview-list-row {

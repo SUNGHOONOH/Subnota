@@ -36,6 +36,7 @@ interface AppSidePanelProps {
   onResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   onRetryInboxSummary: (item: InboxSession) => Promise<void>;
   onRetryPreview: () => void;
+  onDownloadTopicModel: () => void;
   onSelectPreviewResult: (result: NetworkSearchResult) => void;
   onShowList: () => void;
   onShowMoreResults: () => void;
@@ -63,6 +64,7 @@ const AppSidePanel = ({
   onResizeStart,
   onRetryInboxSummary,
   onRetryPreview,
+  onDownloadTopicModel,
   onSelectPreviewResult,
   onShowList,
   onShowMoreResults,
@@ -121,6 +123,7 @@ const AppSidePanel = ({
               onResizeStart={onResizeStart}
               onRetryInboxSummary={onRetryInboxSummary}
               onRetry={onRetryPreview}
+              onDownloadTopicModel={onDownloadTopicModel}
               onSelectResult={onSelectPreviewResult}
               onShowMoreResults={onShowMoreResults}
               onShowList={onShowList}

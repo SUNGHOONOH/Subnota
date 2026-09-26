@@ -28,7 +28,7 @@ export const usePreviewPanelActions = ({
       mode: 'detail' | 'list' = 'detail',
       options: Pick<
         PreviewPanelState,
-        'additionalCounts' | 'isAmbientList' | 'promotionTooltip' | 'showMoreResults'
+        'additionalCounts' | 'isAmbientList' | 'promotionTooltip' | 'showMoreResults' | 'topicModelMissing'
       > = {},
     ) => {
       if (results.length === 0) return;

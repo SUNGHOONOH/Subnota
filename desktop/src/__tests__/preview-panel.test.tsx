@@ -111,6 +111,7 @@ const markup = (
   onCollapse?: () => void,
   onShowMoreResults?: () => void,
   onRetry?: () => void,
+  onDownloadTopicModel?: () => void,
 ) =>
   renderToStaticMarkup(
     <MantineProvider>
@@ -119,6 +120,7 @@ const markup = (
         memos={[memo]}
         onClose={vi.fn()}
         onCollapse={onCollapse}
+        onDownloadTopicModel={onDownloadTopicModel}
         onPromote={vi.fn()}
         onResizeStart={vi.fn()}
         onRetry={onRetry}
@@ -157,6 +159,30 @@ describe('목록 열기 실패', () => {
     });
 
     expect(html).not.toContain('preview-list-row');
+  });
+});
+
+// 이미 BGE를 받아 둔 사용자는 받기 창을 다시 볼 일이 없다. 관련 결과가
+// 필요한 순간인 목록에서만 받으라고 안내한다.
+describe('관련 검색 파일 안내', () => {
+  it('A.X가 없으면 목록 끝에 받기 안내를 둔다', () => {
+    const html = markup(
+      { mode: 'list', result: null, results: [result()], topicModelMissing: true },
+      undefined, undefined, undefined, vi.fn(),
+    );
+    expect(html).toContain('관련 결과를 보려면');
+    expect(html).toContain('받기');
+  });
+
+  it('A.X가 있거나 상세 화면이면 안내하지 않는다', () => {
+    expect(markup(
+      { mode: 'list', result: null, results: [result()] },
+      undefined, undefined, undefined, vi.fn(),
+    )).not.toContain('관련 결과를 보려면');
+    expect(markup(
+      { mode: 'detail', result: result(), results: [result()], topicModelMissing: true },
+      undefined, undefined, undefined, vi.fn(),
+    )).not.toContain('관련 결과를 보려면');
   });
 });
 

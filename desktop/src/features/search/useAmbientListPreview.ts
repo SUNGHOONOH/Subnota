@@ -18,7 +18,7 @@ interface UseAmbientListPreviewOptions {
     mode?: 'detail' | 'list',
     options?: Pick<
       PreviewPanelState,
-      'additionalCounts' | 'isAmbientList' | 'promotionTooltip' | 'showMoreResults'
+      'additionalCounts' | 'isAmbientList' | 'promotionTooltip' | 'showMoreResults' | 'topicModelMissing'
     >,
   ) => void;
   setActiveSidePanel: Dispatch<SetStateAction<'preview' | 'schedule-inbox' | null>>;
@@ -27,6 +27,17 @@ interface UseAmbientListPreviewOptions {
   setSidePanelCollapsed: Dispatch<SetStateAction<boolean>>;
   t: (korean: string, english: string) => string;
 }
+
+// 이미 BGE를 받아 둔 사용자는 받기 창을 다시 보지 않는다. 관련 결과가
+// 필요한 순간인 목록에서 A.X 받기를 안내한다.
+const isTopicModelMissing = async () => {
+  try {
+    const status = await window.electronAPI?.localEmbedStatus?.();
+    return Boolean(status?.ready && !status.topicReady);
+  } catch {
+    return false;
+  }
+};
 
 export const useAmbientListPreview = ({
   ambientTarget,
@@ -53,6 +64,7 @@ export const useAmbientListPreview = ({
       if (ambientListCache.results.length > 0) {
         handleOpenPreview(ambientListCache.results, 'list', {
           isAmbientList: true,
+          topicModelMissing: await isTopicModelMissing(),
           promotionTooltip: t('새 메모 탭으로 열기', 'Open in a new note tab'),
         });
       }
@@ -82,6 +94,7 @@ export const useAmbientListPreview = ({
       if (response.results.length > 0) {
         handleOpenPreview(response.results, 'list', {
           isAmbientList: true,
+          topicModelMissing: await isTopicModelMissing(),
           promotionTooltip: t('새 메모 탭으로 열기', 'Open in a new note tab'),
         });
       }

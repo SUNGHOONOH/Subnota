@@ -43,6 +43,8 @@ export interface PreviewPanelState {
   result: NetworkSearchResult | null;
   results: NetworkSearchResult[];
   showMoreResults?: boolean;
+  /** 관련 검색 파일(A.X)이 없다. 목록 끝에서 받기를 안내한다. */
+  topicModelMissing?: boolean;
 }
 
 interface PreviewPanelProps {
@@ -50,6 +52,7 @@ interface PreviewPanelProps {
   memos: MemoRow[];
   onClose: () => void;
   onCollapse?: () => void;
+  onDownloadTopicModel?: () => void;
   onPromote: (result: NetworkSearchResult) => void;
   onResizeStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onRetryInboxSummary: (item: InboxSession) => Promise<void>;
@@ -130,6 +133,7 @@ const PreviewPanel = ({
   memos,
   onClose,
   onCollapse,
+  onDownloadTopicModel,
   onPromote,
   onResizeStart,
   onRetryInboxSummary,
@@ -169,6 +173,7 @@ const PreviewPanel = ({
     result,
     results,
     showMoreResults,
+    topicModelMissing,
   } =
     state;
   // Ambient의 top-1 상세는 목록을 아직 불러오지 않았으므로 되돌아갈 곳이
@@ -249,6 +254,19 @@ const PreviewPanel = ({
           </strong>
         </button>
       ))}
+      {topicModelMissing && onDownloadTopicModel && (
+        <div className="preview-topic-model-prompt">
+          <span>
+            {t(
+              '관련 결과를 보려면 파일(약 190MB)을 받아야 해요.',
+              'Download a file (about 190MB) to see related results.',
+            )}
+          </span>
+          <button onClick={onDownloadTopicModel} type="button">
+            {t('받기', 'Download')}
+          </button>
+        </div>
+      )}
     </div>
   );
 
