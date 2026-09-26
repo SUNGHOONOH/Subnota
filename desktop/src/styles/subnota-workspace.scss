@@ -804,10 +804,24 @@ html.dark .session-rail {
 }
 
 .nav-item.nav-update-action {
-  color: var(--app-color-muted-icon);
+  /* 회색 레일 아이콘 사이에서 새로 생긴 버튼이 묻히지 않게 브랜드 잉크로 둔다. */
+  color: var(--app-color-action-primary-ink);
+  position: relative;
+
+  /* 알림 점 자리의 작은 로고. .nav-item svg(16px)보다 구체적이어야 크기가 산다.
+     다운로드 아이콘의 오른쪽 위는 비어 있어 화살표와 겹치지 않는다. */
+  .nav-update-mark {
+    color: var(--app-color-brand-mark);
+    height: 10px;
+    pointer-events: none;
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    width: 10px;
+  }
 
   &:hover:not(:disabled):not([aria-disabled='true']) {
-    color: var(--legacy-ink);
+    color: var(--app-color-action-primary-ink);
   }
 }
 

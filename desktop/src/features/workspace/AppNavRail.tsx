@@ -13,6 +13,7 @@ import {
   Topics,
 } from '@/components/icons';
 import TooltipIconButton from '../../components/TooltipIconButton';
+import SubnotaMark from '../../components/SubnotaMark';
 import SubnotaSpinner from '../../components/SubnotaSpinner';
 import type { MemoSidebarMode } from '../memo/MemoWorkspace';
 import {
@@ -259,7 +260,11 @@ const AppNavRail = ({
             {isUpdateWorking ? (
               <SubnotaSpinner size={22} />
             ) : (
-              <Download size={22} />
+              <>
+                <Download size={22} />
+                {/* 알림 점 대신 작은 로고. 받는 중에는 스피너가 대신 알린다. */}
+                <SubnotaMark className="nav-update-mark" size={10} />
+              </>
             )}
             <VisuallyHidden>{updateActionLabel}</VisuallyHidden>
           </TooltipIconButton>

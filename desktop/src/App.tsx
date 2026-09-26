@@ -1756,9 +1756,7 @@ const App = () => {
             try {
               const update = await checkForAvailableUpdate();
               return update
-                ? appSettings.uiLanguage === 'en'
-                  ? `Version ${update.version} is available. Use the update button on the left.`
-                  : `새 버전 ${update.version}을 찾았습니다. 왼쪽 업데이트 버튼을 누르세요.`
+                ? t(`새 버전(${update.version})이 나왔습니다.`, `Version ${update.version} is available.`)
                 : t('Subnota가 최신 상태입니다.', 'Subnota is up to date.');
             } catch {
               throw new Error(
@@ -1768,6 +1766,15 @@ const App = () => {
                 ),
               );
             }
+          },
+          availableUpdateVersion:
+            updateState.status === 'available' || updateState.status === 'error'
+              ? updateState.update.version
+              : null,
+          // 진행 팝업은 앱 왼쪽 아래에 뜬다. 설정 창이 덮고 있으면 안 보인다.
+          onStartUpdate: () => {
+            setSettingsOpen(false);
+            void startAvailableUpdate();
           },
           onChooseStorage: chooseLocalStorage,
           onClose: () => setSettingsOpen(false),

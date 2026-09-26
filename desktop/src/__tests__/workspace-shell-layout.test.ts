@@ -215,7 +215,9 @@ describe('workspace shell layout', () => {
   });
 
   it('keeps settings separate from the direct update action', () => {
+    // 받을 수 있는 동안에는 작은 로고를 붙이고, 받는 중에는 스피너가 대신한다.
     expect(appSource).toContain('className="nav-item nav-utility nav-update-action"');
+    expect(appSource).toContain('<SubnotaMark className="nav-update-mark" size={10} />');
     expect(appSource).toContain('onClick={onStartUpdate}');
     expect(appSource).toContain('disabled={isUpdateWorking}');
     expect(appSource).toContain("aria-label={t('설정', 'Settings')}");

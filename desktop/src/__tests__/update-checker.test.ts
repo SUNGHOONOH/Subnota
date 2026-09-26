@@ -137,6 +137,25 @@ describe('checkForUpdate — platform-aware asset selection', () => {
     expect(result).toBeNull();
   });
 
+  // "확인하지 못함"을 "새 버전 없음"으로 삼키면 오프라인에서도 최신이라고 답한다.
+  it('throws when the release lookup fails instead of reporting up to date', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockFetch.mockRejectedValue(new Error('offline'));
+
+    const { checkForUpdate } = await import('../update-checker');
+
+    await expect(checkForUpdate()).rejects.toThrow();
+  });
+
+  it('throws when GitHub answers with an error status', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockFetch.mockResolvedValue({ ok: false, status: 403 });
+
+    const { checkForUpdate } = await import('../update-checker');
+
+    await expect(checkForUpdate()).rejects.toThrow();
+  });
+
   it('does not check upstream releases when the configured release repo is invalid', async () => {
     process.env.SUBNOTA_RELEASE_REPO = 'not-a-repository';
     delete process.env.GITHUB_REPOSITORY;

@@ -14,7 +14,10 @@ type RunAction = <T>(
 ) => Promise<void>;
 
 interface SettingsAboutSectionProps {
+  /** 이미 찾은 새 버전. 있으면 확인 대신 그 자리에서 업데이트한다. */
+  availableUpdateVersion?: string | null;
   onCheckUpdates: () => Promise<string>;
+  onStartUpdate?: () => void;
   run: RunAction;
   translate: Translate;
 }
@@ -31,7 +34,9 @@ const THIRD_PARTY_MODEL_URLS = {
 } as const;
 
 const SettingsAboutSection = ({
+  availableUpdateVersion,
   onCheckUpdates,
+  onStartUpdate,
   run,
   translate: t,
 }: SettingsAboutSectionProps) => (
@@ -39,13 +44,19 @@ const SettingsAboutSection = ({
     <Section title="Subnota">
       <Row
         action={
-          <RowAction
-            onClick={() =>
-              void run(onCheckUpdates, message => message)
-            }
-          >
-            {t('업데이트 확인', 'Check for updates')}
-          </RowAction>
+          availableUpdateVersion && onStartUpdate ? (
+            <RowAction onClick={onStartUpdate}>
+              {t(`${availableUpdateVersion}로 업데이트`, `Update to ${availableUpdateVersion}`)}
+            </RowAction>
+          ) : (
+            <RowAction
+              onClick={() =>
+                void run(onCheckUpdates, message => message)
+              }
+            >
+              {t('업데이트 확인', 'Check for updates')}
+            </RowAction>
+          )
         }
         description={t('로컬 우선 메모 및 캘린더 워크스페이스', 'A local-first memo and calendar workspace')}
         label={`${t('버전', 'Version')} ${__APP_VERSION__}`}

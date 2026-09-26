@@ -57,7 +57,9 @@ interface SettingsModalProps {
   storageInfo: { databasePath: string; size: number } | null;
   onAppSettingsChange: (settings: AppSettings) => void;
   onBackup: () => Promise<string | null>;
+  availableUpdateVersion?: string | null;
   onCheckUpdates: () => Promise<string>;
+  onStartUpdate?: () => void;
   onChooseStorage: () => Promise<{ databasePath: string; size: number } | null>;
   onClose: () => void;
   onDesktopPreferencesChange: (preferences: {
@@ -716,7 +718,9 @@ export default function SettingsModal(props: SettingsModalProps) {
 
       {active === 'about' && (
         <SettingsAboutSection
+          availableUpdateVersion={props.availableUpdateVersion}
           onCheckUpdates={props.onCheckUpdates}
+          onStartUpdate={props.onStartUpdate}
           run={run}
           translate={t}
         />
