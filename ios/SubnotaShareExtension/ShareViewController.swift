@@ -1,7 +1,7 @@
 import Social
 import UniformTypeIdentifiers
 
-/// `mobile/ios/SubnotaShareExtension/ShareViewController.swift` 에서 이식했다.
+/// 이전 React Native 앱의 공유 확장 동작을 네이티브 Swift로 옮긴 구현이다.
 ///
 /// **확장은 App Group 큐에 durable 하게 넣기만 한다. 서버 생성은 앱이 다음에 켜질
 /// 때 `SharedItemDrain` 이 한다.** 여기서 바로 `POST /inbox/sessions` 를 하려면

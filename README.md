@@ -24,8 +24,9 @@ Subnota는 메모, 일정, 저장한 링크를 한곳에서 관리하는 로컬 
 백엔드는 편집 흐름을 처리하지 않습니다. 하루 한 번 일정 후보를 추출하고, 변경된
 메모·저장 링크를 바탕으로 Topics를 갱신하며, 링크 요약만 보강합니다.
 
-현재 데스크톱 앱은 macOS Apple Silicon과 Windows x64를 지원합니다. `mobile/`은
-향후 iOS 앱 작업을 위한 레거시 코드이며, 데스크톱 앱과 동작을 맞추는 대상이 아닙니다.
+현재 공개 데스크톱 앱은 macOS Apple Silicon과 Windows x64를 지원합니다. 네이티브
+Swift 앱은 `ios/`에서 개발 중이며 아직 완성·출시 단계가 아닙니다. 이전 React Native
+앱 코드는 제거했으며, 현재 제품 개발·릴리스 대상은 데스크톱과 개발 중인 Swift 앱입니다.
 
 ## 주요 기능
 
@@ -64,7 +65,7 @@ Subnota는 메모, 일정, 저장한 링크를 한곳에서 관리하는 로컬 
 | Path | Purpose | Main technologies |
 | --- | --- | --- |
 | [`desktop/`](desktop/) | macOS·Windows 데스크톱 앱 | Electron, React, Tiptap, SQLite |
-| [`mobile/`](mobile/) | 향후 iOS 작업을 위한 레거시 코드 | React Native |
+| [`ios/`](ios/) | 개발 중인 네이티브 iOS 앱과 공유 Swift 모듈 | Swift, SwiftUI, GRDB |
 | [`web/`](web/) | 제품 웹사이트·법률 페이지 | Next.js, React |
 | [`backend/`](backend/) | 링크 요약·일정 추출·Topics 보강 API | FastAPI, Kiwi, Hugging Face |
 | [`supabase/`](supabase/) | 인증·동기화 스키마·RLS·토픽/수집함 벡터 데이터 | PostgreSQL, pgvector |
@@ -74,6 +75,7 @@ Subnota는 메모, 일정, 저장한 링크를 한곳에서 관리하는 로컬 
 각 구성요소의 설치·실행 방법은 해당 문서를 따릅니다.
 
 - [데스크톱 개발](desktop/README.md)
+- [iOS 개발 중](ios/README.md)
 - [웹 개발](web/README.md)
 - [백엔드 개발](backend/README.md)
 - [Supabase 운영 문서](supabase/db.md)

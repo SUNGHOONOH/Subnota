@@ -192,7 +192,7 @@ accept `detail.target: 'beside' | 'focused'`.
 | `src/components/tiptap-icons/**` | Shared SVG icon components. |
 | `src/lib/tiptap-utils.ts` | Markdown conversion and editor helpers. |
 
-The Electron renderer embeds Tiptap React directly; it does not use the mobile
+The Electron renderer embeds Tiptap React directly; it does not use the legacy
 React Native WebView bridge.
 
 ## Local-first data and sync

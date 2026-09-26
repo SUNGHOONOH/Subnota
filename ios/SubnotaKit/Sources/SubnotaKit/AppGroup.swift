@@ -5,7 +5,7 @@ public enum AppGroupError: Error {
 }
 
 /// 본 앱·위젯·Share Extension이 같은 SQLite 파일을 열기 위한 단일 진실.
-/// 이 식별자는 mobile/ios/*.entitlements에 이미 쓰이던 값과 같아야 한다.
+/// 기존 React Native 배포본의 App Group 컨테이너 데이터와 호환되도록 유지한다.
 public enum AppGroup {
   public static let identifier = "group.com.subnota.capture"
 
