@@ -40,6 +40,9 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     title: TITLE,
   },
+  verification: {
+    other: { 'naver-site-verification': 'a148082671ccaadc4fe037a63d3591ae7b50db9f' },
+  },
 };
 
 /* 구조화 데이터는 실제로 제공하는 것만 적는다. 아직 받을 수 있는 파일이
