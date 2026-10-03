@@ -385,7 +385,7 @@ const AuthScreen = ({
               <span className="desktop-auth-brand-name">Subnota</span>
             </div>
             <h2>{isSignUp ? t('Subnota 시작하기', 'Get started with Subnota') : t('다시 만나서 반가워요', 'Welcome back')}</h2>
-            <p>{t('정리하지 말고, 작성만 하세요.', 'Just write. Organize later.')}</p>
+            <p>{t('필요한 생각이 먼저 찾아오는 작업 공간', 'A workspace that brings your ideas back when you need them.')}</p>
           </motion.div>
 
           <motion.div className="oauth-buttons-wrapper" variants={fadeUp}>

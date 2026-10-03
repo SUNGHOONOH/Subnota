@@ -8,7 +8,7 @@ import { ImageResponse } from 'next/og';
  * web/app/globals.css 의 brand-mark 와 같은 값이어야 한다.
  */
 
-export const alt = 'Subnota(서브노타) | 잊어도 정리되는 메모 앱';
+export const alt = 'Subnota(서브노타) | 필요한 생각이 먼저 찾아오는 메모 앱';
 export const size = { height: 630, width: 1200 };
 export const contentType = 'image/png';
 
@@ -64,8 +64,8 @@ export default function OpengraphImage() {
             textAlign: 'center',
           }}
         >
-          <div style={{ display: 'flex' }}>잊어도</div>
-          <div style={{ display: 'flex' }}>정리되는 메모 앱</div>
+          <div style={{ display: 'flex' }}>필요한 생각이</div>
+          <div style={{ display: 'flex' }}>먼저 찾아오는 메모 앱</div>
         </div>
         <div style={{ color: '#7d7466', display: 'flex', fontSize: 30 }}>
           Subnota · 서브노타

@@ -56,7 +56,7 @@ struct AuthView: View {
       Text(isSignUp ? "Subnota 시작하기" : "다시 만나서 반가워요")
         .font(Typography.ui(15, weight: .medium))
         .foregroundStyle(Palette.ink)
-      Text("정리하지 말고, 작성만 하세요.")
+      Text("필요한 생각이 먼저 찾아오는 작업 공간")
         .font(Typography.ui(13))
         .foregroundStyle(Palette.inkMuted)
     }

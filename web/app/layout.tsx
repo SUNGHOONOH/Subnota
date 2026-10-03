@@ -6,7 +6,7 @@ import PostHogProvider from './posthog-provider';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://subnota.com';
 
-const TITLE = 'Subnota(서브노타) | 잊어도 정리되는 메모 앱';
+const TITLE = 'Subnota(서브노타) | 필요한 생각이 먼저 찾아오는 메모 앱';
 const DESCRIPTION =
   '필요한 순간이 오면 과거의 기록이 먼저 찾아옵니다. 문장 단위로 이어지는 메모, 자동으로 잡히는 일정.';
 

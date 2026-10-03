@@ -1,0 +1,25 @@
+# Subnota (서브노타)
+
+> 필요한 생각이 먼저 찾아오는 작업 공간. Subnota는 macOS와 Windows용 로컬 우선 메모 앱입니다. 지금 쓰는 문장과 관련된 과거 메모와 저장한 링크를 옆에 띄우고, 메모 속 날짜를 일정으로 제안합니다.
+>
+> A local-first note app for macOS and Windows that brings related past notes and saved links back while you write, and turns dates in your notes into calendar suggestions.
+
+- 플랫폼: macOS, Windows 데스크톱 앱
+- 가격: 현재 무료로 시작 가능
+- 언어: 한국어, 영어
+- 메모는 기기의 로컬 데이터베이스에 먼저 저장되어 오프라인에서도 작성할 수 있고, 로그인하면 클라우드와 동기화됩니다.
+- 관련 메모 검색은 기기 안의 임베딩 모델로 동작합니다.
+
+## 주요 기능
+
+- [문장 단위 메모 연결](https://subnota.com/features/connected-memory): 지금 쓰는 문장의 의미를 읽어 관련된 과거 문장을 옆에 띄웁니다. 키워드가 겹치지 않아도 의미가 통하면 이어집니다.
+- [메모 속 날짜를 일정으로](https://subnota.com/features/memo-to-calendar): 본문에 적어 둔 약속과 마감을 찾아 일정으로 제안하고, 날짜가 애매한 약속은 일정 저장함에 남겨 둡니다.
+- [웹페이지 저장과 AI 요약](https://subnota.com/features/reuse-inbox): 보고 있는 페이지를 저장하면 제목·요약·키워드가 담기고, 관련된 내용을 쓸 때 다시 나타납니다.
+- [메모와 캘린더를 한 화면에](https://subnota.com/features/productivity): 메모, 캘린더, 저장한 링크를 한 창에 나란히 열어 작업 흐름을 이어 갑니다.
+
+## 다운로드와 정책
+
+- [다운로드](https://subnota.com/#download)
+- [개인정보 처리방침](https://subnota.com/privacy)
+- [서비스 이용약관](https://subnota.com/terms)
+- [문의](mailto:contact@subnota.com)
