@@ -106,8 +106,7 @@ NODE
 pnpm exec tsc --noEmit
 pnpm test
 pnpm run lint
-# adm-zip is an install-time onnxruntime-node dependency with no patched
-# upstream release yet; fail releases on high/critical findings.
+# Fail releases on high/critical production dependency findings.
 pnpm audit --prod --audit-level high
 
 if [ ! -f resources/icon.icns ]; then
