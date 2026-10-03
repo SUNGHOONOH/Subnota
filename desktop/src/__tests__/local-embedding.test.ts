@@ -168,7 +168,11 @@ describe('local-embedding IPC', () => {
     );
     expect(downloadMocks.downloadWeightsResumable).toHaveBeenCalledWith(
       expect.objectContaining({
-        targetPath: expect.stringContaining('Hoon03/subnota-ax-encoder-int8-onnx'),
+        targetPath: path.join(
+          testUserDataRoot,
+          'Models/Embedding/Hoon03/subnota-ax-encoder-int8-onnx',
+          'ce7ce9a158b28352fed762f86aab028385bc5f23/onnx/model_quantized.onnx',
+        ),
         url: expect.stringContaining('ce7ce9a158b28352fed762f86aab028385bc5f23'),
       }),
     );
