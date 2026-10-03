@@ -22,6 +22,11 @@ interface SettingsAboutSectionProps {
   translate: Translate;
 }
 
+const SOURCE_URLS = {
+  license: 'https://github.com/SUNGHOONOH/Subnota/blob/main/LICENSE',
+  repository: 'https://github.com/SUNGHOONOH/Subnota',
+} as const;
+
 const THIRD_PARTY_MODEL_URLS = {
   backendLicense: 'https://opensource.org/license/mit/',
   backendModel:
@@ -62,9 +67,23 @@ const SettingsAboutSection = ({
       />
     </Section>
     <Section
-      description={t('Subnota가 사용하는 임베딩·주제어 모델과 라이선스입니다. 전체 고지는 저장소의 THIRD_PARTY_NOTICES.md에서 확인할 수 있습니다.', 'Embedding and topic-word models used by Subnota and their licenses. See THIRD_PARTY_NOTICES.md for the complete notice.')}
+      description={t('Subnota와 Subnota가 사용하는 임베딩·주제어 모델의 라이선스입니다. 전체 고지는 저장소의 THIRD_PARTY_NOTICES.md에서 확인할 수 있습니다.', 'Licenses for Subnota and the embedding and topic-word models it uses. See THIRD_PARTY_NOTICES.md for the complete notice.')}
       title={t('오픈소스 라이선스', 'Open-source licenses')}
     >
+      <Row
+        action={
+          <Group gap={12} wrap="nowrap">
+            <RowAction onClick={() => void window.electronAPI?.openExternal(SOURCE_URLS.repository)}>
+              {t('소스 코드', 'Source code')}
+            </RowAction>
+            <RowAction onClick={() => void window.electronAPI?.openExternal(SOURCE_URLS.license)}>
+              {t('라이선스', 'License')}
+            </RowAction>
+          </Group>
+        }
+        description={t('AGPL-3.0 · 보증 없음 · 이 라이선스에 따라 수정·배포할 수 있습니다', 'AGPL-3.0 · no warranty · you may modify and distribute it under this license')}
+        label="Subnota"
+      />
       <Row
         action={
           <Group gap={12} wrap="nowrap">

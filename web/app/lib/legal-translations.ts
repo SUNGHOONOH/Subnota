@@ -351,12 +351,14 @@ export const termsTranslations = defineTranslations({
   '타인의 계정이나 인증 정보를 무단으로 사용하는 행위': 'Using another person’s account or authentication information without authorization',
   '서비스의 정상적인 운영을 방해하거나 보안 취약점을 악용하는 행위': 'Interfering with normal Service operation or exploiting a security vulnerability',
   '불법, 명예훼손, 사기, 악성코드 또는 타인의 권리를 침해하는 콘텐츠를 전송하는 행위': 'Sending content that is illegal, defamatory, fraudulent, malicious, or infringes another person’s rights',
-  '서비스를 역설계하거나 제공량 제한·접근 제어를 우회하는 행위': 'Reverse engineering the Service or bypassing usage limits or access controls',
+  '서비스의 제공량 제한·접근 제어를 우회하는 행위': 'Bypassing the Service’s usage limits or access controls',
   '서비스를 이용하여 타인을 감시, 괴롭히거나 법령을 위반하는 행위': 'Using the Service to surveil or harass another person or violate the law',
   '자동화된 요청, 스크래핑 또는 과도한 요청으로 서비스나 외부 제공자에 부담을 주는 행위': 'Burdening the Service or an external provider with automated requests, scraping, or excessive requests',
   '제8조 지식재산권과 오픈소스': 'Article 8. Intellectual Property and Open Source',
   'Subnota의 상표, 소프트웨어, 화면 구성, 문서 및 서비스에 포함된 자료의 권리는 운영자 또는 정당한 권리자에게 있습니다.':
     'Rights to Subnota’s trademarks, software, interface, documentation, and materials included in the Service belong to the Operator or the rightful owner.',
+  'Subnota의 소스 코드는 GNU Affero General Public License v3.0(AGPL-3.0)으로 공개되며, 이용자는 그 조건에 따라 소스 코드를 사용·수정·배포할 수 있습니다. Subnota의 이름과 로고는 이 라이선스에 포함되지 않습니다.':
+    'Subnota’s source code is published under the GNU Affero General Public License v3.0 (AGPL-3.0), and users may use, modify, and distribute it under that license’s terms. The Subnota name and logo are not covered by this license.',
   '서비스에는 오픈소스 소프트웨어와 모델이 포함될 수 있으며, 각 구성요소는 해당 라이선스의 조건을 따릅니다. 데스크톱 앱의 로컬 임베딩 모델과 백엔드 임베딩 모델의 라이선스 및 고지는 앱 설정의 오픈소스 라이선스 안내와 저장소의':
     'The Service may include open-source software and models, and each component is subject to its applicable license. Licenses and notices for the desktop app’s local embedding model and backend embedding model are available in the app settings’ open-source license notice and in',
   '에서 확인할 수 있습니다.': '.',

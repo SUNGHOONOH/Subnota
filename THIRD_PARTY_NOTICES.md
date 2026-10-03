@@ -53,3 +53,16 @@ artifact used by each client remain auditable.
 The model repositories identify the license metadata above. If a model revision
 changes, update this file and the corresponding model signature in the code
 before releasing the change.
+
+## Bundled fonts
+
+The desktop and iOS apps bundle the following fonts. They are licensed under the
+SIL Open Font License 1.1, not under Subnota's AGPL-3.0 license.
+
+- Pretendard by Kil Hyung-jin — <https://github.com/orioncactus/pretendard>
+  (`desktop/src/assets/fonts/Pretendard-*.woff2`, `ios/Subnota/Resources/Fonts/Pretendard-*.otf`)
+- Alegreya Sans by Huerta Tipográfica — <https://github.com/huertatipografica/Alegreya-Sans>
+  (`desktop/src/assets/fonts/AlegreyaSans-*.woff2`, `ios/Subnota/Resources/Fonts/AlegreyaSans-Bold.ttf`)
+- JetBrains Mono by JetBrains — <https://github.com/JetBrains/JetBrainsMono>
+  (`desktop/src/assets/fonts/JetBrainsMono-*.woff2`)
+- License text: <https://openfontlicense.org/open-font-license-official-text/>

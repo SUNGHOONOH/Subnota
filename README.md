@@ -83,3 +83,23 @@ Swift 앱은 `ios/`에서 개발 중이며 아직 완성·출시 단계가 아�
 데스크톱 아키텍처와 인터페이스 규칙은
 [CODEMAP](desktop/docs/CODEMAP.md)과
 [디자인 시스템](desktop/docs/design.md)을 참고하세요.
+
+## 라이선스
+
+Subnota의 소스 코드는 [GNU Affero General Public License v3.0](LICENSE)(AGPL-3.0)으로 공개합니다.
+수정한 버전을 배포하거나 네트워크 서비스로 제공하면 그 소스 코드도 같은 라이선스로 공개해야 합니다.
+
+- "Subnota" 이름과 로고는 이 라이선스에 포함되지 않습니다. 수정한 버전을 배포할 때는 다른 이름과 로고를 사용하세요.
+- 함께 배포하는 폰트와 임베딩 모델은 각자의 라이선스를 따릅니다. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하세요.
+
+### Additional permission under GNU AGPL version 3 section 7
+
+As an additional permission, the copyright holders of Subnota grant you permission
+to convey this program, or any work based on it, through Apple's App Store, Mac App
+Store, Microsoft Store, Google Play, or any similar application distribution service,
+even if the terms of that service impose restrictions on recipients that the GNU
+Affero General Public License would otherwise not permit, provided that the
+Corresponding Source of the conveyed work remains available to its recipients under
+the GNU Affero General Public License version 3.
+
+앱 스토어 약관은 AGPL과 충돌할 수 있으므로, 소스 코드를 계속 AGPL로 공개한다는 조건으로 앱 스토어 배포를 허용합니다.
